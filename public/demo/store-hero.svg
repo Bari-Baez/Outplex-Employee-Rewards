@@ -1,0 +1,25 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#0D1530"/>
+  <rect x="72" y="72" width="1456" height="756" rx="40" fill="url(#panel)"/>
+  <circle cx="1320" cy="190" r="170" fill="rgba(255,138,43,0.12)"/>
+  <circle cx="240" cy="730" r="210" fill="rgba(59,130,246,0.10)"/>
+  <path d="M248 180C392 180 508 296 508 440" stroke="#FF8A2B" stroke-width="26" stroke-linecap="round"/>
+  <path d="M248 236C361 236 452 327 452 440" stroke="#FF8A2B" stroke-width="18" stroke-linecap="round"/>
+  <path d="M452 468C424 578 325 658 208 658" stroke="#FF8A2B" stroke-width="18" stroke-linecap="round"/>
+  <path d="M508 468C474 617 341 730 192 730" stroke="#FF8A2B" stroke-width="26" stroke-linecap="round"/>
+  <path d="M248 180V312" stroke="#FF8A2B" stroke-width="26" stroke-linecap="round"/>
+  <text x="640" y="312" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="700">NYT Desk Collection</text>
+  <text x="640" y="392" fill="#9FB2E0" font-family="Arial, Helvetica, sans-serif" font-size="34">Curated presentation rewards for newsroom teams and standout performance.</text>
+  <rect x="640" y="470" width="256" height="112" rx="24" fill="#13224B" stroke="rgba(255,255,255,0.10)"/>
+  <text x="676" y="514" fill="#7FA7FF" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">LOW STOCK WATCH</text>
+  <text x="676" y="556" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700">2 items</text>
+  <rect x="922" y="470" width="256" height="112" rx="24" fill="#13224B" stroke="rgba(255,255,255,0.10)"/>
+  <text x="958" y="514" fill="#7FA7FF" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">OT + STORE DEMO</text>
+  <text x="958" y="556" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700">Ready</text>
+  <defs>
+    <linearGradient id="panel" x1="72" y1="72" x2="1528" y2="828" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13224B"/>
+      <stop offset="1" stop-color="#0F1734"/>
+    </linearGradient>
+  </defs>
+</svg>

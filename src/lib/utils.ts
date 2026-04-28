@@ -1,0 +1,266 @@
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+/**
+ * Calculate duration in hours between two time strings (HH:MM)
+ */
+export function calcDuration(startTime: string, endTime: string): number {
+  const [startH, startM] = startTime.split(':').map(Number);
+  const [endH, endM] = endTime.split(':').map(Number);
+  const startTotal = startH * 60 + startM;
+  let endTotal = endH * 60 + endM;
+  // Handle overnight shifts
+  if (endTotal <= startTotal) endTotal += 24 * 60;
+  return Math.round(((endTotal - startTotal) / 60) * 10) / 10;
+}
+
+export type OTDateFormat = 'auto' | 'mdy' | 'dmy';
+
+/**
+ * Format a date string to display label
+ */
+export function formatDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * Format time "14:00" → "2:00 PM"
+ */
+export function formatTime(timeStr: string): string {
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+}
+
+/**
+ * Format "14:00"-"16:00" → "2:00 PM – 4:00 PM"
+ */
+export function formatSlotTime(start: string, end: string): string {
+  return `${formatTime(start)} – ${formatTime(end)}`;
+}
+
+/**
+ * Format relative time "2 mins ago"
+ */
+export function formatRelativeTime(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Get shift label from time range
+ */
+export function getShiftLabel(startTime: string): string {
+  const [h] = startTime.split(':').map(Number);
+  if (h >= 5 && h < 12) return 'Morning Shift';
+  if (h >= 12 && h < 17) return 'Afternoon Shift';
+  if (h >= 17 && h < 21) return 'Evening Shift';
+  return 'Night Shift';
+}
+
+/**
+ * Get initials from name
+ */
+export function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+/**
+ * Parse Spanish-format time strings used in OutPLEX OT CSVs:
+ * "4:00 p.m." → "16:00"
+ * "8:30 a.m." → "08:30"
+ * "4:00 PM"   → "16:00"
+ * "16:00"     → "16:00" (passthrough)
+ */
+export function parseSpanishTime(rawTime: string): string {
+  if (!rawTime) return '';
+  const cleaned = rawTime.trim().toLowerCase();
+
+  // Already in HH:MM or HH:MM:SS 24h format
+  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(cleaned)) {
+    const [h, m] = cleaned.split(':').map(Number);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  // Match patterns like "4:00 p.m.", "4:00 PM", "4:00PM", "4:00:00 am"
+  const match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(a\.?m\.?|p\.?m\.?)$/);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].replace(/\./g, '');
+    if (period === 'pm' && hours !== 12) hours += 12;
+    if (period === 'am' && hours === 12) hours = 0;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+
+  return rawTime; // fallback
+}
+
+/**
+ * Parse date strings from OutPLEX OT CSV:
+ * "4/13/26" → "2026-04-13"
+ * "2/12/2026" → "2026-02-12"
+ * "2026-04-13" → passthrough
+ */
+export function parseOTDate(rawDate: string, format: OTDateFormat = 'auto'): string {
+  if (!rawDate) return '';
+  const cleaned = rawDate.trim();
+
+  // Already ISO format
+  if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) return cleaned;
+
+  // MM/DD/YY or MM/DD/YYYY
+  const match = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (match) {
+    const first = match[1].padStart(2, '0');
+    const second = match[2].padStart(2, '0');
+    let year = match[3];
+    if (year.length === 2) year = `20${year}`;
+
+    const firstNum = Number(first);
+    const secondNum = Number(second);
+
+    const resolvedFormat =
+      format === 'auto'
+        ? firstNum > 12
+          ? 'dmy'
+          : secondNum > 12
+            ? 'mdy'
+            : 'mdy'
+        : format;
+
+    const month = resolvedFormat === 'dmy' ? second : first;
+    const day = resolvedFormat === 'dmy' ? first : second;
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return cleaned;
+}
+
+/**
+ * Normalize OutPLEX OT CSV headers to internal field names.
+ * Real format: Spot ID | LOB | Date | Start | End | Total | Status
+ */
+export function normalizeCSVHeaders(headers: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  headers.forEach((h) => {
+    const lower = h.toLowerCase().trim();
+    // Exact OutPLEX column names first
+    if (lower === 'spot id' || lower === 'spot_id' || lower === 'id') map[h] = 'spot_id';
+    else if (lower === 'lob') map[h] = 'lob';
+    else if (lower === 'date') map[h] = 'date';
+    else if (lower === 'start') map[h] = 'start_time';
+    else if (lower === 'end') map[h] = 'end_time';
+    else if (lower === 'total' || lower === 'duration') map[h] = 'duration_hrs';
+    else if (lower === 'status') map[h] = 'csv_status';
+    // Fallbacks
+    else if (lower.includes('start')) map[h] = 'start_time';
+    else if (lower.includes('end')) map[h] = 'end_time';
+    else if (lower.includes('date')) map[h] = 'date';
+    else if (lower.includes('shift') || lower.includes('label')) map[h] = 'shift_label';
+    else map[h] = lower.replace(/\s+/g, '_');
+  });
+  return map;
+}
+
+/**
+ * Get days in a month for calendar rendering
+ */
+export function getCalendarDays(year: number, month: number): Date[] {
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const days: Date[] = [];
+
+  // Pad start (Mon-based)
+  let startDow = firstDay.getDay();
+  startDow = startDow === 0 ? 6 : startDow - 1; // Convert Sun=0 to Mon-based
+  for (let i = startDow - 1; i >= 0; i--) {
+    days.push(new Date(year, month, -i));
+  }
+
+  // Month days
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    days.push(new Date(year, month, d));
+  }
+
+  // Pad end to complete grid (42 cells = 6 rows)
+  while (days.length < 42) {
+    const last = days[days.length - 1];
+    days.push(new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1));
+  }
+
+  return days;
+}
+
+/**
+ * Format a Date to YYYY-MM-DD
+ */
+export function toDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function getLastDayOfMonth(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(
+    new Date(year, month + 1, 0).getDate(),
+  ).padStart(2, '0')}`;
+}
+
+export function formatOTDate(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Check if two dates are the same day
+ */
+export function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/**
+ * Check if date is today
+ */
+export function isToday(date: Date): boolean {
+  return isSameDay(date, new Date());
+}
+
+/**
+ * Format a number to Dominican Pesos (DOP)
+ */
+export function formatDop(value: number) {
+  return `RD$ ${value.toLocaleString('es-DO')}`;
+}

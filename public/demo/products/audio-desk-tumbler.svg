@@ -1,0 +1,13 @@
+<svg width="640" height="640" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="640" rx="44" fill="#131C3F"/>
+  <path d="M244 118H396L420 196H220L244 118Z" fill="#FF8A2B"/>
+  <path d="M238 196H402L370 508C366.495 541.996 337.852 568 303.676 568H336.324C302.148 568 273.505 541.996 270 508L238 196Z" fill="#F8FAFC"/>
+  <path d="M262 226H378L352 502C350.196 521.006 334.28 535.5 315.188 535.5H324.812C305.72 535.5 289.804 521.006 288 502L262 226Z" fill="#243B83"/>
+  <path d="M288 292C352 292 404 344 404 408" stroke="#FF8A2B" stroke-width="16" stroke-linecap="round"/>
+  <path d="M288 330C331 330 366 365 366 408" stroke="#FF8A2B" stroke-width="12" stroke-linecap="round"/>
+  <path d="M366 424C355 462 320 490 280 490" stroke="#FF8A2B" stroke-width="12" stroke-linecap="round"/>
+  <path d="M404 424C389 480 338 522 280 522" stroke="#FF8A2B" stroke-width="16" stroke-linecap="round"/>
+  <path d="M288 292V354" stroke="#FF8A2B" stroke-width="16" stroke-linecap="round"/>
+  <text x="86" y="572" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700">Audio Desk Tumbler</text>
+  <text x="86" y="608" fill="#9FB2E0" font-family="Arial, Helvetica, sans-serif" font-size="24">Built for long-form newsroom coverage</text>
+</svg>

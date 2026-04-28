@@ -1,0 +1,18 @@
+<svg width="640" height="640" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="640" rx="44" fill="#101933"/>
+  <rect x="126" y="102" width="388" height="426" rx="30" fill="#F8FAFC"/>
+  <rect x="154" y="134" width="332" height="372" rx="18" fill="#EEF2FF"/>
+  <path d="M208 204H434" stroke="#243B83" stroke-width="14" stroke-linecap="round"/>
+  <path d="M208 256H434" stroke="#243B83" stroke-width="14" stroke-linecap="round"/>
+  <path d="M208 308H434" stroke="#243B83" stroke-width="14" stroke-linecap="round"/>
+  <path d="M208 360H434" stroke="#243B83" stroke-width="14" stroke-linecap="round"/>
+  <path d="M208 412H372" stroke="#243B83" stroke-width="14" stroke-linecap="round"/>
+  <rect x="126" y="102" width="54" height="426" rx="24" fill="#FF8A2B"/>
+  <rect x="454" y="196" width="78" height="78" rx="18" fill="#243B83"/>
+  <path d="M478 216H508V246H478V216Z" stroke="#FF8A2B" stroke-width="10"/>
+  <path d="M478 246H508V276H478V246Z" stroke="#FF8A2B" stroke-width="10"/>
+  <path d="M508 216H538V246H508V216Z" stroke="#FF8A2B" stroke-width="10"/>
+  <path d="M508 246H538V276H508V246Z" stroke="#FF8A2B" stroke-width="10"/>
+  <text x="92" y="578" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700">Crossword Notes Set</text>
+  <text x="92" y="612" fill="#9FB2E0" font-family="Arial, Helvetica, sans-serif" font-size="24">Notebook + meeting pages</text>
+</svg>
