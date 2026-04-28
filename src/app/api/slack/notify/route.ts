@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WebClient } from '@slack/web-api';
+import { createClient } from '@/lib/supabase/server';
 
 const botToken = process.env.SLACK_BOT_TOKEN;
 const userToken = process.env.SLACK_USER_TOKEN;
@@ -11,6 +12,10 @@ const slackToken = (botToken && botToken !== 'PENDIENTE' && botToken !== 'PLACEH
 const slack = new WebClient(slackToken || 'NO_TOKEN_CONFIGURED');
 
 export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { batchName, slotsCount, firstDate, lastDate } = await request.json();
 
   const channelId = process.env.SLACK_OT_CHANNEL_ID;

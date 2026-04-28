@@ -49,3 +49,5 @@ reset_db.js
 # output/log files
 *.txt
 .codex-logs/
+
+.vercel

@@ -61,6 +61,5 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // TODO: send push notifications to affected employees
   return NextResponse.json({ success: true });
 }
