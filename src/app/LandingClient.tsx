@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import Image from 'next/image';
-import { Zap, ChevronRight, ShieldCheck, X, ChevronDown } from 'lucide-react';
+import { ShieldCheck, X, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Lenis from 'lenis';
 import { createClient } from '@/lib/supabase/client';
@@ -15,15 +15,7 @@ function getReadableAuthError(error: unknown) {
   return error instanceof Error ? error.message : 'Unable to complete the login request.';
 }
 
-const URL_ERRORS: Record<string, string> = {
-  unauthorized_domain: 'Acceso restringido. Solo @outplex.com autorizado.',
-  auth_failed: 'La autenticación falló.',
-  access_denied: 'Acceso denegado por Slack.',
-};
-
 // ── TYPES ────────────────────────────────────────────────────────────
-
-type UserRole = 'admin' | 'moderator_a1' | 'moderator_b1' | 'employee';
 
 type Star = {
   x: number;
@@ -47,18 +39,6 @@ type Nebula = {
   startThreshold: number;
 };
 
-type DemoPreset = {
-  email: string;
-  role: UserRole;
-  label: string;
-};
-
-const DEMO_PRESETS: DemoPreset[] = [
-  { email: 'it@outplex.test', role: 'admin', label: 'SR. ADMIN' },
-  { email: 'a1@outplex.test', role: 'moderator_a1', label: 'L1 MOD' },
-  { email: 'b1@outplex.test', role: 'moderator_b1', label: 'B1 MOD' },
-  { email: 'employee@outplex.test', role: 'employee', label: 'AGENT' },
-];
 
 function SlackIcon({ size = 18 }: { size?: number }) {
   return (
@@ -118,14 +98,15 @@ export function LandingClient({
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
-  const [activeDemoEmail, setActiveDemoEmail] = useState('');
   const [error, setError] = useState<string | null>(initialError);
   const [showForm, setShowForm] = useState(variant === 'login');
   const [spaceLocked, setSpaceLocked] = useState(variant === 'login');
   const [logoVisible, setLogoVisible] = useState(variant === 'login');
   const [progress, setProgress] = useState(variant === 'login' ? 1 : 0);
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [showSlackModal, setShowSlackModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
@@ -352,14 +333,6 @@ export function LandingClient({
     };
   }, [spaceLocked, variant]);
 
-  const bootstrapDemoUsers = async () => {
-    try {
-      await fetch('/api/dev/bootstrap', { method: 'POST' });
-    } catch {
-      // best-effort
-    }
-  };
-
   const handleSlackLogin = async () => {
     setLoading(true);
     setError(null);
@@ -378,31 +351,35 @@ export function LandingClient({
     }
   };
 
-  const handlePresetLogin = async (preset: DemoPreset) => {
-    setActiveDemoEmail(preset.email);
-    setDemoLoading(true);
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+    
+    const email = emailInput.toLowerCase().trim();
+    const domain = email.split('@')[1];
+    
+    const allowedDomains = (process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAINS || 'outplex.com')
+      .split(',')
+      .map(d => d.trim().toLowerCase());
+
+    if (!allowedDomains.includes(domain)) {
+      setError(`Acceso restringido. Solo dominios autorizados (${allowedDomains.join(', ')}) permitidos.`);
+      return;
+    }
+    setLoading(true);
     try {
-      await bootstrapDemoUsers();
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: preset.email,
-        password: 'password123',
+        email: emailInput.toLowerCase().trim(),
+        password: passwordInput,
       });
-
       if (signInError) throw signInError;
-
-      void fetch('/api/dev/promote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: preset.email, role: preset.role }),
-      });
-
       window.location.href = '/dashboard';
     } catch (err) {
       setError(getReadableAuthError(err));
-      setDemoLoading(false);
+      setLoading(false);
     }
   };
+
 
   return (
     <main 
@@ -515,43 +492,64 @@ export function LandingClient({
                       </div>
 
                       <button
-                        onClick={handleSlackLogin}
-                        disabled={loading || demoLoading}
+                        onClick={() => setShowSlackModal(true)}
                         className="w-full relative group overflow-hidden py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 transition-colors"
                       >
                         <div className="relative z-10 flex items-center justify-center gap-3 text-xs font-black text-white tracking-widest uppercase">
                           <SlackIcon size={18} />
-                          {loading ? 'Validating...' : 'Authorize via Slack'}
+                          Authorize via Slack
                         </div>
                       </button>
 
                       <div className="relative flex items-center justify-center">
                         <div className="w-full h-px bg-white/5" />
-                        <div className="absolute px-4 bg-transparent text-[9px] font-black tracking-[0.4em] text-white/20 uppercase">Fallback</div>
+                        <div className="absolute px-4 bg-transparent text-[9px] font-black tracking-[0.4em] text-white/20 uppercase">o</div>
                       </div>
 
-                      <button
-                        onClick={() => setShowDemo(v => !v)}
-                        disabled={loading || demoLoading}
-                        className="w-full py-3.5 rounded-xl border border-white/5 hover:bg-white/5 transition-all text-[10px] font-black tracking-widest text-indigo-300/60 uppercase"
-                      >
-                        {showDemo ? 'Close Demo Menu' : 'Maintenance Access'}
-                      </button>
-
-                      {showDemo && (
-                        <div className="grid grid-cols-2 gap-3 pt-2">
-                          {DEMO_PRESETS.map((preset) => (
+                      {!showEmailForm ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowEmailForm(true)}
+                          disabled={loading}
+                          className="w-full py-3.5 rounded-xl border border-indigo-500/20 hover:bg-indigo-500/10 hover:border-indigo-500/40 transition-all text-[10px] font-black tracking-widest text-indigo-300/70 uppercase"
+                        >
+                          Manual Login
+                        </button>
+                      ) : (
+                        <form onSubmit={handleEmailLogin} className="space-y-3">
+                          <input
+                            type="email"
+                            placeholder="usuario@outplex.com"
+                            value={emailInput}
+                            onChange={e => setEmailInput(e.target.value)}
+                            required
+                            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-indigo-500/60 transition-colors"
+                          />
+                          <input
+                            type="password"
+                            placeholder="Contraseña"
+                            value={passwordInput}
+                            onChange={e => setPasswordInput(e.target.value)}
+                            required
+                            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-indigo-500/60 transition-colors"
+                          />
+                          <div className="flex gap-2">
                             <button
-                              key={preset.role}
                               type="button"
-                              className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-[9px] font-bold text-indigo-200 transition-all uppercase tracking-tighter"
-                              onClick={() => handlePresetLogin(preset)}
-                              disabled={demoLoading}
+                              onClick={() => { setShowEmailForm(false); setEmailInput(''); setPasswordInput(''); setError(null); }}
+                              className="flex-1 py-3 rounded-xl border border-white/5 text-[10px] font-black tracking-widest text-white/30 uppercase hover:bg-white/5 transition-all"
                             >
-                              {demoLoading && activeDemoEmail === preset.email ? '...' : preset.label}
+                              Cancelar
                             </button>
-                          ))}
-                        </div>
+                            <button
+                              type="submit"
+                              disabled={loading}
+                              className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-black tracking-widest text-white uppercase transition-colors disabled:opacity-50"
+                            >
+                              {loading ? '...' : 'Entrar'}
+                            </button>
+                          </div>
+                        </form>
                       )}
                     </div>
 
@@ -575,6 +573,76 @@ export function LandingClient({
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── SLACK INFO MODAL ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showSlackModal && (
+          <motion.div
+            key="slack-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-6"
+            style={{ backdropFilter: 'blur(12px)', background: 'rgba(0,0,0,0.7)' }}
+            onClick={() => setShowSlackModal(false)}
+          >
+            <motion.div
+              key="slack-modal-card"
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-[400px]"
+            >
+              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/40 to-cyan-500/40 rounded-[28px] blur opacity-40" />
+              <div className="relative bg-slate-950/95 backdrop-blur-3xl border border-indigo-500/25 rounded-[24px] p-8 shadow-2xl">
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={() => setShowSlackModal(false)}
+                  className="absolute top-4 right-4 p-2 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-all"
+                  aria-label="Cerrar"
+                >
+                  <X size={18} />
+                </button>
+
+                {/* Icon */}
+                <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 mb-6 mx-auto">
+                  <SlackIcon size={24} />
+                </div>
+
+                {/* Content */}
+                <div className="text-center space-y-3 mb-8">
+                  <h2 className="text-lg font-black text-white tracking-tight">Autenticación vía Slack</h2>
+                  <p className="text-indigo-300/60 text-xs leading-relaxed">
+                    Esta opción requiere la <span className="text-indigo-300 font-bold">API oficial de Slack de Outplex</span> para funcionar. Actualmente está pendiente de configuración por el equipo de IT.
+                  </p>
+                  <p className="text-white/30 text-[10px] leading-relaxed">
+                    Para solicitar acceso o reportar esto, contacta a tu supervisor o al equipo de IT de Outplex.
+                  </p>
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-white/5 mb-6" />
+
+                {/* Footer */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black tracking-[0.3em] text-white/20 uppercase">Outplex IT</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowSlackModal(false)}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-black tracking-widest text-white uppercase transition-colors"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
