@@ -1,21 +1,68 @@
 import type { NextConfig } from "next";
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://outplexemplyeerewards.vercel.app';
+
+// ── Content-Security-Policy ───────────────────────────────────────────────────
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://lh3.googleusercontent.com https://picsum.photos",
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://slack.com https://*.slack.com ${appUrl}`,
+  "frame-src 'self' https://www.africau.edu",
+  "media-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+// ── Headers applied to every route ───────────────────────────────────────────
+const securityHeaders = [
+  { key: 'X-DNS-Prefetch-Control',   value: 'on' },
+  { key: 'X-Content-Type-Options',   value: 'nosniff' },
+  { key: 'X-Frame-Options',          value: 'DENY' },
+  { key: 'Referrer-Policy',          value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy',       value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+  { key: 'Strict-Transport-Security',value: 'max-age=63072000; includeSubDomains; preload' },
+  { key: 'Content-Security-Policy',  value: csp },
+];
+
+// ── CORS headers for API routes ───────────────────────────────────────────────
+const corsHeaders = [
+  { key: 'Access-Control-Allow-Credentials', value: 'true' },
+  { key: 'Access-Control-Allow-Origin',      value: appUrl },
+  { key: 'Access-Control-Allow-Methods',     value: 'GET,POST,PUT,DELETE,OPTIONS' },
+  { key: 'Access-Control-Allow-Headers',     value: 'Content-Type, Authorization' },
+];
+
 const nextConfig: NextConfig = {
   images: {
-    localPatterns: [
-      {
-        pathname: '/outplex-logo.png',
-      },
-      {
-        pathname: '/outplex-logo.webp',
-      },
-      {
-        pathname: '/api/assets/**',
-      },
-      {
-        pathname: '/**',
-      },
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: '*.supabase.co' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
     ],
+    localPatterns: [
+      { pathname: '/outplex-logo.png' },
+      { pathname: '/outplex-logo.webp' },
+      { pathname: '/api/assets/**' },
+      { pathname: '/**' },
+    ],
+  },
+
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: securityHeaders,
+      },
+      {
+        source: '/api/(.*)',
+        headers: corsHeaders,
+      },
+    ];
   },
 };
 
