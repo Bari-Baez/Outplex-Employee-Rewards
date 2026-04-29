@@ -177,13 +177,30 @@ export function LandingClient({
       scrollRef.current.velocity = e.velocity;
 
       if (p >= 0.99 && !spaceLockedRef.current) {
-        // Update ref immediately (no waiting for React render cycle)
         spaceLockedRef.current = true;
         setSpaceLocked(true);
         lenisRef.current?.stop();
         window.scrollTo(0, document.body.scrollHeight);
       }
+
+      // Scroll back up past threshold → release lock and resume Lenis
+      if (spaceLockedRef.current && p < 0.9) {
+        spaceLockedRef.current = false;
+        setSpaceLocked(false);
+        lenisRef.current?.start();
+      }
     });
+
+    // When Lenis is stopped, wheel/trackpad events don't reach the scroll handler.
+    // Detect an upward scroll directly and restart Lenis so the user can go back up.
+    const handleWheelUp = (e: WheelEvent) => {
+      if (spaceLockedRef.current && e.deltaY < 0) {
+        spaceLockedRef.current = false;
+        setSpaceLocked(false);
+        lenisRef.current?.start();
+      }
+    };
+    window.addEventListener('wheel', handleWheelUp, { passive: true });
 
     const animate = (now: number) => {
       // Cap delta to 50 ms — prevents a huge jump when the tab regains focus
@@ -340,6 +357,7 @@ export function LandingClient({
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('wheel', handleWheelUp);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       lenisRef.current?.destroy();
