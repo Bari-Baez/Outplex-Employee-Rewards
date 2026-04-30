@@ -1,0 +1,4425 @@
+openapi: 3.0.3
+
+info:
+  title: Outplex Employee Hub API
+  description: |
+    Internal REST API for the **Outplex Employee Hub** platform.
+
+    Covers overtime management, company store (NYT), employee marketplace,
+    raffles, communications, forms, breaks scheduling, and admin operations.
+
+    ## Authentication
+    Most endpoints require a valid Supabase session cookie obtained after
+    authenticating via **Slack OIDC** (`/auth/callback`).
+    Dev/bootstrap endpoints use a service token in the `x-dev-token` header.
+
+    ## Roles (least → most privileged)
+    | Role | Description |
+    |------|-------------|
+    | `employee` | Regular employee — basic access |
+    | `moderator_b1` | Supervisor — manages breaks, OT, and bath time |
+    | `moderator_a1` | Senior moderator — full moderation suite |
+    | `moderator` | General moderator |
+    | `admin` | Full administrative access |
+
+    ## Base URL
+    All paths are relative to `https://outplexemplyeerewards.vercel.app`.
+
+  version: 1.0.0
+  contact:
+    name: Outplex IT
+    email: admintest@outplex.com
+
+servers:
+  - url: https://outplexemplyeerewards.vercel.app
+    description: Production
+
+tags:
+  - name: Admin
+    description: Administrative controls (admin role required)
+  - name: Assets
+    description: Static asset endpoints
+  - name: Breaks
+    description: Break schedule upload, time logging, and reporting
+  - name: Communications
+    description: Company announcements and push broadcasts
+  - name: Departments
+    description: Department list and custom department management
+  - name: Dev
+    description: Internal development and demo seeding endpoints
+  - name: Employee Store
+    description: Employee-owned marketplace — stores, products, and orders
+  - name: Forms
+    description: Form builder, distribution, responses, and exports
+  - name: Google
+    description: Google OAuth integration and Forms/Sheets sync
+  - name: Moderator
+    description: Moderation tools for users, stores, and point balances
+  - name: Notifications
+    description: User notification management
+  - name: Onboarding
+    description: New-user onboarding flow
+  - name: Orders
+    description: Company store (NYT) order cancellations
+  - name: OT
+    description: Overtime slot publishing, claiming, and management
+  - name: Raffles
+    description: Raffle lifecycle — creation, spinning, and prizes
+  - name: Slack
+    description: Slack workspace integration
+  - name: Store
+    description: Company store (NYT) — items, checkout, reviews, and orders
+  - name: Support
+    description: IT and moderator support tickets
+  - name: System
+    description: File upload, tool availability, and Supabase proxy
+  - name: User
+    description: User role requests and account actions
+
+security:
+  - sessionCookie: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sb-pdebyqbtmnqpvepvrmiw-auth-token
+      description: Supabase session cookie set after Slack OIDC authentication.
+    devToken:
+      type: apiKey
+      in: header
+      name: x-dev-token
+      description: Service token for dev/bootstrap endpoints (`DEV_BOOTSTRAP_TOKEN` env var).
+
+  responses:
+    Unauthorized:
+      description: Authentication required — no valid session cookie present.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Unauthorized
+    Forbidden:
+      description: Valid session exists but role is insufficient.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Forbidden
+    BadRequest:
+      description: Invalid or missing request parameters/body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Success:
+      description: Operation completed successfully.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SuccessResponse'
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Unauthorized
+
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    UserRole:
+      type: string
+      enum: [employee, moderator_b1, moderator_a1, moderator, admin, staff]
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+        department:
+          type: string
+          nullable: true
+        employee_id:
+          type: string
+          nullable: true
+        supervisor_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_approved:
+          type: boolean
+        points:
+          type: integer
+        avatar_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    OtSlot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          example: '08:00'
+        end_time:
+          type: string
+          example: '12:00'
+        duration_hrs:
+          type: number
+        shift_label:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [available, claimed, cancelled]
+        claimed_by:
+          type: string
+          format: uuid
+          nullable: true
+        claim_kind:
+          type: string
+          enum: [day_off, scheduled_extension, recovery]
+          nullable: true
+
+    StoreItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        points_cost:
+          type: integer
+        stock:
+          type: integer
+        image_url:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        category:
+          type: string
+          nullable: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    StoreOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        total_points:
+          type: integer
+        status:
+          type: string
+          enum: [pending, ready_for_pickup, completed, cancelled, denied]
+        pickup_mode:
+          type: string
+          enum: [on_site, remote]
+          nullable: true
+        pickup_date:
+          type: string
+          format: date
+          nullable: true
+        pickup_note:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    StoreReview:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        item_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        cover_image_url:
+          type: string
+          nullable: true
+        content:
+          type: array
+          items:
+            type: object
+            description: Content block (type: text | image | slider | pdf)
+        action:
+          type: string
+          enum: [draft, scheduled, published]
+        publish_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_days:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    AnnouncementInput:
+      type: object
+      required: [title, action]
+      properties:
+        title:
+          type: string
+        excerpt:
+          type: string
+          nullable: true
+        coverImageUrl:
+          type: string
+          nullable: true
+        content:
+          type: array
+          items:
+            type: object
+        durationDays:
+          type: integer
+        action:
+          type: string
+          enum: [draft, scheduled, published]
+        publishAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    BreakSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee_id:
+          type: string
+          format: uuid
+        schedule_date:
+          type: string
+          format: date
+        shift_in:
+          type: string
+          nullable: true
+        shift_out:
+          type: string
+          nullable: true
+        first_break:
+          type: string
+          nullable: true
+        lunch:
+          type: string
+          nullable: true
+        second_break:
+          type: string
+          nullable: true
+        third_break:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, published, archived]
+
+    SupportTicket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        department:
+          type: string
+          enum: [it, moderator]
+        subject:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+        created_at:
+          type: string
+          format: date-time
+
+    EmployeeStore:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, paused, closed, suspended]
+        is_open:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    EmployeeStoreProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        store_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        price_dop:
+          type: number
+        cost_dop:
+          type: number
+        stock:
+          type: integer
+        image_url:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, active, rejected, out_of_stock]
+
+    Form:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, published, closed]
+        is_mandatory:
+          type: boolean
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    RoleRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, reviewing, approved, rejected]
+        role:
+          $ref: '#/components/schemas/UserRole'
+        functional_area:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Raffle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        mode:
+          type: string
+          enum: [live, scheduled, completed]
+        spin_count:
+          type: integer
+        remove_winner_after_spin:
+          type: boolean
+        scheduled_date:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ═══════════════════════════════════════
+  # ADMIN
+  # ═══════════════════════════════════════
+
+  /api/admin/tools:
+    get:
+      tags: [Admin]
+      summary: Get tool/section availability state
+      description: Returns current state of all tool toggles, section availability, and the maintenance banner.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Availability state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+                  sections:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+                  banner:
+                    type: object
+                    properties:
+                      active:
+                        type: boolean
+                      message:
+                        type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      summary: Update tool/section availability or maintenance banner
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                toolUpdates:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+                sectionUpdates:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+                banner:
+                  type: object
+                  properties:
+                    active:
+                      type: boolean
+                    message:
+                      type: string
+      responses:
+        '200':
+          description: Updated state
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/users/logout:
+    post:
+      tags: [Admin]
+      summary: Force-logout a user
+      description: Revokes all active Supabase sessions for a specific user.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: User logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # ASSETS
+  # ═══════════════════════════════════════
+
+  /api/assets/outplex-logo:
+    get:
+      tags: [Assets]
+      summary: Redirect to Outplex logo PNG
+      security: []
+      responses:
+        '307':
+          description: Redirect to /outplex-logo.png (no-store cache)
+
+  # ═══════════════════════════════════════
+  # BREAKS
+  # ═══════════════════════════════════════
+
+  /api/breaks/my-schedule:
+    get:
+      tags: [Breaks]
+      summary: Get my schedule for today
+      description: Returns the authenticated employee's published break schedule and time logs for today.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Today's schedule and time logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedule:
+                    allOf:
+                      - $ref: '#/components/schemas/BreakSchedule'
+                    nullable: true
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        log_id:
+                          type: string
+                          format: uuid
+                        event_type:
+                          type: string
+                        actual_start:
+                          type: string
+                          format: date-time
+                        actual_end:
+                          type: string
+                          format: date-time
+                          nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/breaks/report:
+    post:
+      tags: [Breaks]
+      summary: Start a break event
+      description: |
+        Employee logs the start of a break with a server-side timestamp.
+        A `delay_reason` is required when the report is >5 minutes late.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [daily_schedule_id, event_type]
+              properties:
+                daily_schedule_id:
+                  type: string
+                  format: uuid
+                event_type:
+                  type: string
+                  enum: [shift_in, first_break, lunch, second_break, third_break, shift_out]
+                delay_reason:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Break log created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  log:
+                    type: object
+                  varianceMinutes:
+                    type: number
+                    nullable: true
+                  scheduledEnd:
+                    type: string
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/breaks/report-end:
+    post:
+      tags: [Breaks]
+      summary: End a break event
+      description: Closes the active time log entry with a server-side end timestamp.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [log_id]
+              properties:
+                log_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Break ended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  actual_end:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/breaks/report/export:
+    get:
+      tags: [Breaks]
+      summary: Export break variance report (Excel)
+      description: |
+        Generates an `.xlsx` file with color-coded delay variance data and
+        an employee summary sheet. Requires moderator_b1 or above.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: lob
+          in: query
+          description: Filter by line of business / department
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Excel workbook
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/upload:
+    post:
+      tags: [Breaks]
+      summary: Upload schedule file (CSV / Excel)
+      description: Parses the file, matches employees, and creates a batch for review. Requires moderator_a1+.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV or Excel schedule file (max 10 MB)
+                force_replace:
+                  type: string
+                  enum: ['true', 'false']
+                  description: Replace an existing schedule for the same date
+      responses:
+        '200':
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  batchId:
+                    type: string
+                    format: uuid
+                  batchName:
+                    type: string
+                  scheduleDate:
+                    type: string
+                    format: date
+                  matched:
+                    type: integer
+                  pendingReview:
+                    type: array
+                    items:
+                      type: object
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/manual-entry:
+    post:
+      tags: [Breaks]
+      summary: Manually create an employee schedule
+      description: Moderator creates a single daily schedule for an employee with break times.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduleDate, employeeId]
+              properties:
+                scheduleDate:
+                  type: string
+                  format: date
+                employeeId:
+                  type: string
+                  format: uuid
+                shiftIn:
+                  type: string
+                  example: '08:00'
+                shiftOut:
+                  type: string
+                  example: '17:00'
+                firstBreak:
+                  type: string
+                  nullable: true
+                lunch:
+                  type: string
+                  nullable: true
+                secondBreak:
+                  type: string
+                  nullable: true
+                thirdBreak:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/match-agent:
+    post:
+      tags: [Breaks]
+      summary: Manually match an unmatched agent to a user
+      description: Links a raw name from the uploaded schedule to a platform user ID.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId, rawName, userId]
+              properties:
+                batchId:
+                  type: string
+                  format: uuid
+                rawName:
+                  type: string
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Match result
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/live-sync:
+    post:
+      tags: [Breaks]
+      summary: Sync schedule from Microsoft 365 / SharePoint
+      description: Pulls schedule data from Microsoft Graph API and auto-creates a batch. Requires moderator_b1+.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  batchId:
+                    type: string
+                    format: uuid
+                  matched:
+                    type: integer
+                  pendingReviewCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/bath-time/active:
+    get:
+      tags: [Breaks]
+      summary: Get active bath-time logs (supervisors)
+      description: Lists all currently open bath-time log entries for today. Requires moderator_b1+.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activeCount:
+                    type: integer
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        log_id:
+                          type: string
+                          format: uuid
+                        employee:
+                          type: string
+                        actual_start:
+                          type: string
+                          format: date-time
+                        duration_minutes:
+                          type: number
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/batches/{batchId}/schedules:
+    get:
+      tags: [Breaks]
+      summary: Get all schedules in a batch
+      description: Fetches every daily schedule record in the batch with joined employee info.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Schedules array
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BreakSchedule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Breaks]
+      summary: Bulk-upsert batch schedules
+      description: Replaces or creates multiple schedule rows. Requires moderator_a1+.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updates]
+              properties:
+                updates:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/BreakSchedule'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/breaks/batches/{batchId}/publish:
+    post:
+      tags: [Breaks]
+      summary: Publish, schedule, or delete a batch
+      description: Publishes employees' schedules immediately, schedules for a future time, or deletes the batch.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [publish, schedule, delete]
+                schedule_at:
+                  type: string
+                  format: date-time
+                  description: Required when action is "schedule"
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # COMMUNICATIONS
+  # ═══════════════════════════════════════
+
+  /api/communications/announcements:
+    post:
+      tags: [Communications]
+      summary: Create company announcement
+      description: Creates a company-wide announcement with rich content blocks. Requires moderator_a1+.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementInput'
+      responses:
+        '200':
+          description: Created announcement
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  announcement:
+                    $ref: '#/components/schemas/Announcement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/communications/announcements/{announcementId}:
+    patch:
+      tags: [Communications]
+      summary: Update announcement
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementInput'
+      responses:
+        '200':
+          description: Updated announcement
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Communications]
+      summary: Delete announcement
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/communications/broadcasts:
+    post:
+      tags: [Communications]
+      summary: Create push-notification broadcast
+      description: Creates a broadcast with optional scheduling. Daily quotas apply for store owners.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, message, category, action]
+              properties:
+                title:
+                  type: string
+                message:
+                  type: string
+                category:
+                  type: string
+                action:
+                  type: string
+                  enum: [draft, scheduled, published]
+                publishAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        '200':
+          description: Created broadcast
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/communications/broadcasts/{broadcastId}:
+    patch:
+      tags: [Communications]
+      summary: Update broadcast
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: broadcastId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                message:
+                  type: string
+                category:
+                  type: string
+                action:
+                  type: string
+                  enum: [draft, scheduled, published]
+                publishAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        '200':
+          description: Updated broadcast
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Communications]
+      summary: Delete broadcast
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: broadcastId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/communications/employee-announcements:
+    post:
+      tags: [Communications]
+      summary: Create employee-store announcement
+      description: Store owners publish announcements to their followers. Daily limits apply.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementInput'
+      responses:
+        '200':
+          description: Created announcement
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/communications/employee-announcements/{announcementId}:
+    patch:
+      tags: [Communications]
+      summary: Update employee-store announcement
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementInput'
+      responses:
+        '200':
+          description: Updated announcement
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Communications]
+      summary: Delete employee-store announcement
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: announcementId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════
+  # DEPARTMENTS
+  # ═══════════════════════════════════════
+
+  /api/departments:
+    get:
+      tags: [Departments]
+      summary: List all departments
+      description: Returns built-in departments plus any custom ones created by admins.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Department list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  departments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        value:
+                          type: string
+                        label:
+                          type: string
+                        group:
+                          type: string
+    post:
+      tags: [Departments]
+      summary: Create custom department
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                group:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Departments]
+      summary: Delete custom department
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════
+  # DEV (internal)
+  # ═══════════════════════════════════════
+
+  /api/dev/bootstrap:
+    post:
+      tags: [Dev]
+      summary: Bootstrap demo users
+      description: |
+        Creates preset demo accounts for development and presentation.
+        **Disabled in production** (`ALLOW_PUBLIC_DEMO_BOOTSTRAP=false`).
+        Requires `x-dev-token` header matching `DEV_BOOTSTRAP_TOKEN`.
+      security:
+        - devToken: []
+      responses:
+        '200':
+          description: Bootstrap result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        email:
+                          type: string
+                          format: email
+                        role:
+                          $ref: '#/components/schemas/UserRole'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/dev/promote:
+    post:
+      tags: [Dev]
+      summary: Promote demo user to a role
+      description: |
+        Upserts a demo user's role. Internal use only.
+        Requires `x-dev-token` header.
+      security:
+        - devToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  $ref: '#/components/schemas/UserRole'
+      responses:
+        '200':
+          description: Promotion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  updated:
+                    type: boolean
+                  msg:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/dev/demo:
+    get:
+      tags: [Dev]
+      summary: Get demo data state
+      description: Returns current demo seeding status. Requires admin role.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Demo status
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Dev]
+      summary: Execute demo action
+      description: Seed, reset, or adjust demo data. Requires admin role.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [ensureUsers, resetDemo, seedDemo, resetAndSeed, setPoints]
+                userId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: integer
+                mode:
+                  type: string
+                  enum: [set, adjust]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Action result
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # EMPLOYEE STORE
+  # ═══════════════════════════════════════
+
+  /api/employee-store/stores:
+    get:
+      tags: [Employee Store]
+      summary: List all active employee stores
+      description: Returns approved stores with enriched owner data and active product count.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Store list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stores:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmployeeStore'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/my-store:
+    get:
+      tags: [Employee Store]
+      summary: Get own store and product list
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Store and products
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Employee Store]
+      summary: Update own store settings
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                banner_image:
+                  type: string
+                logo_image:
+                  type: string
+                accent_color:
+                  type: string
+                status:
+                  type: string
+                  enum: [active, paused, closed, suspended]
+                is_open:
+                  type: boolean
+                operating_hours:
+                  type: object
+      responses:
+        '200':
+          description: Updated store
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/products:
+    get:
+      tags: [Employee Store]
+      summary: List own store products
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Products
+    post:
+      tags: [Employee Store]
+      summary: Create product in own store
+      description: Prevents creation if another product is currently suspended.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price_dop, cost_dop, stock]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                price_dop:
+                  type: number
+                cost_dop:
+                  type: number
+                stock:
+                  type: integer
+                image_url:
+                  type: string
+                category:
+                  type: string
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Created product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: '#/components/schemas/EmployeeStoreProduct'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/products/{productId}:
+    patch:
+      tags: [Employee Store]
+      summary: Update product
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeStoreProduct'
+      responses:
+        '200':
+          description: Updated product
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Employee Store]
+      summary: Delete product
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/orders:
+    get:
+      tags: [Employee Store]
+      summary: List purchase orders
+      description: Returns the authenticated user's purchase orders with store and seller enrichment.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Orders list
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Employee Store]
+      summary: Create order(s)
+      description: Groups items by store, validates stock, and creates multiple orders if needed.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                contactMethod:
+                  type: string
+                buyerNotes:
+                  type: string
+                pickupMode:
+                  type: string
+                  enum: [on_site, remote]
+                pickupAt:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Created orders
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/orders/{id}:
+    patch:
+      tags: [Employee Store]
+      summary: Update order status (seller)
+      description: Store owner marks fulfillment progress and schedules pickup.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [ready_for_pickup, completed, cancelled]
+                pickupMode:
+                  type: string
+                pickupAt:
+                  type: string
+                  format: date-time
+                pickupDeadline:
+                  type: string
+                  format: date-time
+                pickupNote:
+                  type: string
+      responses:
+        '200':
+          description: Updated order
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/orders/cancel:
+    post:
+      tags: [Employee Store]
+      summary: Cancel own order (buyer)
+      description: Buyer cancels if order is still in pending or ready-for-pickup state.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId]
+              properties:
+                orderId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/requests:
+    get:
+      tags: [Employee Store]
+      summary: List own store creation requests
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Store requests
+    post:
+      tags: [Employee Store]
+      summary: Submit store creation request
+      description: Creates a request for approval and notifies moderators.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [store_name, description, category, policy_accepted]
+              properties:
+                store_name:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                policy_accepted:
+                  type: boolean
+      responses:
+        '200':
+          description: Created request
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/reviews:
+    get:
+      tags: [Employee Store]
+      summary: Get reviews for a store
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: storeId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reviews list
+    post:
+      tags: [Employee Store]
+      summary: Submit or update product rating
+      description: Upserts a 1–5 star rating. Self-reviews on own store products are blocked.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, rating]
+              properties:
+                productId:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+      responses:
+        '200':
+          description: Upserted review
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employee-store/reviews/user:
+    post:
+      tags: [Employee Store]
+      summary: Batch-get my ratings for products
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productIds]
+              properties:
+                productIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Ratings map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ratings:
+                    type: object
+                    additionalProperties:
+                      type: number
+
+  # ═══════════════════════════════════════
+  # FORMS
+  # ═══════════════════════════════════════
+
+  /api/forms:
+    get:
+      tags: [Forms]
+      summary: List forms
+      description: Employees see published forms; moderators see all with response counts.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Forms list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Form'
+    post:
+      tags: [Forms]
+      summary: Create draft form
+      description: Form moderator role required.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Created form
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Form'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/forms/{formId}:
+    get:
+      tags: [Forms]
+      summary: Get form details
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Form
+    patch:
+      tags: [Forms]
+      summary: Update form
+      description: Updates fields, settings, and metadata. Form moderator required.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                fields:
+                  type: array
+                  items:
+                    type: object
+                settings:
+                  type: object
+                status:
+                  type: string
+                  enum: [draft, published, closed]
+                is_mandatory:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated form
+    delete:
+      tags: [Forms]
+      summary: Delete form
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+
+  /api/forms/{formId}/publish:
+    post:
+      tags: [Forms]
+      summary: Toggle form publish state
+      description: Switches form between `published` and `closed`. Form moderator required.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Updated form state
+
+  /api/forms/{formId}/responses:
+    get:
+      tags: [Forms]
+      summary: Get all form responses
+      description: Form moderator required.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Responses array
+    post:
+      tags: [Forms]
+      summary: Submit form response
+      description: Any authenticated employee can submit one response per form.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  type: object
+                  additionalProperties: {}
+      responses:
+        '200':
+          description: Submitted response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/forms/{formId}/completion:
+    get:
+      tags: [Forms]
+      summary: Get form completion status per employee
+      description: Returns lists of employees who have and have not submitted. Form moderator required.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Completion status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  completed:
+                    type: array
+                    items:
+                      type: object
+                  pending:
+                    type: array
+                    items:
+                      type: object
+
+  /api/forms/{formId}/export:
+    get:
+      tags: [Forms]
+      summary: Export form responses as CSV
+      description: Downloads a CSV with employee name, email, ID, submission date, and field answers.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # GOOGLE
+  # ═══════════════════════════════════════
+
+  /api/google/status:
+    get:
+      tags: [Google]
+      summary: Get Google OAuth connection status
+      security: []
+      responses:
+        '200':
+          description: Connection state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connected:
+                    type: boolean
+                  email:
+                    type: string
+                    nullable: true
+                  connectedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+    delete:
+      tags: [Google]
+      summary: Disconnect Google account
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Disconnected
+
+  /api/google/connect:
+    get:
+      tags: [Google]
+      summary: Initiate Google OAuth flow
+      description: Redirects to Google consent page with CSRF nonce. Requires moderator_a1 or admin.
+      security:
+        - sessionCookie: []
+      responses:
+        '302':
+          description: Redirect to Google OAuth URL
+
+  /api/google/callback:
+    get:
+      tags: [Google]
+      summary: Google OAuth callback handler
+      description: Exchanges auth code for tokens and redirects to settings page.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to /settings
+
+  /api/google/forms:
+    get:
+      tags: [Google]
+      summary: List Google Forms from Drive
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Google Forms list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  forms:
+                    type: array
+                    items:
+                      type: object
+
+  /api/google/forms/import:
+    post:
+      tags: [Google]
+      summary: Import a Google Form
+      description: Converts a Google Form into an Outplex form. Requires moderator_a1+.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [googleFormId]
+              properties:
+                googleFormId:
+                  type: string
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  formId:
+                    type: string
+                    format: uuid
+                  alreadyExists:
+                    type: boolean
+                  fieldCount:
+                    type: integer
+
+  /api/google/sheets/export:
+    post:
+      tags: [Google]
+      summary: Export form responses to Google Sheets
+      description: Creates a new Google Sheet with all responses. Form moderator required.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [formId]
+              properties:
+                formId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Sheet created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  spreadsheetId:
+                    type: string
+                  spreadsheetUrl:
+                    type: string
+                  rowsWritten:
+                    type: integer
+                  cellsWritten:
+                    type: integer
+
+  # ═══════════════════════════════════════
+  # MODERATOR
+  # ═══════════════════════════════════════
+
+  /api/moderator/users/access-review:
+    post:
+      tags: [Moderator]
+      summary: Approve or deny platform access for a new user
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, decision]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                decision:
+                  type: string
+                  enum: [approved, denied]
+                reason:
+                  type: string
+                  description: Required when decision is "denied"
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/users/update:
+    post:
+      tags: [Moderator]
+      summary: Update user profile and role
+      description: Updates role, department, supervisor, and profile fields. Resets approval if role changes.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                department:
+                  type: string
+                supervisor_id:
+                  type: string
+                  format: uuid
+                is_approved:
+                  type: boolean
+                name:
+                  type: string
+                employee_id:
+                  type: string
+      responses:
+        '200':
+          description: Update result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+                  roleChanged:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/users/revoke:
+    post:
+      tags: [Moderator]
+      summary: Revoke user's special role
+      description: Resets role to employee and sets `role_revoked_at` timestamp with full audit trail.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/users/delete:
+    post:
+      tags: [Moderator]
+      summary: Permanently delete user
+      description: Removes user from both the public profile table and Supabase Auth. Admin only.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/roles/approve:
+    post:
+      tags: [Moderator]
+      summary: Approve or reject a role upgrade request
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, role, department, decision]
+              properties:
+                requestId:
+                  type: string
+                  format: uuid
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                department:
+                  type: string
+                decision:
+                  type: string
+                  enum: [approved, rejected]
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Decision result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  decision:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/points:
+    post:
+      tags: [Moderator]
+      summary: Update employee point balances
+      description: |
+        Accepts either `assignments` (by email/employee_id) or `updates` (by userId).
+        Requires moderator or admin.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assignments:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      identifier:
+                        type: string
+                        description: Employee email or employee_id
+                      points:
+                        type: integer
+                updates:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      userId:
+                        type: string
+                        format: uuid
+                      points:
+                        type: integer
+                      reason:
+                        type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Update result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  updatedCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/points/reset:
+    post:
+      tags: [Moderator]
+      summary: Reset ALL employee points to zero
+      description: |
+        Zeroes every non-zero point balance with a full audit trail.
+        The body must include `confirm: "RESET"` as a safety gate.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm:
+                  type: string
+                  enum: ['RESET']
+                  description: Must be exactly the string "RESET"
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Reset result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  resetCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/employee-store/stores:
+    patch:
+      tags: [Moderator]
+      summary: Update employee store status
+      description: Admin/moderator_a1 can pause, close, or suspend a store.
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: [active, paused, closed, suspended]
+                reason:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Moderator]
+      summary: Permanently delete employee store
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: storeId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/employee-store/requests:
+    get:
+      tags: [Moderator]
+      summary: List store creation requests and existing stores
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Requests and stores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      type: object
+                  stores:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmployeeStore'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/employee-store/requests/{requestId}:
+    patch:
+      tags: [Moderator]
+      summary: Approve or reject a store creation request
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [approved, rejected]
+                notes:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+      responses:
+        '200':
+          description: Decision result
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/employee-store/products:
+    get:
+      tags: [Moderator]
+      summary: List all employee store products
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Products list
+    patch:
+      tags: [Moderator]
+      summary: Approve, reject, or suspend a product
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                productId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: [active, rejected, out_of_stock]
+                reviewNotes:
+                  type: string
+                is_suspended:
+                  type: boolean
+                suspend_reason:
+                  type: string
+      responses:
+        '200':
+          description: Updated product
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Moderator]
+      summary: Delete employee store product
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: productId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/moderator/maintenance/cleanup-logs:
+    post:
+      tags: [Moderator]
+      summary: Purge old platform records
+      description: |
+        Deletes aged records by category:
+        - Activity logs older than 30 days
+        - Store orders older than 30 days
+        - Completed raffles older than 20 days
+        - Processed store requests older than 15 days
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  purged:
+                    type: array
+                    items:
+                      type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # NOTIFICATIONS
+  # ═══════════════════════════════════════
+
+  /api/notifications:
+    delete:
+      tags: [Notifications]
+      summary: Clear all notifications
+      description: |
+        Deletes every notification for the authenticated user.
+        Notifications are typically fetched directly via the Supabase client SDK,
+        not through a REST endpoint.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/{notificationId}:
+    delete:
+      tags: [Notifications]
+      summary: Delete a single notification
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/mutes:
+    post:
+      tags: [Notifications]
+      summary: Mute notifications from a sender
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [senderId]
+              properties:
+                senderId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/mutes/{senderId}:
+    delete:
+      tags: [Notifications]
+      summary: Unmute notifications from a sender
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: senderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════
+  # ONBOARDING
+  # ═══════════════════════════════════════
+
+  /api/onboarding/supervisors:
+    get:
+      tags: [Onboarding]
+      summary: List supervisors for the onboarding dropdown
+      description: Returns all users with `moderator_b1` role as selectable supervisors.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Supervisors list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  supervisors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/onboarding/complete-profile:
+    post:
+      tags: [Onboarding]
+      summary: Complete user profile during onboarding
+      description: Saves name, employee ID, department, and supervisor assignment for a new user.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, employee_id, department, supervisor_id]
+              properties:
+                name:
+                  type: string
+                employee_id:
+                  type: string
+                department:
+                  type: string
+                supervisor_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/onboarding/request-access:
+    post:
+      tags: [Onboarding]
+      summary: Submit specialized access request
+      description: Creates a `role_request` record and notifies the moderator team.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, employee_id, functional_area, reason]
+              properties:
+                name:
+                  type: string
+                employee_id:
+                  type: string
+                functional_area:
+                  type: string
+                  description: e.g. QA, Workforce Management, Senior Operations
+                reason:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════
+  # ORDERS (NYT Company Store)
+  # ═══════════════════════════════════════
+
+  /api/orders/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel a company store order
+      description: Cancels a pending order within the 5-minute cancellation window and refunds points.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId]
+              properties:
+                orderId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════
+  # OT (Overtime)
+  # ═══════════════════════════════════════
+
+  /api/ot/claim:
+    post:
+      tags: [OT]
+      summary: Claim an OT slot
+      description: Claims an available slot. Validates for time overlaps and daily claim limits.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slotId, claimKind]
+              properties:
+                slotId:
+                  type: string
+                  format: uuid
+                claimKind:
+                  type: string
+                  enum: [day_off, scheduled_extension, recovery]
+      responses:
+        '200':
+          description: Claimed slot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OtSlot'
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/ot/unclaim:
+    post:
+      tags: [OT]
+      summary: Release a claimed OT slot
+      description: Releases the slot within the 20-minute unclaim window.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slotId]
+              properties:
+                slotId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Released slot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OtSlot'
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/ot/publish:
+    post:
+      tags: [OT]
+      summary: Publish OT batch from CSV rows
+      description: Creates or updates an OT batch with slots. Posts Slack notification when published.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rows, batchName, status]
+              properties:
+                rows:
+                  type: array
+                  items:
+                    type: object
+                  description: Parsed CSV rows from the OT upload
+                batchName:
+                  type: string
+                batchId:
+                  type: string
+                  format: uuid
+                  description: Provide to update an existing batch
+                status:
+                  type: string
+                  enum: [published, draft]
+      responses:
+        '200':
+          description: Published batch
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OtSlot'
+                  batch:
+                    type: object
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/ot/slots/{slotId}:
+    patch:
+      tags: [OT]
+      summary: Update an OT slot
+      description: Edits slot date, time, assignment, or status with conflict checking and user notifications.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                start_time:
+                  type: string
+                  example: '08:00'
+                end_time:
+                  type: string
+                  example: '12:00'
+                shift_label:
+                  type: string
+                assignedUserId:
+                  type: string
+                  format: uuid
+                claimKind:
+                  type: string
+                  enum: [day_off, scheduled_extension, recovery]
+                status:
+                  type: string
+                  enum: [available, claimed, cancelled]
+      responses:
+        '200':
+          description: Updated slot
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [OT]
+      summary: Cancel an OT slot
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/ot/drafts/{draftId}:
+    delete:
+      tags: [OT]
+      summary: Delete an OT draft batch
+      description: Permanently deletes the draft batch and all its associated slot records.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: draftId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # RAFFLES
+  # ═══════════════════════════════════════
+
+  /api/raffles:
+    get:
+      tags: [Raffles]
+      summary: Get raffle feed
+      description: Returns the current raffle feed with lifecycle state.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Raffle feed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Raffles]
+      summary: Create a raffle
+      description: Creates a new live or scheduled raffle with participants and prize plan.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, title, participants]
+              properties:
+                mode:
+                  type: string
+                  enum: [live, scheduled]
+                title:
+                  type: string
+                description:
+                  type: string
+                participants:
+                  type: array
+                  items:
+                    type: object
+                prizePlan:
+                  type: object
+                prizePlans:
+                  type: array
+                  items:
+                    type: object
+                countdownOption:
+                  type: string
+                removeWinnerAfterSpin:
+                  type: boolean
+                spinCount:
+                  type: integer
+                scheduledDate:
+                  type: string
+                  format: date
+                scheduledTime:
+                  type: string
+      responses:
+        '200':
+          description: Created raffle
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Raffles]
+      summary: Prune expired raffles
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+
+  /api/raffles/{raffleId}:
+    delete:
+      tags: [Raffles]
+      summary: Delete a raffle
+      description: Soft-deletes upcoming raffles; hard-deletes live/completed with stock restoration.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: raffleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Delete result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                      canRestore:
+                        type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/raffles/{raffleId}/prizes:
+    patch:
+      tags: [Raffles]
+      summary: Assign a prize to a winner
+      description: Records prize assignment and manages store item stock deduction.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: raffleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                winnerParticipantId:
+                  type: string
+                prizeTitle:
+                  type: string
+                prizeSlotId:
+                  type: string
+                storeItemId:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                imageUrl:
+                  type: string
+                unitPoints:
+                  type: integer
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Updated raffle runtime
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/raffles/{raffleId}/spin-complete:
+    post:
+      tags: [Raffles]
+      summary: Complete a raffle spin
+      description: Records the winner and optionally creates store orders for prize fulfillment.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: raffleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spinToken]
+              properties:
+                spinToken:
+                  type: string
+                  description: One-time token generated at spin start
+      responses:
+        '200':
+          description: Spin result
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/raffles/{raffleId}/restore:
+    post:
+      tags: [Raffles]
+      summary: Restore a soft-deleted raffle
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: raffleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Restored
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/raffles/{raffleId}/video:
+    get:
+      tags: [Raffles]
+      summary: Download raffle spin video proof
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: raffleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: WebM video file
+          content:
+            video/webm:
+              schema:
+                type: string
+                format: binary
+    post:
+      tags: [Raffles]
+      summary: Upload raffle spin video proof
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: raffleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [spinToken, file]
+              properties:
+                spinToken:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+                  description: WebM video recording
+      responses:
+        '200':
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      downloadUrl:
+                        type: string
+                        format: uri
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/raffles/deleted:
+    get:
+      tags: [Raffles]
+      summary: List soft-deleted raffles (recycle bin)
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Deleted raffles
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/raffles/sync:
+    post:
+      tags: [Raffles]
+      summary: Sync raffle lifecycle state
+      description: Advances timers, transitions phases, and returns the updated feed.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Updated raffle feed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # SLACK
+  # ═══════════════════════════════════════
+
+  /api/slack/workspace:
+    get:
+      tags: [Slack]
+      summary: Get Slack workspace configuration status
+      security: []
+      responses:
+        '200':
+          description: Workspace info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                  workspace:
+                    type: object
+                    nullable: true
+
+  /api/slack/fields:
+    get:
+      tags: [Slack]
+      summary: List Slack custom profile fields
+      description: Diagnostic endpoint to identify the Employee ID field ID in the Slack workspace.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Slack profile fields
+
+  /api/slack/notify:
+    post:
+      tags: [Slack]
+      summary: Post OT batch notification to Slack
+      description: Sends a formatted message with a claim button to the configured OT Slack channel.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchName, slotsCount, firstDate, lastDate]
+              properties:
+                batchName:
+                  type: string
+                slotsCount:
+                  type: integer
+                firstDate:
+                  type: string
+                  format: date
+                lastDate:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Notification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  skipped:
+                    type: boolean
+                    description: True if Slack is not configured
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ═══════════════════════════════════════
+  # STORE (NYT Company Store)
+  # ═══════════════════════════════════════
+
+  /api/store/items:
+    post:
+      tags: [Store]
+      summary: Create a store item
+      description: Adds a new redeemable item to the company store. Requires moderator_a1+.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, points_cost, stock]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                points_cost:
+                  type: integer
+                stock:
+                  type: integer
+                image_url:
+                  type: string
+                is_active:
+                  type: boolean
+                category:
+                  type: string
+      responses:
+        '200':
+          description: Created item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item:
+                    $ref: '#/components/schemas/StoreItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/store/items/{itemId}:
+    patch:
+      tags: [Store]
+      summary: Update a store item
+      description: Edits item properties; triggers low-stock alerts when stock drops below threshold.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                points_cost:
+                  type: integer
+                stock:
+                  type: integer
+                image_url:
+                  type: string
+                is_active:
+                  type: boolean
+                category:
+                  type: string
+      responses:
+        '200':
+          description: Updated item
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Store]
+      summary: Soft-delete a store item
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/store/checkout:
+    post:
+      tags: [Store]
+      summary: Process store checkout
+      description: Validates cart, deducts points, reserves stock, and creates orders. Low-stock alerts fire automatically.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cart]
+              properties:
+                cart:
+                  type: array
+                  items:
+                    type: object
+                    required: [item, quantity]
+                    properties:
+                      item:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                      quantity:
+                        type: integer
+      responses:
+        '200':
+          description: Checkout result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  totalPoints:
+                    type: integer
+                  orderCount:
+                    type: integer
+                  orderId:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/store/favorites:
+    get:
+      tags: [Store]
+      summary: Get favorited item IDs
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Favorite item IDs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  favoriteItemIds:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/store/favorites/toggle:
+    post:
+      tags: [Store]
+      summary: Toggle item favorite status
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemId]
+              properties:
+                itemId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: New favorite state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isFavorite:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/store/reviews:
+    get:
+      tags: [Store]
+      summary: Get reviews for a store item
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: itemId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reviews list
+    post:
+      tags: [Store]
+      summary: Submit or update a review
+      description: Upserts a review for an item. One review per user per item.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemId, rating]
+              properties:
+                itemId:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Upserted review
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/store/reviews/summary:
+    get:
+      tags: [Store]
+      summary: Get review summary for all store items
+      description: Returns average rating and review count per item across the entire store.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Summary map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        avg:
+                          type: number
+                        count:
+                          type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/store/reviews/user:
+    post:
+      tags: [Store]
+      summary: Batch-get my ratings for items
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemIds]
+              properties:
+                itemIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Ratings map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ratings:
+                    type: object
+                    additionalProperties:
+                      type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/store/orders/{orderId}:
+    patch:
+      tags: [Store]
+      summary: Update order status (moderator)
+      description: Moderator manages fulfillment — sets pickup details, approves, or denies. Points refunded on denial.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, ready_for_pickup, completed, cancelled, denied]
+                pickupMode:
+                  type: string
+                  enum: [on_site, remote]
+                pickupDate:
+                  type: string
+                  format: date
+                pickupTime:
+                  type: string
+                pickupDeadline:
+                  type: string
+                  format: date-time
+                pickupNote:
+                  type: string
+                denialReason:
+                  type: string
+      responses:
+        '200':
+          description: Updated order
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Store]
+      summary: Archive a completed order
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/store/orders/cleanup:
+    delete:
+      tags: [Store]
+      summary: Archive old eligible orders in bulk
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  deletedCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/store/inventory/notify:
+    post:
+      tags: [Store]
+      summary: Notify employees of restocked items
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemIds]
+              properties:
+                itemIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                moderatorName:
+                  type: string
+      responses:
+        '200':
+          description: Notification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  notifiedCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/store/inventory/reset:
+    post:
+      tags: [Store]
+      summary: Reset entire store inventory
+      description: Deactivates all active store items and moves them to the recycle bin. Requires moderator_a1+.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Reset result
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/store/theme:
+    patch:
+      tags: [Store]
+      summary: Update store theme configuration
+      description: Updates branding settings (accent color, layout, etc.).
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [theme]
+              properties:
+                theme:
+                  type: object
+                  description: StoreThemeConfig — color palette and layout preferences
+      responses:
+        '200':
+          description: Updated theme
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # SUPPORT
+  # ═══════════════════════════════════════
+
+  /api/support/tickets:
+    post:
+      tags: [Support]
+      summary: Create a support ticket
+      description: |
+        Creates a ticket routed to the IT or Moderator team.
+        Subject line is auto-generated. A 5-hour cooldown applies between tickets.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [department, message]
+              properties:
+                department:
+                  type: string
+                  enum: [it, moderator]
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Created ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SupportTicket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/support/tickets/{ticketId}:
+    patch:
+      tags: [Support]
+      summary: Update ticket status
+      description: Moderators update ticket status. Department-based access restrictions apply.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [open, in_progress, resolved]
+      responses:
+        '200':
+          description: Updated ticket
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ═══════════════════════════════════════
+  # SYSTEM
+  # ═══════════════════════════════════════
+
+  /api/upload:
+    post:
+      tags: [System]
+      summary: Upload file to Supabase Storage
+      description: Accepts any file up to 10 MB, stores it, and returns the public URL.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Any file type (max 10 MB)
+                folder:
+                  type: string
+                  description: Storage folder path (optional, defaults to 'public/')
+      responses:
+        '200':
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/tools:
+    get:
+      tags: [System]
+      summary: Get tool/section availability (client-side)
+      description: Used by the React client to determine which features are enabled.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Tool and section state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: object
+                  sections:
+                    type: object
+                  banner:
+                    type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/supabase-proxy/{supabasePath}:
+    get:
+      tags: [System]
+      summary: Proxy GET to Supabase REST API
+      description: |
+        Forwards requests to Supabase. Paths under `auth/v1/` are public (used for OAuth).
+        All other paths require a valid session. Used internally by the Supabase JS client.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Supabase REST path (e.g. `rest/v1/users`)
+      responses:
+        '200':
+          description: Proxied Supabase response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [System]
+      summary: Proxy POST to Supabase REST API
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Proxied Supabase response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [System]
+      summary: Proxy PATCH to Supabase REST API
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Proxied Supabase response
+    delete:
+      tags: [System]
+      summary: Proxy DELETE to Supabase REST API
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proxied Supabase response
+
+  # ═══════════════════════════════════════
+  # USER
+  # ═══════════════════════════════════════
+
+  /api/user/role-request/status:
+    get:
+      tags: [User]
+      summary: Get current role request status
+      description: Returns the status and details of the user's most recent role request.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Role request status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending, reviewing, approved, rejected]
+                    nullable: true
+                  request:
+                    allOf:
+                      - $ref: '#/components/schemas/RoleRequest'
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/role-request/acknowledge:
+    post:
+      tags: [User]
+      summary: Acknowledge an approved role request
+      description: Marks the user as fully approved and deletes the approved role request record.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/role-request/cancel:
+    post:
+      tags: [User]
+      summary: Cancel a pending role request
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/user/clear-revoke:
+    post:
+      tags: [User]
+      summary: Clear role revocation timestamp
+      description: Resets the `role_revoked_at` field, allowing the user to re-enter the platform normally.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
