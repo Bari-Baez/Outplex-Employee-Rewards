@@ -195,6 +195,47 @@ export function parseSpanishTime(rawTime: string): string {
  * "2/12/2026" → "2026-02-12"
  * "2026-04-13" → passthrough
  */
+/**
+ * Given a list of raw date strings ("M/D/YYYY"), score both MM/DD and DD/MM interpretations
+ * by counting how many dates land on today or in the future (OT slots must be present/future).
+ * Returns the format with more valid dates, or 'mdy' as a tiebreaker.
+ */
+export function detectOTDateFormat(rawDates: string[]): OTDateFormat {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+
+  let mdyFuture = 0, dmyFuture = 0;
+  let mdyDist = 0, dmyDist = 0;
+  let ambiguousCount = 0;
+
+  for (const raw of rawDates) {
+    const m = raw.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (!m) continue;
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    let year = Number(m[3]);
+    if (year < 100) year += 2000;
+
+    // Unambiguous: skip (same result either way)
+    if (a > 12 || b > 12) continue;
+    ambiguousCount++;
+
+    const asMDY = new Date(year, a - 1, b).getTime(); // a=month, b=day
+    const asDMY = new Date(year, b - 1, a).getTime(); // a=day, b=month
+
+    if (asMDY >= todayMs) mdyFuture++; else mdyDist += todayMs - asMDY;
+    if (asDMY >= todayMs) dmyFuture++; else dmyDist += todayMs - asDMY;
+  }
+
+  if (ambiguousCount === 0) return 'mdy'; // nothing to decide
+
+  // Group: prefer format with more future dates
+  if (mdyFuture !== dmyFuture) return mdyFuture > dmyFuture ? 'mdy' : 'dmy';
+  // Tiebreak: prefer format whose past dates are less far in the past
+  return mdyDist <= dmyDist ? 'mdy' : 'dmy';
+}
+
 export function parseOTDate(rawDate: string, format: OTDateFormat = 'auto'): string {
   if (!rawDate) return '';
   const cleaned = rawDate.trim();
@@ -202,8 +243,8 @@ export function parseOTDate(rawDate: string, format: OTDateFormat = 'auto'): str
   // Already ISO format
   if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) return cleaned;
 
-  // MM/DD/YY or MM/DD/YYYY
-  const match = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  // M/D/YY or M/D/YYYY (also accepts dash separators)
+  const match = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (match) {
     const first = match[1].padStart(2, '0');
     const second = match[2].padStart(2, '0');
@@ -213,14 +254,29 @@ export function parseOTDate(rawDate: string, format: OTDateFormat = 'auto'): str
     const firstNum = Number(first);
     const secondNum = Number(second);
 
-    const resolvedFormat =
-      format === 'auto'
-        ? firstNum > 12
-          ? 'dmy'
-          : secondNum > 12
-            ? 'mdy'
-            : 'mdy'
-        : format;
+    let resolvedFormat: 'mdy' | 'dmy';
+    if (format === 'auto') {
+      if (firstNum > 12) {
+        resolvedFormat = 'dmy'; // first part must be day
+      } else if (secondNum > 12) {
+        resolvedFormat = 'mdy'; // second part must be day
+      } else {
+        // Both ≤ 12: individual heuristic — pick interpretation closer to today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayMs = today.getTime();
+        const yr = Number(year);
+        const asMDY = new Date(yr, firstNum - 1, secondNum).getTime();
+        const asDMY = new Date(yr, secondNum - 1, firstNum).getTime();
+        const mdyFuture = asMDY >= todayMs;
+        const dmyFuture = asDMY >= todayMs;
+        if (mdyFuture && !dmyFuture) resolvedFormat = 'mdy';
+        else if (dmyFuture && !mdyFuture) resolvedFormat = 'dmy';
+        else resolvedFormat = Math.abs(asMDY - todayMs) <= Math.abs(asDMY - todayMs) ? 'mdy' : 'dmy';
+      }
+    } else {
+      resolvedFormat = format;
+    }
 
     const month = resolvedFormat === 'dmy' ? second : first;
     const day = resolvedFormat === 'dmy' ? first : second;

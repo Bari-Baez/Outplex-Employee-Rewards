@@ -85,6 +85,9 @@ type FormulaScope = 'all' | 'selected' | 'blank-only';
 
 const RESERVED_ROW_KEYS = new Set(['id', '_rowIndex']);
 
+// Column names that represent total hours — mapped to duration_hrs during normalization
+const DURATION_ALIASES = ['total', 'duration', 'hours', 'hrs', 'total_hrs'] as const;
+
 function sanitizeCellValue(value: string | number | undefined, shouldTrim = true) {
   if (typeof value === 'number') {
     return value;
@@ -189,15 +192,30 @@ export function normalizeOTRow(
     normalizedRow[key] = sanitizeCellValue(value, shouldTrim);
   });
 
+  // Promote duration column aliases (e.g. Gemini's "total") to duration_hrs when duration_hrs is absent
+  if (!String(normalizedRow.duration_hrs ?? '').trim()) {
+    for (const alias of DURATION_ALIASES) {
+      const v = String(normalizedRow[alias] ?? '').trim();
+      if (v && Number(v) > 0) {
+        normalizedRow.duration_hrs = Number(v);
+        break;
+      }
+    }
+  }
+
   normalizedRow.date = parseOTDate(String(normalizedRow.date ?? ''), dateFormat);
   normalizedRow.start_time = parseSpanishTime(String(normalizedRow.start_time ?? ''));
   normalizedRow.end_time = parseSpanishTime(String(normalizedRow.end_time ?? ''));
 
-  if (normalizedRow.start_time && normalizedRow.end_time) {
+  // Auto-calculate duration only when it is not already set (preserves manually entered values)
+  if (!String(normalizedRow.duration_hrs ?? '').trim() && normalizedRow.start_time && normalizedRow.end_time) {
     normalizedRow.duration_hrs = calcDuration(
       String(normalizedRow.start_time),
       String(normalizedRow.end_time),
     );
+  }
+
+  if (normalizedRow.start_time && normalizedRow.end_time) {
     normalizedRow.shift_label =
       String(normalizedRow.shift_label ?? '').trim() || getShiftLabel(String(normalizedRow.start_time));
   } else if (!String(normalizedRow.shift_label ?? '').trim() && normalizedRow.start_time) {

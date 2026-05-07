@@ -40,7 +40,7 @@ import {
   type OcrParseLayout,
   sanitizeOTRows,
 } from '@/lib/ot';
-import { normalizeCSVHeaders, parseFlexibleTime, type OTDateFormat, type OTMeridiem } from '@/lib/utils';
+import { detectOTDateFormat, normalizeCSVHeaders, parseFlexibleTime, type OTDateFormat, type OTMeridiem } from '@/lib/utils';
 import { readFileAsTextWithProgress } from '@/lib/file-transfer';
 
 type ValidationError = { row: number; field: string; message: string };
@@ -162,10 +162,10 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   const [pasteText, setPasteText] = useState('');
   const [formulaInput, setFormulaInput] = useState('=SHIFT(start_time)');
   const [formulaColumn, setFormulaColumn] = useState('shift_label');
-  const [formulaScope, setFormulaScope] = useState<FormulaScope>('selected');
+  const [formulaScope, setFormulaScope] = useState<FormulaScope>('all');
   const [bulkEditColumn, setBulkEditColumn] = useState('csv_status');
   const [bulkEditValue, setBulkEditValue] = useState('Pending');
-  const [bulkEditScope, setBulkEditScope] = useState<BulkEditScope>('selected');
+  const [bulkEditScope, setBulkEditScope] = useState<BulkEditScope>('all');
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrSummary, setOcrSummary] = useState<OcrSummary | null>(null);
   const [ocrReview, setOcrReview] = useState<OcrReviewState | null>(null);
@@ -176,6 +176,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   const [deleteColumnModal, setDeleteColumnModal] = useState<string | null>(null);
   const [ocrImageColumns, setOcrImageColumns] = useState<Set<string>>(new Set());
   const uploadRef = useRef<HTMLInputElement>(null);
+  const prevDateFormatRef = useRef<OTDateFormat>('auto');
   const [dragKind, setDragKind] = useState<'csv' | 'image' | null>(null);
   const transfer = useTransferState({ resetAfterMs: 1500 });
 
@@ -216,6 +217,38 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
 
     setErrors(nextErrors);
     return nextErrors;
+  };
+
+  const handleDateFormatChange = (newFormat: OTDateFormat) => {
+    const prevFormat = prevDateFormatRef.current;
+    prevDateFormatRef.current = newFormat;
+    setDateFormat(newFormat);
+
+    if (rows.length === 0) return;
+
+    // When both formats are explicit and different, swap month↔day for ambiguous dates (both ≤ 12)
+    const reprocessed = rows.map((row) => {
+      let newDate = String(row.date ?? '');
+      const isoMatch = newDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (isoMatch) {
+        const [, yr, mm, dd] = isoMatch;
+        const monthNum = Number(mm);
+        const dayNum = Number(dd);
+        if (
+          monthNum <= 12 && dayNum <= 12 && // was ambiguous when imported
+          ((prevFormat === 'mdy' && newFormat === 'dmy') || (prevFormat === 'dmy' && newFormat === 'mdy'))
+        ) {
+          // Swap month and day to re-interpret under the new format
+          newDate = `${yr}-${dd}-${mm}`;
+        } else if (newFormat !== 'auto' && prevFormat === 'auto' && monthNum <= 12 && dayNum <= 12) {
+          // Switching away from Auto: trust the explicit new format (no swap needed — auto already chose one)
+        }
+      }
+      return normalizeOTRow({ ...row, date: newDate }, newFormat);
+    });
+
+    setRows(reprocessed);
+    validateRows(reprocessed);
   };
 
   const loadRows = (nextRows: CSVRow[], nextBatchName?: string, nextBatchId?: string | null, imageCols?: string[]) => {
@@ -391,8 +424,12 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
     const processServerAttempts = (raw: Array<{ label: string; text: string; tsv: string | null; confidence: number; rows?: Record<string, string>[] | null; extraColumns?: string[] }>) => {
       const attempts = raw.map(({ label, text, tsv, confidence, rows: serverRows, extraColumns }) => {
         if (serverRows && serverRows.length > 0) {
-          // Claude Vision returned structured JSON — use directly without text parsing
-          const csvRows = serverRows.map((r) => normalizeOTRow(r as CSVRow, dateFormat));
+          // Use detectOTDateFormat when Auto is selected: pick format whose dates fall on/after today
+          const effectiveFormat =
+            dateFormat === 'auto'
+              ? detectOTDateFormat(serverRows.map((r) => String(r.date ?? '')))
+              : dateFormat;
+          const csvRows = serverRows.map((r) => normalizeOTRow(r as CSVRow, effectiveFormat));
           return { text, tsv, rows: csvRows, issues: [], label, confidence, layout: 'wide-export' as OcrParseLayout, extraColumns: extraColumns ?? [] };
         }
         const parsed = parseOcrContent({ text, tsv, dateFormat });
@@ -541,9 +578,13 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
 
   const updateCell = (rowIndex: number, field: string, value: string) => {
     setRows((current) => {
-      const next = current.map((row, index) =>
-        index === rowIndex ? normalizeOTRow({ ...row, [field]: value }, dateFormat, false) : row,
-      );
+      const next = current.map((row, index) => {
+        if (index !== rowIndex) return row;
+        // Clear duration_hrs when start/end time changes so it auto-recalculates from new times
+        const patch: Partial<CSVRow> = { [field]: value };
+        if (field === 'start_time' || field === 'end_time') patch.duration_hrs = undefined;
+        return normalizeOTRow({ ...row, ...patch }, dateFormat, false);
+      });
       validateRows(next);
       return next;
     });
@@ -721,8 +762,16 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   const applyBulkPreset = (column: string, value: string) => {
     setBulkEditColumn(column);
     setBulkEditValue(value);
+    // Apply immediately to the whole sheet (presets are one-click fills)
+    setRows((current) => {
+      const next = current.map((row) =>
+        normalizeOTRow({ ...row, [column]: value }, dateFormat),
+      );
+      validateRows(next);
+      return next;
+    });
     setStatusTone('success');
-    setStatusMessage(`Preset ready: ${getOTColumnLabel(column)} will be set to "${value}". Click Apply value when ready.`);
+    setStatusMessage(`Applied "${value}" to ${getOTColumnLabel(column)} for all rows.`);
   };
 
   const duplicateSelectedRows = () => {
@@ -836,7 +885,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <ModernSelect
             value={dateFormat}
-            onValueChange={v => setDateFormat(v as OTDateFormat)}
+            onValueChange={v => handleDateFormatChange(v as OTDateFormat)}
             options={DATE_FORMAT_OPTIONS}
           />
           <button className="btn btn-ghost" onClick={addRow}><Table2 size={15} /> Manual Sheet</button>
@@ -1308,7 +1357,6 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
                               type={isDuration ? 'number' : 'text'}
                               value={value}
                               step={isDuration ? '0.1' : undefined}
-                              readOnly={isDuration}
                               onChange={(event) => updateCell(rowIndex, column, event.target.value)}
                               className="staging-cell-input"
                             />
