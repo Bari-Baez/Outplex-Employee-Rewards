@@ -200,7 +200,7 @@ export function parseSpanishTime(rawTime: string): string {
  * by counting how many dates land on today or in the future (OT slots must be present/future).
  * Returns the format with more valid dates, or 'mdy' as a tiebreaker.
  */
-export function detectOTDateFormat(rawDates: string[]): OTDateFormat {
+export function detectOTDateFormat(rawDates: string[]): 'mdy' | 'dmy' {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayMs = today.getTime();

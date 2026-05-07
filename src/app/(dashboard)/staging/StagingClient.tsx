@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import Papa from 'papaparse';
 import {
   AlertCircle,
@@ -40,13 +40,16 @@ import {
   type OcrParseLayout,
   sanitizeOTRows,
 } from '@/lib/ot';
-import { detectOTDateFormat, normalizeCSVHeaders, parseFlexibleTime, type OTDateFormat, type OTMeridiem } from '@/lib/utils';
+import { detectOTDateFormat, normalizeCSVHeaders, parseFlexibleTime, parseOTDate, type OTDateFormat, type OTMeridiem } from '@/lib/utils';
 import { readFileAsTextWithProgress } from '@/lib/file-transfer';
+
+const SESSION_KEY = 'outplex_staging_session';
 
 type ValidationError = { row: number; field: string; message: string };
 type DraftBatch = Pick<OTBatch, 'id' | 'name' | 'status' | 'csv_data' | 'created_at' | 'published_at'>;
 type FormulaScope = 'all' | 'selected' | 'blank-only';
 type BulkEditScope = 'all' | 'selected' | 'blank-only';
+type StagingSession = { rows: CSVRow[]; columns: string[]; batchName: string; activeBatchId: string | null; dateFormat: OTDateFormat; timestamp: number };
 type OcrSummary = {
   fileName: string;
   method: string;
@@ -131,15 +134,18 @@ async function preprocessImageForTesseract(file: File): Promise<File> {
   }
 }
 
-function mapImportedRows(rawRows: Record<string, string>[], rawHeaders: string[], dateFormat: OTDateFormat) {
+function mapImportedRows(rawRows: Record<string, string>[], rawHeaders: string[], dateFormat: OTDateFormat): { rows: CSVRow[]; rawDates: string[] } {
   const headerMap = normalizeCSVHeaders(rawHeaders);
-  return rawRows.map((row) => {
+  const rawDates: string[] = [];
+  const rows = rawRows.map((row) => {
     const mapped: CSVRow = { date: '', start_time: '', end_time: '' };
     Object.entries(headerMap).forEach(([original, normalizedKey]) => {
       mapped[normalizedKey] = row[original] ?? '';
     });
+    rawDates.push(String(mapped.date ?? ''));
     return normalizeOTRow(mapped, dateFormat);
   });
+  return { rows, rawDates };
 }
 
 export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }) {
@@ -175,13 +181,46 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   const [inlineTimeError, setInlineTimeError] = useState<string | null>(null);
   const [deleteColumnModal, setDeleteColumnModal] = useState<string | null>(null);
   const [ocrImageColumns, setOcrImageColumns] = useState<Set<string>>(new Set());
+  const [resumeSession, setResumeSession] = useState<StagingSession | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
-  const prevDateFormatRef = useRef<OTDateFormat>('auto');
+  const rawImportedDatesRef = useRef<string[]>([]);
+  const isFirstRenderRef = useRef(true);
   const [dragKind, setDragKind] = useState<'csv' | 'image' | null>(null);
   const transfer = useTransferState({ resetAfterMs: 1500 });
 
   const hasMissingIDs = rows.some((row) => !String(row.spot_id ?? '').trim());
   const selectedRowCount = selectedRows.size;
+
+  // On mount: check localStorage for an unsaved staging session
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SESSION_KEY);
+      if (saved) {
+        const data = JSON.parse(saved) as StagingSession;
+        if (Array.isArray(data.rows) && data.rows.length > 0) {
+          setResumeSession(data);
+        }
+      }
+    } catch { /* corrupt data — ignore */ }
+  }, []);
+
+  // Persist staging state to localStorage whenever rows change (skip first render to avoid
+  // clearing before the mount effect above has had a chance to show the resume dialog)
+  useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+    if (resumeSession !== null) return; // dialog is open — don't overwrite the saved session
+    if (rows.length === 0) {
+      localStorage.removeItem(SESSION_KEY);
+      return;
+    }
+    try {
+      const session: StagingSession = { rows, columns, batchName, activeBatchId, dateFormat, timestamp: Date.now() };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch { /* storage quota exceeded — ignore */ }
+  }, [rows, columns, batchName, activeBatchId, dateFormat, resumeSession]);
   const bulkEditInputType =
     bulkEditColumn === 'date'
       ? 'date'
@@ -220,38 +259,36 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   };
 
   const handleDateFormatChange = (newFormat: OTDateFormat) => {
-    const prevFormat = prevDateFormatRef.current;
-    prevDateFormatRef.current = newFormat;
     setDateFormat(newFormat);
 
     if (rows.length === 0) return;
 
-    // When both formats are explicit and different, swap month↔day for ambiguous dates (both ≤ 12)
-    const reprocessed = rows.map((row) => {
-      let newDate = String(row.date ?? '');
-      const isoMatch = newDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (isoMatch) {
-        const [, yr, mm, dd] = isoMatch;
-        const monthNum = Number(mm);
-        const dayNum = Number(dd);
-        if (
-          monthNum <= 12 && dayNum <= 12 && // was ambiguous when imported
-          ((prevFormat === 'mdy' && newFormat === 'dmy') || (prevFormat === 'dmy' && newFormat === 'mdy'))
-        ) {
-          // Swap month and day to re-interpret under the new format
-          newDate = `${yr}-${dd}-${mm}`;
-        } else if (newFormat !== 'auto' && prevFormat === 'auto' && monthNum <= 12 && dayNum <= 12) {
-          // Switching away from Auto: trust the explicit new format (no swap needed — auto already chose one)
-        }
+    const rawDates = rawImportedDatesRef.current;
+
+    // Resolve effective parse format — for 'auto', re-run group detection on the original raw strings
+    let effectiveFormat: 'mdy' | 'dmy';
+    if (newFormat === 'auto') {
+      effectiveFormat = rawDates.length > 0 ? detectOTDateFormat(rawDates) : 'mdy';
+    } else {
+      effectiveFormat = newFormat;
+    }
+
+    const reprocessed = rows.map((row, index) => {
+      const rawDate = rawDates[index];
+      if (rawDate) {
+        // Re-parse from the original raw date string — fully accurate regardless of how many times format changes
+        const reparsedDate = parseOTDate(rawDate, effectiveFormat);
+        return normalizeOTRow({ ...row, date: reparsedDate }, newFormat);
       }
-      return normalizeOTRow({ ...row, date: newDate }, newFormat);
+      // No raw date (manually added row) — keep existing ISO date
+      return normalizeOTRow({ ...row }, newFormat);
     });
 
     setRows(reprocessed);
     validateRows(reprocessed);
   };
 
-  const loadRows = (nextRows: CSVRow[], nextBatchName?: string, nextBatchId?: string | null, imageCols?: string[]) => {
+  const loadRows = (nextRows: CSVRow[], nextBatchName?: string, nextBatchId?: string | null, imageCols?: string[], rawDates?: string[]) => {
     const normalized = sanitizeOTRows(nextRows, dateFormat);
     const nextColumns = getOTColumns(normalized);
     setRows(normalized);
@@ -261,6 +298,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
     setSelectedRows(new Set());
     setStatusMessage(null);
     setOcrImageColumns(imageCols ? new Set(imageCols) : new Set());
+    if (rawDates !== undefined) rawImportedDatesRef.current = rawDates;
     validateRows(normalized);
   };
 
@@ -283,11 +321,8 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
 
       setOcrSummary(null);
       setOcrReview(null);
-      loadRows(
-        mapImportedRows(result.data, result.meta.fields ?? [], dateFormat),
-        file.name.replace(/\.(csv|txt)$/i, ''),
-        null,
-      );
+      const { rows: importedRows, rawDates: importedRawDates } = mapImportedRows(result.data, result.meta.fields ?? [], dateFormat);
+      loadRows(importedRows, file.name.replace(/\.(csv|txt)$/i, ''), null, undefined, importedRawDates);
       transfer.succeed('Imported');
     } catch (error) {
       setOcrSummary(null);
@@ -314,7 +349,8 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         }
         setOcrSummary(null);
         setOcrReview(null);
-        loadRows(mapImportedRows(result.data, result.meta.fields ?? [], dateFormat), batchName || 'manual_paste_import', null);
+        const { rows: pastedRows, rawDates: pastedRawDates } = mapImportedRows(result.data, result.meta.fields ?? [], dateFormat);
+        loadRows(pastedRows, batchName || 'manual_paste_import', null, undefined, pastedRawDates);
       },
       error: (error: Error) => {
         setStatusTone('warning');
@@ -425,10 +461,12 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
       const attempts = raw.map(({ label, text, tsv, confidence, rows: serverRows, extraColumns }) => {
         if (serverRows && serverRows.length > 0) {
           // Use detectOTDateFormat when Auto is selected: pick format whose dates fall on/after today
+          const ocrRawDates = serverRows.map((r) => String(r.date ?? ''));
           const effectiveFormat =
             dateFormat === 'auto'
-              ? detectOTDateFormat(serverRows.map((r) => String(r.date ?? '')))
+              ? detectOTDateFormat(ocrRawDates)
               : dateFormat;
+          rawImportedDatesRef.current = ocrRawDates;
           const csvRows = serverRows.map((r) => normalizeOTRow(r as CSVRow, effectiveFormat));
           return { text, tsv, rows: csvRows, issues: [], label, confidence, layout: 'wide-export' as OcrParseLayout, extraColumns: extraColumns ?? [] };
         }
@@ -825,6 +863,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         setActiveBatchId(null);
         setSelectedRows(new Set());
         setDrafts((current) => current.filter((draft) => draft.id !== payload.batch!.id));
+        localStorage.removeItem(SESSION_KEY);
       }
 
       setStatusTone('success');
@@ -852,6 +891,45 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
       return;
     }
     void doPublish(status);
+  };
+
+  const handleResumeSession = () => {
+    if (!resumeSession) return;
+    setRows(resumeSession.rows);
+    setColumns(resumeSession.columns);
+    setBatchName(resumeSession.batchName);
+    setActiveBatchId(resumeSession.activeBatchId);
+    setDateFormat(resumeSession.dateFormat);
+    setResumeSession(null);
+    validateRows(resumeSession.rows);
+  };
+
+  const handleResumeSaveAsDraft = async () => {
+    if (!resumeSession) return;
+    setPublishing(true);
+    try {
+      const response = await fetch('/api/ot/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: resumeSession.rows, batchName: resumeSession.batchName, batchId: resumeSession.activeBatchId, status: 'draft', dateFormat: resumeSession.dateFormat }),
+      });
+      const payload = (await response.json()) as { batch?: DraftBatch; error?: string; message?: string };
+      if (!response.ok || !payload.batch) throw new Error(payload.error ?? 'Unable to save draft.');
+      localStorage.removeItem(SESSION_KEY);
+      setResumeSession(null);
+      setDrafts((current) => [payload.batch!, ...current.filter((d) => d.id !== payload.batch!.id)].slice(0, 6));
+      setStatusTone('success');
+      setStatusMessage('Draft saved. Load it from the list below to continue editing.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save draft.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleDiscardSession = () => {
+    localStorage.removeItem(SESSION_KEY);
+    setResumeSession(null);
   };
 
   const doDeleteDraft = async (draftId: string) => {
@@ -1638,6 +1716,32 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
           }}
           onCancel={() => setPendingPublish(null)}
         />
+      )}
+
+      {resumeSession && (
+        <div className="modal-overlay">
+          <div className="store-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="store-modal-header">
+              <h3 style={{ margin: 0 }}>Continue editing?</h3>
+              <p style={{ margin: '0.45rem 0 0', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                You left {resumeSession.rows.length} unsaved OT row{resumeSession.rows.length !== 1 ? 's' : ''} from a previous session
+                {resumeSession.batchName ? ` (${resumeSession.batchName})` : ''}.
+                What would you like to do?
+              </p>
+            </div>
+            <div className="store-modal-actions" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <button className="btn btn-ghost" onClick={handleDiscardSession}>
+                Discard
+              </button>
+              <button className="btn btn-modern" onClick={() => void handleResumeSaveAsDraft()} disabled={publishing}>
+                {publishing ? 'Saving...' : 'Save as draft'}
+              </button>
+              <button className="btn btn-primary" onClick={handleResumeSession}>
+                Continue editing
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteDraftConfirm && (
