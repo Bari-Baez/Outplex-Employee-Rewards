@@ -2,9 +2,11 @@ import type { CSVRow } from '@/types/database';
 import {
   calcDuration,
   getShiftLabel,
+  parseFlexibleTime,
   parseOTDate,
   parseSpanishTime,
   type OTDateFormat,
+  type OTMeridiem,
 } from '@/lib/utils';
 
 export const OT_APP_TIMEZONE = 'America/Santo_Domingo';
@@ -22,6 +24,29 @@ export const CORE_OT_COLUMNS = [
 
 export const OT_LOB_OPTIONS = ['NYT VOICE', 'NYT CHAT', 'NYT EMAIL'] as const;
 export type OTLob = (typeof OT_LOB_OPTIONS)[number];
+export type OcrParseLayout = 'header' | 'five-column' | 'four-column' | 'wide-export' | 'partial' | 'none' | 'mixed';
+export type OcrParseIssue =
+  | {
+      type: 'missing-field';
+      rowIndex: number;
+      field: 'spot_id' | 'date' | 'start_time' | 'end_time';
+      line: string;
+    }
+  | {
+      type: 'ambiguous-time';
+      rowIndex: number;
+      field: 'start_time' | 'end_time';
+      rawValue: string;
+      line: string;
+    };
+export type OcrParseResult = {
+  rows: CSVRow[];
+  issues: OcrParseIssue[];
+  detectedHeaders: boolean;
+  inferredLayout: OcrParseLayout;
+  sourceLineCount: number;
+  unparsedLineCount: number;
+};
 
 export function canonicalizeOTLob(input: unknown): OTLob {
   const raw = typeof input === 'string' ? input.trim() : '';
@@ -402,120 +427,336 @@ export function applyFormulaToRows({
 }
 
 export function parseOcrTextToRows(text: string, dateFormat: OTDateFormat = 'auto') {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => normalizeOcrLine(line))
-    .filter(Boolean);
+  return parseOcrContent({ text, dateFormat }).rows;
+}
 
+const OCR_DATE_PATTERN = /^(?:\d{4}-\d{2}-\d{2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})$/;
+const OCR_TIME_PATTERN = /^\d{1,2}(?::\d{2})?(?::\d{2})?(?:[ap]m)?$/i;
+const OCR_MERIDIEM_PATTERN = /^(?:a|p)?m$/i;
+const OCR_DURATION_PATTERN = /^\d+(?:\.\d+)?$/;
+const OCR_STATUS_PATTERN = /^(available|claimed|pending|cancelled)$/i;
+const OCR_SPOT_ID_PATTERN = /^\d{4,8}$/;
+
+type ParsedOcrDraft = {
+  row: CSVRow;
+  layout: Exclude<OcrParseLayout, 'none' | 'mixed' | 'header'>;
+  ambiguousTimes: Array<{ field: 'start_time' | 'end_time'; rawValue: string }>;
+};
+
+type OcrTimeChunk = {
+  rawValue: string;
+  startIndex: number;
+  endIndex: number;
+};
+
+export function parseOcrContent({
+  text,
+  tsv,
+  dateFormat = 'auto',
+  defaultMeridiem = null,
+}: {
+  text: string;
+  tsv?: string | null;
+  dateFormat?: OTDateFormat;
+  defaultMeridiem?: OTMeridiem | null;
+}): OcrParseResult {
+  const lines = collectParsedOcrLines(text, tsv);
   const rows: CSVRow[] = [];
-  const rowPattern =
-    /^(?:\d+\s+)?(?:(\d{4,8})\s+)?(.+?)\s+(\d{4}-\d{2}-\d{2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?|am|pm)?)\s+(\d{1,2}:\d{2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?|am|pm)?)(?:\s+(\d+(?:\.\d+)?))?(?:\s+(Morning Shift|Afternoon Shift|Evening Shift|Night Shift))?(?:\s+(available|claimed|pending|cancelled))?/i;
+  const issues: OcrParseIssue[] = [];
+  const layouts = new Set<Exclude<OcrParseLayout, 'none' | 'mixed' | 'header'>>();
+  let detectedHeaders = false;
+  let unparsedLineCount = 0;
 
   lines.forEach((line) => {
-    if (!/\d{4}-\d{2}-\d{2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}/.test(line)) {
+    if (isParsedOcrHeaderLine(line)) {
+      detectedHeaders = true;
       return;
     }
 
-    if ((line.match(/\d{1,2}[:.]\d{2}(?::\d{2})?/g) ?? []).length < 2) {
+    const parsed = parseStructuredOcrDraft(line, dateFormat, defaultMeridiem);
+    if (!parsed) {
+      unparsedLineCount += 1;
       return;
     }
 
-    const match = line.match(rowPattern);
+    const rowIndex = rows.length;
+    rows.push(parsed.row);
+    layouts.add(parsed.layout);
 
-    if (match) {
-      rows.push(
-        normalizeOTRow(
-          {
-            spot_id: match[1] ?? '',
-            lob: match[2] ?? '',
-            date: match[3] ?? '',
-            start_time: match[4] ?? '',
-            end_time: match[5] ?? '',
-            duration_hrs: match[6] ? Number(match[6]) : undefined,
-            shift_label: match[7] ?? '',
-            csv_status: match[8] ?? '',
-          },
-          dateFormat,
-        ),
+    if (!String(parsed.row.spot_id ?? '').trim()) {
+      issues.push({ type: 'missing-field', rowIndex, field: 'spot_id', line });
+    }
+    if (!String(parsed.row.date ?? '').trim()) {
+      issues.push({ type: 'missing-field', rowIndex, field: 'date', line });
+    }
+    if (!String(parsed.row.start_time ?? '').trim()) {
+      const ambiguous = parsed.ambiguousTimes.find((issue) => issue.field === 'start_time');
+      issues.push(
+        ambiguous
+          ? { type: 'ambiguous-time', rowIndex, field: 'start_time', rawValue: ambiguous.rawValue, line }
+          : { type: 'missing-field', rowIndex, field: 'start_time', line },
       );
-      return;
     }
-
-    const structuredRow = parseStructuredOcrLine(line, dateFormat);
-    if (structuredRow) {
-      rows.push(structuredRow);
+    if (!String(parsed.row.end_time ?? '').trim()) {
+      const ambiguous = parsed.ambiguousTimes.find((issue) => issue.field === 'end_time');
+      issues.push(
+        ambiguous
+          ? { type: 'ambiguous-time', rowIndex, field: 'end_time', rawValue: ambiguous.rawValue, line }
+          : { type: 'missing-field', rowIndex, field: 'end_time', line },
+      );
     }
   });
 
-  return rows;
+  const inferredLayout =
+    layouts.size === 0
+      ? 'none'
+      : layouts.size === 1
+        ? Array.from(layouts)[0]
+        : 'mixed';
+
+  return {
+    rows,
+    issues,
+    detectedHeaders,
+    inferredLayout,
+    sourceLineCount: lines.length,
+    unparsedLineCount,
+  };
+}
+
+function collectParsedOcrLines(text: string, tsv?: string | null) {
+  return Array.from(
+    new Set(
+      [
+        ...extractParsedOcrLinesFromTsv(tsv),
+        ...text
+          .split(/\r?\n/)
+          .map((line) => normalizeOcrLine(line))
+          .filter(Boolean),
+      ].filter(Boolean),
+    ),
+  );
+}
+
+function extractParsedOcrLinesFromTsv(tsv?: string | null) {
+  if (!tsv?.trim()) {
+    return [];
+  }
+
+  const [headerLine, ...rawLines] = tsv.trim().split(/\r?\n/);
+  const headers = headerLine.split('\t');
+  const indexMap = Object.fromEntries(headers.map((header, index) => [header, index])) as Record<string, number>;
+  const grouped = new Map<string, Array<{ left: number; text: string }>>();
+
+  rawLines.forEach((rawLine) => {
+    const cells = rawLine.split('\t');
+    const level = Number(cells[indexMap.level]);
+    const textValue = cells[indexMap.text]?.trim();
+    if (level !== 5 || !textValue) {
+      return;
+    }
+
+    const key = [
+      cells[indexMap.page_num],
+      cells[indexMap.block_num],
+      cells[indexMap.par_num],
+      cells[indexMap.line_num],
+    ].join(':');
+    const left = Number(cells[indexMap.left] ?? '0');
+    const words = grouped.get(key) ?? [];
+    words.push({ left, text: textValue });
+    grouped.set(key, words);
+  });
+
+  return Array.from(grouped.values())
+    .map((words) =>
+      normalizeOcrLine(
+        words
+          .sort((left, right) => left.left - right.left)
+          .map((word) => word.text)
+          .join(' '),
+      ),
+    )
+    .filter(Boolean);
+}
+
+function isParsedOcrHeaderLine(line: string) {
+  const lower = line.toLowerCase();
+  // Must contain both start + end time headers
+  if (!lower.includes('start') || !lower.includes('end')) return false;
+  // Must also contain at least one additional structural keyword
+  return (
+    lower.includes('date') ||
+    lower.includes('total') ||
+    lower.includes('duration') ||
+    lower.includes('id') ||
+    lower.includes('spot') ||
+    lower.includes('status') ||
+    lower.includes('shift') ||
+    lower.includes('lob')
+  );
+}
+
+function tokenizeParsedOcrLine(line: string) {
+  return normalizeOcrLine(line)
+    .split(' ')
+    .map((token) => token.trim().replace(/^[,;]+|[,;]+$/g, ''))
+    .filter(Boolean);
+}
+
+function getParsedOcrTimeChunks(tokens: string[]) {
+  const chunks: OcrTimeChunk[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index].replace(/\s+/g, '');
+    if (!OCR_TIME_PATTERN.test(token)) {
+      continue;
+    }
+
+    const nextToken = tokens[index + 1]?.replace(/\s+/g, '') ?? '';
+    if (!token.match(/[ap]m$/i) && OCR_MERIDIEM_PATTERN.test(nextToken)) {
+      chunks.push({
+        rawValue: `${tokens[index]} ${tokens[index + 1]}`,
+        startIndex: index,
+        endIndex: index + 1,
+      });
+      index += 1;
+      continue;
+    }
+
+    chunks.push({
+      rawValue: tokens[index],
+      startIndex: index,
+      endIndex: index,
+    });
+  }
+
+  return chunks;
+}
+
+function parseStructuredOcrDraft(
+  line: string,
+  dateFormat: OTDateFormat,
+  defaultMeridiem: OTMeridiem | null,
+): ParsedOcrDraft | null {
+  const tokens = tokenizeParsedOcrLine(line);
+  if (tokens.length < 2) {
+    return null;
+  }
+
+  const dateIndex = tokens.findIndex((token) => OCR_DATE_PATTERN.test(token));
+  const timeChunks = getParsedOcrTimeChunks(tokens);
+  const firstSpotIdIndex = tokens.findIndex((token) => OCR_SPOT_ID_PATTERN.test(token));
+
+  // Must have at least a date OR at least one time chunk OR a spot ID to be worth parsing
+  if (dateIndex === -1 && timeChunks.length === 0) {
+    return null;
+  }
+
+  const startChunk =
+    timeChunks.find((chunk) => chunk.startIndex > dateIndex) ??
+    timeChunks.find((chunk) => chunk.startIndex > firstSpotIdIndex) ??
+    timeChunks[0];
+  const endChunk =
+    timeChunks.find((chunk) => startChunk && chunk.startIndex > startChunk.endIndex) ?? null;
+
+  // spotId must appear before the date (it's the row identifier)
+  const spotIdIndex =
+    firstSpotIdIndex !== -1 && (dateIndex === -1 || firstSpotIdIndex < dateIndex)
+      ? firstSpotIdIndex
+      : -1;
+  const spotId = spotIdIndex !== -1 ? tokens[spotIdIndex] : '';
+
+  // Everything between spotId and date (or first time chunk) is the LOB
+  const lobStart = spotIdIndex !== -1 ? spotIdIndex + 1 : 0;
+  const lobEnd = dateIndex !== -1
+    ? dateIndex
+    : startChunk
+      ? startChunk.startIndex
+      : tokens.length;
+  const lobTokens = tokens.slice(lobStart, lobEnd).filter(
+    (t) => !OCR_SPOT_ID_PATTERN.test(t) && !OCR_DATE_PATTERN.test(t),
+  );
+
+  const trailingTokens = endChunk ? tokens.slice(endChunk.endIndex + 1) : [];
+  const durationToken = trailingTokens.find((token) => OCR_DURATION_PATTERN.test(token)) ?? '';
+  const statusToken = trailingTokens.find((token) => OCR_STATUS_PATTERN.test(token)) ?? '';
+
+  const ambiguousTimes: ParsedOcrDraft['ambiguousTimes'] = [];
+  const resolveTime = (field: 'start_time' | 'end_time', rawValue: string) => {
+    if (!rawValue) {
+      return '';
+    }
+    const parsed = parseFlexibleTime(rawValue, { defaultMeridiem });
+    if (parsed.isAmbiguous) {
+      ambiguousTimes.push({ field, rawValue });
+      return '';
+    }
+    return parsed.value || parseSpanishTime(rawValue);
+  };
+
+  const draftRow: CSVRow = {
+    spot_id: spotId,
+    lob: lobTokens.join(' '),
+    date: dateIndex !== -1 ? tokens[dateIndex] : '',
+    start_time: resolveTime('start_time', startChunk?.rawValue ?? ''),
+    end_time: resolveTime('end_time', endChunk?.rawValue ?? ''),
+    duration_hrs: durationToken ? Number(durationToken) : undefined,
+    csv_status: statusToken,
+  };
+
+  if (
+    !String(draftRow.spot_id ?? '').trim() &&
+    !String(draftRow.date ?? '').trim() &&
+    !String(draftRow.start_time ?? '').trim() &&
+    !String(draftRow.end_time ?? '').trim()
+  ) {
+    return null;
+  }
+
+  const layout: ParsedOcrDraft['layout'] =
+    lobTokens.length > 0
+      ? 'wide-export'
+      : durationToken
+        ? 'five-column'
+        : dateIndex !== -1 && startChunk && endChunk
+          ? 'four-column'
+          : 'partial';
+
+  return {
+    row: normalizeOTRow(draftRow, dateFormat),
+    layout,
+    ambiguousTimes,
+  };
 }
 
 function normalizeOcrLine(line: string) {
   return line
-    .replace(/[|[\]]/g, ' ')
-    .replace(/[â€œâ€]/g, '"')
-    .replace(/[â€“â€”]/g, '-')
-    .replace(/[•·]/g, ' ')
-    .replace(/[Il](?=\d)/g, '1')
-    .replace(/[Oo](?=\d)/g, '0')
-    .replace(/(\d)\.(\d{2})(?!\d)/g, '$1:$2')
+    // Excel/Sheets UI artifacts: filter arrows, sort icons
+    .replace(/[\u25bc\u25bd\u25be\u25bf\u25b2\u25b3\u25b4\u25b8\u25c0\u25c2]/g, '')
+    // Standalone asterisks (e.g. flagged rows in Excel) \u2014 not between digits
+    .replace(/(?<!\d)\*(?!\d)/g, '')
+    // Structural characters that fragment tokens
+    .replace(/[|[\]{}]/g, ' ')
+    // Smart quotes and typographic dashes
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    // Bullets, middle dots
+    .replace(/[\u2022\u00b7]/g, ' ')
+    // Common Tesseract OCR misreads in number sequences
+    .replace(/\bI(?=\d)/g, '1')
+    .replace(/\bl(?=\d)/g, '1')
+    .replace(/\bO(?=\d)/g, '0')
+    .replace(/(?<=\d)O\b/g, '0')
+    .replace(/(?<=\d)l\b/g, '1')
+    // Period-separated time (8.30 \u2192 8:30)
+    .replace(/\b(\d{1,2})\.(\d{2})\b/g, '$1:$2')
+    // Ensure space between time and meridiem (8:30AM \u2192 8:30 AM)
+    .replace(/(\d{1,2}(?::\d{2})?)([AaPp][Mm])\b/g, '$1 $2')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function parseStructuredOcrLine(line: string, dateFormat: OTDateFormat) {
-  const dateMatch = line.match(/\d{4}-\d{2}-\d{2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}/);
-  if (!dateMatch || typeof dateMatch.index !== 'number') {
-    return null;
-  }
-
-  const timeMatches = Array.from(
-    line.matchAll(/\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?|am|pm)?/gi),
-  );
-  if (timeMatches.length < 2) {
-    return null;
-  }
-
-  const dateToken = dateMatch[0];
-  const startToken = timeMatches[0]?.[0] ?? '';
-  const endToken = timeMatches[1]?.[0] ?? '';
-  const secondTimeIndex = timeMatches[1]?.index;
-
-  if (typeof secondTimeIndex !== 'number') {
-    return null;
-  }
-
-  const leadingSegment = line.slice(0, dateMatch.index).trim();
-  const withoutLineNumber = leadingSegment.replace(/^\d+\s+(?=\d{4,8}\b)/, '');
-  const spotMatch =
-    withoutLineNumber.match(/^(\d{4,8})\b/) ??
-    withoutLineNumber.match(/\b(\d{4,8})\b/);
-  const spotId = spotMatch?.[1] ?? '';
-  const lob = spotId
-    ? withoutLineNumber.replace(spotId, '').trim()
-    : withoutLineNumber.trim();
-
-  const trailingSegment = line.slice(secondTimeIndex + endToken.length).trim();
-  const durationMatch = trailingSegment.match(/\b(\d+(?:\.\d+)?)\b/);
-  const shiftMatch = trailingSegment.match(
-    /\b(Morning Shift|Afternoon Shift|Evening Shift|Night Shift)\b/i,
-  );
-  const statusMatch = trailingSegment.match(/\b(available|claimed|pending|cancelled)\b/i);
-
-  return normalizeOTRow(
-    {
-      spot_id: spotId,
-      lob,
-      date: dateToken,
-      start_time: startToken.replace('.', ':'),
-      end_time: endToken.replace('.', ':'),
-      duration_hrs: durationMatch ? Number(durationMatch[1]) : undefined,
-      shift_label: shiftMatch?.[1] ?? '',
-      csv_status: statusMatch?.[1] ?? '',
-    },
-    dateFormat,
-  );
-}
 
 export function rowsToCsv(rows: CSVRow[], columns = getOTColumns(rows)) {
   const escape = (value: string | number | undefined) => {

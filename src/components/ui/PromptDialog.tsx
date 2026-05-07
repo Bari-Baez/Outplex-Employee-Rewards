@@ -11,6 +11,7 @@ interface PromptDialogProps {
   onCancel: () => void;
   busy?: boolean;
   required?: boolean;
+  error?: string | null;
 }
 
 export function PromptDialog({
@@ -22,6 +23,7 @@ export function PromptDialog({
   onCancel,
   busy = false,
   required = false,
+  error,
 }: PromptDialogProps) {
   const [value, setValue] = useState('');
   const cardRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ export function PromptDialog({
             ref={inputRef}
             type="text"
             className="form-input"
-            style={{ marginTop: '0.75rem', width: '100%' }}
+            style={{ marginTop: '0.75rem', width: '100%', borderColor: error ? 'rgba(239,68,68,0.5)' : undefined }}
             placeholder={placeholder}
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -66,6 +68,9 @@ export function PromptDialog({
             disabled={busy}
             autoFocus
           />
+          {error && (
+            <p style={{ margin: '0.4rem 0 0', fontSize: '0.78rem', color: '#fca5a5', fontWeight: 600 }}>{error}</p>
+          )}
         </div>
         <div className="store-modal-actions">
           <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>
