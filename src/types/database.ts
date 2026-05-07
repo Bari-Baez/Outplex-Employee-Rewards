@@ -15,8 +15,8 @@ export type StorePickupMode = 'immediate' | 'scheduled';
 export type BroadcastNotificationStatus = 'draft' | 'scheduled' | 'published';
 export type BroadcastNotificationCategory = 'availability' | 'stock' | 'site_visit' | 'general';
 export type AnnouncementStatus = 'draft' | 'scheduled' | 'published';
-export type AnnouncementBlockType = 'text' | 'image' | 'slider' | 'pdf';
-export type AnnouncementPdfDisplayMode = 'document' | 'slider' | 'both';
+export type AnnouncementBlockType = 'text' | 'image' | 'slider' | 'pdf' | 'gif';
+export type AnnouncementPdfDisplayMode = 'slider' | 'download_only';
 export type AnnouncementDurationDays = 1 | 3 | 5 | 7 | 15 | 30 | 60;
 
 export interface StoreThemePresetConfig {
@@ -183,15 +183,25 @@ export interface AnnouncementPdfBlock {
   body?: string | null;
   fileUrl: string;
   fileName?: string | null;
-  displayMode: AnnouncementPdfDisplayMode | string;
+  displayMode: AnnouncementPdfDisplayMode;
   previewImages?: string[] | null;
+}
+
+export interface AnnouncementGifBlock {
+  id: string;
+  type: 'gif';
+  heading?: string | null;
+  caption?: string | null;
+  gifUrl: string;
+  gifId?: string | null;
 }
 
 export type AnnouncementBlock =
   | AnnouncementTextBlock
   | AnnouncementImageBlock
   | AnnouncementSliderBlock
-  | AnnouncementPdfBlock;
+  | AnnouncementPdfBlock
+  | AnnouncementGifBlock;
 
 export interface CompanyAnnouncement {
   id: string;

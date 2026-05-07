@@ -15,6 +15,7 @@ import { validateFormAnswers } from '@/lib/forms/validation';
 import type { FormDefinition, FormField, FormResponse, FormSummary } from '@/lib/forms/types';
 import { ModernSelect } from '@/components/ui/Select';
 import { ModernDatePicker } from '@/components/ui/DatePicker';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 interface FormsHubClientProps {
   userId: string;
@@ -201,7 +202,7 @@ function FieldRenderer({
       {field.type === 'image' && field.imageUrl && (
         <figure style={{ margin: '1rem 0', textAlign: 'center' }}>
           <img
-            src={field.imageUrl}
+            src={proxifyMediaUrl(field.imageUrl)}
             alt={field.label}
             style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', objectFit: 'cover' }}
           />

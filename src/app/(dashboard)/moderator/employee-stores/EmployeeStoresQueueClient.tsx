@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import type { EmployeeStore, EmployeeStoreProduct, EmployeeStoreRequest, User } from '@/types/database';
 import { canEditTool } from '@/lib/permissions';
 import { SupervisorFilter } from '@/components/SupervisorFilter';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 type RequestWithUser = EmployeeStoreRequest & {
   user: Pick<User, 'id' | 'name' | 'email' | 'employee_id' | 'avatar_url' | 'supervisor' | 'supervisor_id'> | null;
@@ -449,7 +450,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     <div className="request-avatar">
                       {req.user?.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={req.user.avatar_url} alt="" />
+                        <img src={proxifyMediaUrl(req.user.avatar_url)} alt="" />
                       ) : (
                         <span>{initialsFromName(req.user?.name ?? 'E')}</span>
                       )}
@@ -521,7 +522,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                       <div className="product-thumb-sm">
                         {prod.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={prod.image_url} alt={prod.name} />
+                          <img src={proxifyMediaUrl(prod.image_url)} alt={prod.name} />
                         ) : (
                           <Package size={20} />
                         )}
@@ -626,7 +627,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     <div className="store-logo" style={{ background: store.accent_color ?? '#7c6cff' }}>
                       {store.logo_image ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={store.logo_image} alt="" />
+                        <img src={proxifyMediaUrl(store.logo_image)} alt="" />
                       ) : (
                         <StoreIcon size={18} />
                       )}
@@ -643,7 +644,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                       <div className="store-owner-avatar">
                         {store.owner?.avatar_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={store.owner.avatar_url} alt="" />
+                          <img src={proxifyMediaUrl(store.owner.avatar_url)} alt="" />
                         ) : (
                           <span>{initialsFromName(store.owner?.name ?? '?')}</span>
                         )}

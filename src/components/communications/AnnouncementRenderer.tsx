@@ -1,9 +1,156 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { AnnouncementBlock, CompanyAnnouncement } from '@/types/database';
-import { ChevronLeft, ChevronRight, FileText, GalleryHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, FileText, GalleryHorizontal, Search, X, ZoomIn } from 'lucide-react';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
+
+// ---------------------------------------------------------------------------
+// PDF Page Slider
+// ---------------------------------------------------------------------------
+
+function PdfZoomOverlay({
+  src,
+  pageLabel,
+  onClose,
+}: {
+  src: string;
+  pageLabel: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="pdf-zoom-overlay" role="dialog" aria-modal="true" aria-label={`Zoom — ${pageLabel}`}>
+      <div className="pdf-zoom-backdrop" onClick={onClose} />
+      <div className="pdf-zoom-frame">
+        <button type="button" className="pdf-zoom-close" onClick={onClose} aria-label="Close zoom">
+          <X size={20} />
+        </button>
+        <img src={src} alt={pageLabel} className="pdf-zoom-img" />
+        <div className="pdf-zoom-label">{pageLabel}</div>
+      </div>
+    </div>
+  );
+}
+
+function PdfPageSlider({
+  heading,
+  body,
+  fileName,
+  fileUrl,
+  previewImages,
+}: {
+  heading?: string | null;
+  body?: string | null;
+  fileName?: string | null;
+  fileUrl: string;
+  previewImages: string[];
+}) {
+  const [index, setIndex] = useState(0);
+  const [zoomedSrc, setZoomedSrc] = useState<string | null>(null);
+
+  const activeImage = previewImages[index];
+  const total = previewImages.length;
+  const pageLabel = `${fileName || 'PDF'} · Page ${index + 1} of ${total}`;
+
+  const goLeft = () => setIndex((i) => (i === 0 ? total - 1 : i - 1));
+  const goRight = () => setIndex((i) => (i === total - 1 ? 0 : i + 1));
+
+  return (
+    <section className="announcement-pdf-block">
+      <div className="announcement-pdf-head">
+        <div>
+          {heading ? <h3 className="announcement-block-title">{heading}</h3> : null}
+          {body ? <p>{body}</p> : null}
+        </div>
+        <a
+          className="btn btn-ghost btn-sm pdf-download-btn"
+          href={fileUrl}
+          download={fileName || 'document.pdf'}
+          aria-label={`Download ${fileName || 'PDF'}`}
+        >
+          <Download size={15} />
+          Download
+        </a>
+      </div>
+
+      {total === 0 ? (
+        <div className="announcement-media-placeholder">
+          <FileText size={22} />
+          <span>PDF uploaded — preview images are still processing. Re-upload to generate them.</span>
+        </div>
+      ) : (
+        <>
+          <div className="pdf-slider-frame">
+            <img
+              src={activeImage}
+              alt={pageLabel}
+              className="pdf-slider-image"
+            />
+
+            {/* Zoom button */}
+            <button
+              type="button"
+              className="pdf-slider-zoom-btn"
+              onClick={() => setZoomedSrc(activeImage)}
+              aria-label={`Zoom page ${index + 1}`}
+            >
+              <ZoomIn size={16} />
+            </button>
+
+            {/* Left / Right nav */}
+            {total > 1 ? (
+              <>
+                <button
+                  type="button"
+                  className="announcement-slider-nav announcement-slider-nav-left"
+                  onClick={goLeft}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="announcement-slider-nav announcement-slider-nav-right"
+                  onClick={goRight}
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            ) : null}
+          </div>
+
+          <div className="pdf-slider-footer">
+            <span className="pdf-slider-label">{pageLabel}</span>
+            {total > 1 ? (
+              <div className="announcement-slider-dots">
+                {previewImages.map((_, dotIndex) => (
+                  <button
+                    key={dotIndex}
+                    type="button"
+                    className={`announcement-slider-dot ${dotIndex === index ? 'announcement-slider-dot-active' : ''}`}
+                    onClick={() => setIndex(dotIndex)}
+                    aria-label={`Go to page ${dotIndex + 1}`}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+
+      {/* Zoom overlay */}
+      {zoomedSrc ? (
+        <PdfZoomOverlay src={zoomedSrc} pageLabel={pageLabel} onClose={() => setZoomedSrc(null)} />
+      ) : null}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Image Slider (unchanged, pulled out for clarity)
+// ---------------------------------------------------------------------------
 
 function AnnouncementSlider({
   title,
@@ -12,11 +159,9 @@ function AnnouncementSlider({
   title?: string | null;
   slides: Array<{ id?: string; imageUrl: string; caption?: string | null; body?: string | null }>;
 }) {
-  // Filter out slides that have no image URL yet to avoid empty src=""
   const validSlides = slides.filter((s) => !!s.imageUrl);
   const [index, setIndex] = useState(0);
 
-  // Safety: reset index if it goes out of bounds when slides are removed
   if (index >= validSlides.length && validSlides.length > 0) {
     setIndex(0);
   }
@@ -41,7 +186,7 @@ function AnnouncementSlider({
     <section className="announcement-slider-block">
       {title ? <h3 className="announcement-block-title">{title}</h3> : null}
       <div className="announcement-slider-frame">
-        <img src={activeSlide.imageUrl} alt={activeSlide.caption || 'Announcement slide'} className="announcement-slider-image" />
+        <img src={proxifyMediaUrl(activeSlide.imageUrl)} alt={activeSlide.caption || 'Announcement slide'} className="announcement-slider-image" />
         {validSlides.length > 1 ? (
           <>
             <button
@@ -86,6 +231,10 @@ function AnnouncementSlider({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Block renderer
+// ---------------------------------------------------------------------------
+
 function renderBlock(block: AnnouncementBlock) {
   switch (block.type) {
     case 'text':
@@ -95,13 +244,14 @@ function renderBlock(block: AnnouncementBlock) {
           <p>{block.body || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No text added yet.</span>}</p>
         </section>
       );
+
     case 'image':
       return (
         <section key={block.id} className="announcement-image-block">
           {block.heading ? <h3 className="announcement-block-title">{block.heading}</h3> : null}
           <div className="announcement-image-shell">
             {block.imageUrl ? (
-              <img src={block.imageUrl} alt={block.caption || block.heading || 'Announcement image'} className="announcement-inline-image" />
+              <img src={proxifyMediaUrl(block.imageUrl)} alt={block.caption || block.heading || 'Announcement image'} className="announcement-inline-image" />
             ) : (
               <div className="announcement-media-placeholder">
                 <GalleryHorizontal size={22} />
@@ -117,57 +267,59 @@ function renderBlock(block: AnnouncementBlock) {
           ) : null}
         </section>
       );
+
     case 'slider':
       return <AnnouncementSlider key={block.id} title={block.heading} slides={block.slides} />;
+
     case 'pdf':
-      return (
-        <section key={block.id} className="announcement-pdf-block">
-          <div className="announcement-pdf-head">
-            <div>
-              {block.heading ? <h3 className="announcement-block-title">{block.heading}</h3> : null}
-              {block.body ? <p>{block.body}</p> : null}
-            </div>
-            {block.fileUrl ? (
-              <a className="btn btn-ghost btn-sm" href={block.fileUrl} target="_blank" rel="noreferrer">
-                <FileText size={15} />
-                {block.fileName || 'Open PDF'}
-              </a>
-            ) : null}
-          </div>
-          {!block.fileUrl ? (
+      if (!block.fileUrl) {
+        return (
+          <section key={block.id} className="announcement-pdf-block">
+            {block.heading ? <h3 className="announcement-block-title">{block.heading}</h3> : null}
             <div className="announcement-media-placeholder">
               <FileText size={22} />
-              <span>Upload a PDF to enable the viewer and slideshow preview.</span>
+              <span>Upload a PDF to enable the viewer and page preview.</span>
+            </div>
+          </section>
+        );
+      }
+      return (
+        <PdfPageSlider
+          key={block.id}
+          heading={block.heading}
+          body={block.body}
+          fileName={block.fileName}
+          fileUrl={block.fileUrl}
+          previewImages={block.previewImages ?? []}
+        />
+      );
+
+    case 'gif':
+      return (
+        <section key={block.id} className="announcement-gif-block">
+          {block.heading ? <h3 className="announcement-block-title">{block.heading}</h3> : null}
+          {block.gifUrl ? (
+            <div className="announcement-gif-shell">
+              <img src={block.gifUrl} alt={block.caption || block.heading || 'GIF'} className="announcement-gif-image" />
             </div>
           ) : (
-            <>
-              {(block.displayMode === 'document' || block.displayMode === 'both') ? (
-                <div className="announcement-pdf-frame">
-                  <iframe src={block.fileUrl} title={block.fileName || block.heading || 'Announcement PDF'} />
-                </div>
-              ) : null}
-              {(block.displayMode === 'slider' || block.displayMode === 'both') && (block.previewImages?.length ?? 0) > 0 ? (
-                <AnnouncementSlider
-                  title={block.displayMode === 'both' ? 'PDF slideshow' : block.heading}
-                  slides={(block.previewImages ?? []).map((imageUrl, slideIndex) => ({
-                    imageUrl,
-                    caption: `${block.fileName || 'PDF'} · Page ${slideIndex + 1}`,
-                  }))}
-                />
-              ) : (block.fileUrl && (block.displayMode === 'slider' || block.displayMode === 'both')) ? (
-                <div className="announcement-media-placeholder">
-                  <FileText size={22} />
-                  <span>Re-upload the PDF to generate the slideshow preview pages.</span>
-                </div>
-              ) : null}
-            </>
+            <div className="announcement-media-placeholder">
+              <Search size={22} />
+              <span>Search and select a GIF to display it here.</span>
+            </div>
           )}
+          {block.caption ? <div className="announcement-media-copy"><div className="announcement-media-caption">{block.caption}</div></div> : null}
         </section>
       );
+
     default:
       return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Main renderer
+// ---------------------------------------------------------------------------
 
 export function AnnouncementRenderer({
   announcement,
@@ -180,7 +332,7 @@ export function AnnouncementRenderer({
     <div className="announcement-renderer">
       {showCover && announcement.cover_image_url ? (
         <div className="announcement-hero-image-shell">
-          <img src={announcement.cover_image_url} alt={announcement.title} className="announcement-hero-image" />
+          <img src={proxifyMediaUrl(announcement.cover_image_url)} alt={announcement.title} className="announcement-hero-image" />
         </div>
       ) : null}
 
@@ -218,7 +370,8 @@ export function AnnouncementRenderer({
         .announcement-text-block,
         .announcement-image-block,
         .announcement-pdf-block,
-        .announcement-slider-block {
+        .announcement-slider-block,
+        .announcement-gif-block {
           border: 1px solid var(--border-subtle);
           border-radius: 24px;
           background: rgba(12, 16, 30, 0.8);
@@ -241,6 +394,7 @@ export function AnnouncementRenderer({
           line-height: 1.7;
         }
 
+        /* ---- Image shell ---- */
         .announcement-image-shell,
         .announcement-slider-frame,
         .announcement-hero-image-shell {
@@ -253,16 +407,27 @@ export function AnnouncementRenderer({
         }
 
         .announcement-inline-image,
-        .announcement-slider-image,
-        .announcement-hero-image {
+        .announcement-slider-image {
           display: block;
           width: 100%;
           height: auto;
           object-fit: cover;
         }
 
+        /* ---- Hero image — viewport-relative so portrait images don't fill the screen ---- */
+        .announcement-hero-image-shell {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          max-height: clamp(220px, 50vh, 520px);
+        }
+
         .announcement-hero-image {
-          max-height: 420px;
+          display: block;
+          width: 100%;
+          height: 100%;
+          max-height: clamp(220px, 50vh, 520px);
+          object-fit: contain;
         }
 
         .announcement-media-copy {
@@ -277,6 +442,7 @@ export function AnnouncementRenderer({
           font-weight: 700;
         }
 
+        /* ---- Slider nav ---- */
         .announcement-slider-frame {
           position: relative;
         }
@@ -303,13 +469,8 @@ export function AnnouncementRenderer({
           background: rgba(20, 30, 58, 0.92);
         }
 
-        .announcement-slider-nav-left {
-          left: 0.85rem;
-        }
-
-        .announcement-slider-nav-right {
-          right: 0.85rem;
-        }
+        .announcement-slider-nav-left { left: 0.85rem; }
+        .announcement-slider-nav-right { right: 0.85rem; }
 
         .announcement-slider-dots {
           display: flex;
@@ -333,6 +494,7 @@ export function AnnouncementRenderer({
           transform: scale(1.15);
         }
 
+        /* ---- PDF Slider ---- */
         .announcement-pdf-head {
           display: flex;
           align-items: flex-start;
@@ -341,21 +503,149 @@ export function AnnouncementRenderer({
           margin-bottom: 0.85rem;
         }
 
-        .announcement-pdf-frame {
-          min-height: 420px;
-          border-radius: 18px;
+        .pdf-download-btn {
+          flex-shrink: 0;
+        }
+
+        .pdf-slider-frame {
+          position: relative;
+          border-radius: 20px;
           overflow: hidden;
           border: 1px solid rgba(255, 255, 255, 0.08);
           background: rgba(255, 255, 255, 0.02);
         }
 
-        .announcement-pdf-frame iframe {
+        .pdf-slider-image {
+          display: block;
           width: 100%;
-          min-height: 420px;
-          border: 0;
-          background: white;
+          height: auto;
+          max-height: clamp(320px, 65vh, 860px);
+          object-fit: contain;
+          background: #fff;
         }
 
+        .pdf-slider-zoom-btn {
+          position: absolute;
+          top: 0.75rem;
+          right: 0.75rem;
+          width: 38px;
+          height: 38px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(8, 12, 26, 0.78);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform 0.2s ease, background 0.2s ease;
+          z-index: 2;
+        }
+
+        .pdf-slider-zoom-btn:hover {
+          transform: scale(1.08);
+          background: rgba(99, 102, 241, 0.72);
+        }
+
+        .pdf-slider-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          flex-wrap: wrap;
+          margin-top: 0.75rem;
+        }
+
+        .pdf-slider-label {
+          font-size: 0.8rem;
+          color: var(--text-muted);
+        }
+
+        /* ---- PDF Zoom Overlay ---- */
+        .pdf-zoom-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1.5rem;
+        }
+
+        .pdf-zoom-backdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(3, 6, 18, 0.88);
+          backdrop-filter: blur(8px);
+        }
+
+        .pdf-zoom-frame {
+          position: relative;
+          max-width: min(90vw, 960px);
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.75rem;
+          z-index: 1;
+        }
+
+        .pdf-zoom-img {
+          display: block;
+          max-width: 100%;
+          max-height: calc(90vh - 4rem);
+          object-fit: contain;
+          border-radius: 16px;
+          box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+        }
+
+        .pdf-zoom-close {
+          position: absolute;
+          top: -0.5rem;
+          right: -0.5rem;
+          width: 40px;
+          height: 40px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(15, 20, 40, 0.92);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 0.2s ease;
+          z-index: 2;
+        }
+
+        .pdf-zoom-close:hover {
+          background: rgba(239, 68, 68, 0.6);
+        }
+
+        .pdf-zoom-label {
+          font-size: 0.8rem;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* ---- GIF Block ---- */
+        .announcement-gif-shell {
+          border-radius: 20px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(0, 0, 0, 0.25);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .announcement-gif-image {
+          display: block;
+          max-width: 100%;
+          max-height: clamp(200px, 45vh, 480px);
+          object-fit: contain;
+          border-radius: 20px;
+        }
+
+        /* ---- Misc ---- */
         .announcement-empty-body {
           display: inline-flex;
           align-items: center;
@@ -382,10 +672,12 @@ export function AnnouncementRenderer({
           .announcement-pdf-head {
             flex-direction: column;
           }
-
           .announcement-slider-nav {
             width: 38px;
             height: 38px;
+          }
+          .pdf-zoom-overlay {
+            padding: 0.75rem;
           }
         }
       `}</style>

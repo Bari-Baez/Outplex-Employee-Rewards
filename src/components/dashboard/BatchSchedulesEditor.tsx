@@ -12,6 +12,7 @@ import {
   Filter
 } from 'lucide-react';
 import { DailySchedule, User } from '@/types/database';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 interface BatchSchedulesEditorProps {
   batchId: string;
@@ -156,7 +157,7 @@ export function BatchSchedulesEditor({
                         <div className="agent-cell">
                           <div className="agent-avatar">
                             {s.employee?.avatar_url ? (
-                              <img src={s.employee.avatar_url} alt="" />
+                              <img src={proxifyMediaUrl(s.employee.avatar_url)} alt="" />
                             ) : (
                               <span>{s.employee?.name.charAt(0)}</span>
                             )}

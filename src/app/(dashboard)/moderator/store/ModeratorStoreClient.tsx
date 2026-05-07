@@ -26,6 +26,7 @@ import {
   isModeratorOrderDeleteEligible,
   RECENT_ORDER_HISTORY_WINDOW_DAYS,
 } from '@/lib/store-helpers';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import type {
   OrderStatus,
   StoreItem,
@@ -1109,7 +1110,7 @@ export function ModeratorStoreClient({
                         <div className="low-stock-thumb">
                           {item.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={proxifyMediaUrl(item.image_url)} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
                             <Package size={16} color="var(--text-muted)" />
                           )}
@@ -1184,7 +1185,7 @@ export function ModeratorStoreClient({
                       <div style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', flexShrink: 0 }}>
                         {image ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={image} alt={itemName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={proxifyMediaUrl(image)} alt={itemName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Reward</div>
                         )}
@@ -1239,7 +1240,7 @@ export function ModeratorStoreClient({
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     {line.imageUrl ? (
                                       // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={line.imageUrl} alt={line.name} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
+                                      <img src={proxifyMediaUrl(line.imageUrl)} alt={line.name} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
                                     ) : (
                                       <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <Package size={16} color="var(--text-muted)" />
@@ -1523,7 +1524,7 @@ export function ModeratorStoreClient({
               <label className="file-input-row"><Upload size={16} /><input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importImageFile(file, (value) => setNewItem((current) => ({ ...current, image_url: value }))); event.currentTarget.value = ''; }} /></label>
               <div className="preview-box">{newItem.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={newItem.image_url} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={proxifyMediaUrl(newItem.image_url)} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : <div className="preview-empty">Preview</div>}</div>
               <button className="btn btn-primary" onClick={() => void handleCreateItem()} disabled={inventoryBusy || isReadOnly}>Add Item to Store</button>
             </div>
@@ -1708,7 +1709,7 @@ export function ModeratorStoreClient({
                 {theme.empCartBannerImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={theme.empCartBannerImage}
+                    src={proxifyMediaUrl(theme.empCartBannerImage)}
                     alt="Employee cart banner preview"
                     style={{ width: '100%', height: '100%', minHeight: 120, objectFit: 'cover', borderRadius: 'inherit', display: 'block' }}
                   />

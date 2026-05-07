@@ -21,6 +21,7 @@ import { announcementDurationLabel, formatCommunicationDate } from '@/lib/commun
 import { countAnnouncementAssets, normalizeAnnouncementBlocks } from '@/lib/communications';
 import { createClient } from '@/lib/supabase/client';
 import { formatRelativeTime } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 type NotificationWithSender = Notification & {
   sender?: Pick<User, 'id' | 'name' | 'avatar_url' | 'role'> | null;
@@ -189,7 +190,7 @@ export function AnnouncementsHubClient({
               </div>
               <div className="featured-announcement-cover">
                 {featuredAnnouncement.cover_image_url ? (
-                  <img src={featuredAnnouncement.cover_image_url} alt={featuredAnnouncement.title} />
+                  <img src={proxifyMediaUrl(featuredAnnouncement.cover_image_url)} alt={featuredAnnouncement.title} />
                 ) : (
                   <div className="featured-announcement-cover-empty">
                     <Newspaper size={24} />
@@ -229,7 +230,7 @@ export function AnnouncementsHubClient({
                     >
                       <div className="announcement-card-cover">
                         {announcement.cover_image_url ? (
-                          <img src={announcement.cover_image_url} alt={announcement.title} />
+                          <img src={proxifyMediaUrl(announcement.cover_image_url)} alt={announcement.title} />
                         ) : (
                           <div className="announcement-card-cover-empty">
                             <Newspaper size={22} />
@@ -293,7 +294,7 @@ export function AnnouncementsHubClient({
                     >
                       <div className="announcement-card-cover">
                         {announcement.cover_image_url ? (
-                          <img src={announcement.cover_image_url} alt={announcement.title} />
+                          <img src={proxifyMediaUrl(announcement.cover_image_url)} alt={announcement.title} />
                         ) : (
                           <div className="announcement-card-cover-empty">
                             <Newspaper size={22} />

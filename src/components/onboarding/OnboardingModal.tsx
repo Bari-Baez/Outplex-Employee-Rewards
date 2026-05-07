@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { User as UserType } from '@/types/database';
 import { ModernSelect } from '@/components/ui/Select';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 interface RoleRequestRef {
   id: string;
@@ -326,7 +327,7 @@ export function OnboardingModal({ user, roleRequest, onComplete }: OnboardingMod
     <div className="ob-avatar">
       {user.avatar_url
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={user.avatar_url} alt="avatar" />
+        ? <img src={proxifyMediaUrl(user.avatar_url)} alt="avatar" />
         : <User size={15} />}
     </div>
   );

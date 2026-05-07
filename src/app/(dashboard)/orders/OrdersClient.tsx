@@ -17,6 +17,7 @@ import {
   getOrderSummaryTitle,
 } from '@/lib/store-helpers';
 import { formatDop } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import type { StoreOrder } from '@/types/database';
 import { ModernSelect } from '@/components/ui/Select';
 import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, IdCard, Mail, MessageSquare, MoreVertical, Package, Star, Store, Zap, XCircle } from 'lucide-react';
@@ -367,7 +368,7 @@ export function OrdersClient({ initialOrders, initialEmpOrders }: { initialOrder
                   <div className="order-image-shell" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)' }}>
                     {order.items[0]?.image_snapshot ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={order.items[0].image_snapshot} alt={order.items[0].name_snapshot} className="order-image" />
+                      <img src={proxifyMediaUrl(order.items[0].image_snapshot)} alt={order.items[0].name_snapshot} className="order-image" />
                     ) : (
                       <div className="order-image-fallback"><Store size={24} style={{ color: '#6ee7b7' }} /></div>
                     )}
@@ -457,7 +458,7 @@ export function OrdersClient({ initialOrders, initialEmpOrders }: { initialOrder
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                               {item.image_snapshot ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={item.image_snapshot} alt={item.name_snapshot} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
+                                <img src={proxifyMediaUrl(item.image_snapshot)} alt={item.name_snapshot} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
                               ) : (
                                 <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   <Package size={16} color="var(--text-muted)" />
@@ -562,7 +563,7 @@ export function OrdersClient({ initialOrders, initialEmpOrders }: { initialOrder
                 <div className="order-image-shell">
                   {itemImage ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={itemImage} alt={itemName} className="order-image" />
+                    <img src={proxifyMediaUrl(itemImage)} alt={itemName} className="order-image" />
                   ) : (
                     <div className="order-image-fallback">
                       <Package size={24} />
@@ -639,7 +640,7 @@ export function OrdersClient({ initialOrders, initialEmpOrders }: { initialOrder
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             {line.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={line.imageUrl} alt={line.name} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
+                              <img src={proxifyMediaUrl(line.imageUrl)} alt={line.name} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
                             ) : (
                               <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Package size={16} color="var(--text-muted)" />

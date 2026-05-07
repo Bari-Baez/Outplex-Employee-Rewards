@@ -29,6 +29,7 @@ import {
   Calendar
 } from 'lucide-react';
 import type { ScheduleUploadBatch, User, PendingReviewAgent } from '@/types/database';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { findBestUserMatch } from '@/lib/breaks';
 import { BatchSchedulesEditor } from '@/components/dashboard/BatchSchedulesEditor';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -1301,7 +1302,7 @@ function MatchAgentDrawer({
                   <div key={emp.id} className="p-4 bg-white/5 border border-white/5 rounded-2xl flex items-center gap-4 group hover:bg-white/10 transition-all">
                     <div className="h-10 w-10 rounded-xl bg-[#6d5dfc]/20 flex items-center justify-center text-[#6d5dfc] font-black">
                       {emp.avatar_url ? (
-                        <img src={emp.avatar_url} alt="" className="w-full h-full object-cover rounded-xl" />
+                        <img src={proxifyMediaUrl(emp.avatar_url)} alt="" className="w-full h-full object-cover rounded-xl" />
                       ) : (
                         emp.name.charAt(0)
                       )}

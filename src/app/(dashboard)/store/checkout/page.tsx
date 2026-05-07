@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { formatPoints, getStockLabel } from '@/lib/store-helpers';
 import { PurchaseOverlay } from '@/components/store/PurchaseOverlay';
 import { useAppStore, type CartItem } from '@/lib/store';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { AlertCircle, RefreshCcw, ShoppingBag, Trash2, Zap } from 'lucide-react';
 
 type OverlayPhase = 'processing' | 'success';
@@ -224,7 +225,7 @@ export default function CheckoutPage() {
                   <div className="checkout-line-image">
                     {cartItem.item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={cartItem.item.image_url} alt={cartItem.item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={proxifyMediaUrl(cartItem.item.image_url)} alt={cartItem.item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <div className="checkout-line-fallback">Reward</div>
                     )}

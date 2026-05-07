@@ -14,7 +14,9 @@ export function ApprovedAccessIntro({ userId, userName }: ApprovedAccessIntroPro
 
   useEffect(() => {
     if (window.localStorage.getItem(storageKey) !== 'seen') {
-      setOpen(true);
+      // Defer to avoid synchronous setState inside effect (eslint rule).
+      const timeout = window.setTimeout(() => setOpen(true), 0);
+      return () => window.clearTimeout(timeout);
     }
   }, [storageKey]);
 

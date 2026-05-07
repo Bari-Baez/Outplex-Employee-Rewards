@@ -209,7 +209,7 @@ export async function sendGlobalRaffleNotifications(
     const { error } = await supabase.rpc('notify_users_by_role', {
       n_title: title,
       n_message: message,
-      n_type: 'raffle',
+      n_type: 'system',
       roles: ['employee', 'staff', 'moderator', 'moderator_a1', 'moderator_b1', 'admin'],
     });
     if (!error) return;
@@ -221,7 +221,7 @@ export async function sendGlobalRaffleNotifications(
   if (error) throw new Error(error.message);
   if (!users || users.length === 0) return;
 
-  const rows = users.map((user) => ({ user_id: user.id, title, message, type: 'raffle' }));
+  const rows = users.map((user) => ({ user_id: user.id, title, message, type: 'system' }));
   const chunkSize = 500;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
@@ -246,7 +246,7 @@ export async function sendWinnerNotifications(
       user_id: winner.userId!,
       title: 'You won a raffle!',
       message: `${winner.name} won "${runtime.title}".`,
-      type: 'raffle',
+      type: 'system',
     }));
 
   if (rows.length === 0) {

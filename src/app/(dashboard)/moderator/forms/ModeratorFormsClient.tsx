@@ -53,6 +53,7 @@ import {
   type FormSummaryWithStats,
   type LockedFieldSource,
 } from '@/lib/forms/types';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type AppView = 'list' | 'builder';
@@ -339,7 +340,7 @@ function QuestionCard({
                     {field.imageUrl && (
                       <div style={{ width: 80, height: 60, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)', flexShrink: 0 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={field.imageUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={proxifyMediaUrl(field.imageUrl)} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                     )}
                   </div>
@@ -365,7 +366,7 @@ function QuestionCard({
                     <div style={{ marginTop: '1rem', padding: '1rem', background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(15,23,42,0.2))', borderRadius: 12, border: '1px solid rgba(99,102,241,0.2)' }}>
                       <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Vista previa:</div>
                       <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(99,102,241,0.15)', background: 'rgba(0,0,0,0.2)' }}>
-                        <img src={field.imageUrl} alt="preview" style={{ width: '100%', height: 'auto', maxHeight: '280px', objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.5'; }} />
+                        <img src={proxifyMediaUrl(field.imageUrl)} alt="preview" style={{ width: '100%', height: 'auto', maxHeight: '280px', objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.5'; }} />
                       </div>
                     </div>
                   )}

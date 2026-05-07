@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAppStore } from '@/lib/store';
 import { formatDop } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import {
   formatPoints,
   getLowStockUrgencyCopy,
@@ -426,7 +427,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               : themePresentation.heroGradient)
             : (activeStore?.banner_image
                 ? `linear-gradient(180deg, rgba(9, 11, 22, 0.72) 0%, rgba(9, 11, 22, 0.95) 100%), url(${activeStore.banner_image})`
-                : `linear-gradient(180deg, rgba(9, 11, 22, 0.72) 0%, rgba(9, 11, 22, 0.95) 100%), url(https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&q=80&w=2000)`),
+                : `linear-gradient(180deg, rgba(9, 11, 22, 0.72) 0%, rgba(9, 11, 22, 0.95) 100%), url(${proxifyMediaUrl('https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&q=80&w=2000')})`),
         }}
       />
 
@@ -568,7 +569,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                         <button type="button" className="store-image-button" onClick={() => setSelectedItem(item)}>
                           {item.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.image_url} alt={item.name} className="store-image" />
+                            <img src={proxifyMediaUrl(item.image_url)} alt={item.name} className="store-image" />
                           ) : (
                             <div className="store-image-placeholder">Reward</div>
                           )}
@@ -674,7 +675,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                       <button type="button" className="store-image-button" onClick={() => setSelectedItem(item)}>
                         {item.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.image_url} alt={item.name} className="store-image" />
+                          <img src={proxifyMediaUrl(item.image_url)} alt={item.name} className="store-image" />
                         ) : (
                           <div className="store-image-placeholder">Reward</div>
                         )}
@@ -829,7 +830,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                       >
                         {store.logo_image ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={store.logo_image} alt={store.name} className="emp-store-logo" />
+                          <img src={proxifyMediaUrl(store.logo_image)} alt={store.name} className="emp-store-logo" />
                         ) : (
                           <div className="emp-store-logo-fallback">
                             {store.name.charAt(0).toUpperCase()}
@@ -909,7 +910,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                         <button type="button" className="store-image-button" onClick={() => setSelectedEmpItem(product)}>
                           {product.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={product.image_url} alt={product.name} className="store-image" />
+                            <img src={proxifyMediaUrl(product.image_url)} alt={product.name} className="store-image" />
                           ) : (
                             <div className="store-image-placeholder">{product.name.charAt(0)}</div>
                           )}
@@ -983,7 +984,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
             <div className="store-modal-image-container">
               {selectedEmpItem.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={selectedEmpItem.image_url} alt={selectedEmpItem.name} className="store-modal-image" />
+                <img src={proxifyMediaUrl(selectedEmpItem.image_url)} alt={selectedEmpItem.name} className="store-modal-image" />
               ) : (
                 <div className="store-image-placeholder">{selectedEmpItem.name.charAt(0)}</div>
               )}
@@ -1123,7 +1124,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
             <div className="store-modal-media">
               {selectedItem.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={selectedItem.image_url} alt={selectedItem.name} className="store-modal-image" />
+                <img src={proxifyMediaUrl(selectedItem.image_url)} alt={selectedItem.name} className="store-modal-image" />
               ) : (
                 <div className="store-image-placeholder">Reward</div>
               )}

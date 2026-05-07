@@ -873,13 +873,13 @@ async function seedRaffles(serviceClient: ServiceSupabaseClient, users: SeedUser
       user_id: users.employee.id,
       title: 'Raffle scheduled',
       message: 'NYT Friday Spotlight Giveaway is scheduled for two days from now at 3:00 PM.',
-      type: 'raffle',
+      type: 'system',
     },
     {
       user_id: users.employee.id,
       title: 'You won a raffle!',
       message: 'Coffee Break Winner was assigned to your profile during the last wrap-up.',
-      type: 'raffle',
+      type: 'system',
     },
   ]);
   if (raffleNotificationError) {

@@ -4,6 +4,7 @@ import { sanitizeOTRows } from '@/lib/ot';
 import type { CSVRow, BatchStatus } from '@/types/database';
 import { isModeratorRole } from '@/lib/auth/roles';
 import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import type { OTDateFormat } from '@/lib/utils';
 
 async function requireModeratorOrAdmin() {
   const supabase = await createClient();
@@ -50,6 +51,7 @@ type PublishPayload = {
   batchName: string;
   batchId?: string | null;
   status?: BatchStatus;
+  dateFormat?: OTDateFormat;
 };
 
 export async function POST(request: NextRequest) {
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
   const { user, serviceClient } = auth;
   const payload = (await request.json()) as PublishPayload;
   const status = payload.status ?? 'published';
-  const sanitizedRows = sanitizeOTRows(payload.rows ?? []);
+  const sanitizedRows = sanitizeOTRows(payload.rows ?? [], payload.dateFormat ?? 'auto');
   const batchName = payload.batchName?.trim() || `Batch ${new Date().toLocaleDateString()}`;
 
   if (sanitizedRows.length === 0) {

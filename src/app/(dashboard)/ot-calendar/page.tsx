@@ -17,6 +17,7 @@ import {
   toDateString,
 } from '@/lib/utils';
 import { getUnclaimWindowRemainingMs } from '@/lib/ot';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -586,7 +587,7 @@ function OTCalendarPageContent() {
                             <div className="claimed-avatar">
                               {slot.claimedByUser.avatar_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={slot.claimedByUser.avatar_url} alt={slot.claimedByUser.name} />
+                                <img src={proxifyMediaUrl(slot.claimedByUser.avatar_url)} alt={slot.claimedByUser.name} />
                               ) : (
                                 <span>{slot.claimedByUser.name[0]}</span>
                               )}

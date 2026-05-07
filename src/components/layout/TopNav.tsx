@@ -8,6 +8,7 @@ import { ModernSelect } from '@/components/ui/Select';
 import type { SupportTicket, User } from '@/types/database';
 import { getInitials } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 interface TopNavProps {
   user: User | null;
@@ -120,7 +121,7 @@ export function TopNav({ user }: TopNavProps) {
           <div className="user-avatar">
             {user?.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatar_url} alt={user.name} referrerPolicy="no-referrer" />
+              <img src={proxifyMediaUrl(user.avatar_url)} alt={user.name} referrerPolicy="no-referrer" />
             ) : (
               <span>{getInitials(user?.name ?? 'U')}</span>
             )}

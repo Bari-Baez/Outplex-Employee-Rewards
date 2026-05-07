@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CalendarClock, Gift, RefreshCcw, Trophy } from 'lucide-react';
 import { CanvasRoulette } from '@/components/raffles/CanvasRoulette';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import {
   syncRaffleFeed,
   filterRaffles,
@@ -417,7 +418,7 @@ export function RafflesHubClient() {
                               <div className="emp-prize-thumb">
                                 {imageUrl ? (
                                   // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={imageUrl} alt={assignment.prizeTitle} />
+                                  <img src={proxifyMediaUrl(imageUrl)} alt={assignment.prizeTitle} />
                                 ) : (
                                   <Gift size={22} />
                                 )}

@@ -1,19 +1,25 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AlignLeft,
   BellRing,
+  ChevronDown,
+  ChevronUp,
   FileText,
+  Film,
   ImagePlus,
-  LayoutTemplate,
   Megaphone,
   Plus,
   Save,
+  Search,
   Send,
   SlidersHorizontal,
+  Trash2,
   Wrench,
+  X,
 } from 'lucide-react';
 import { TransferProgress } from '@/components/uploads/TransferProgress';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -21,6 +27,7 @@ import { useTransferState } from '@/components/uploads/useTransferState';
 import type {
   AnnouncementBlock,
   AnnouncementDurationDays,
+  AnnouncementGifBlock,
   AnnouncementPdfBlock,
   AnnouncementSliderBlock,
   AnnouncementTextBlock,
@@ -32,6 +39,7 @@ import {
   ANNOUNCEMENT_DURATION_OPTIONS,
   BROADCAST_NOTIFICATION_LIMIT_PER_DAY,
   announcementDurationLabel,
+  createAnnouncementGifBlock,
   createAnnouncementImageBlock,
   createAnnouncementPdfBlock,
   createAnnouncementSlide,
@@ -48,6 +56,7 @@ import { readFileAsDataUrlWithProgress } from '@/lib/file-transfer';
 import { ModernSelect } from '@/components/ui/Select';
 import { ModernDatePicker } from '@/components/ui/DatePicker';
 import { ModernTimePicker } from '@/components/ui/TimePicker';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 type StudioTab = 'notifications' | 'announcements';
 type BroadcastAction = 'draft' | 'scheduled' | 'published';
@@ -94,10 +103,9 @@ function createEmptyAnnouncementForm(): AnnouncementFormState {
 }
 
 async function extractPdfPreviewImages(file: File) {
-  // Use a reliable CDN worker that matches the version in package.json (5.6.205)
-  const PDFJS_VERSION = '5.6.205';
+  // Avoid CDN workers (often blocked on corporate networks). We ship the worker in `public/pdfjs` via postinstall.
   const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 
   const pdf = await pdfjs.getDocument({
     data: await file.arrayBuffer(),
@@ -166,6 +174,19 @@ function isTextBlock(block: AnnouncementBlock): block is AnnouncementTextBlock {
   return block.type === 'text';
 }
 
+function isGifBlock(block: AnnouncementBlock): block is AnnouncementGifBlock {
+  return block.type === 'gif';
+}
+
+interface TenorResult {
+  id: string;
+  title: string;
+  media_formats: {
+    gif: { url: string };
+    tinygif: { url: string };
+  };
+}
+
 export function ModeratorCommunicationsClient({
   currentModeratorName,
   initialBroadcasts,
@@ -191,6 +212,9 @@ export function ModeratorCommunicationsClient({
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'broadcast' | 'announcement'; id: string } | null>(null);
   const [notice, setNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
   const [pdfBusyBlockId, setPdfBusyBlockId] = useState<string | null>(null);
+  const [gifQuery, setGifQuery] = useState<Record<string, string>>({});
+  const [gifResults, setGifResults] = useState<Record<string, TenorResult[]>>({});
+  const [gifSearching, setGifSearching] = useState<Record<string, boolean>>({});
   const transfer = useTransferState({ resetAfterMs: 1500 });
   const { isSectionEnabled } = useAppAvailability();
 
@@ -409,7 +433,7 @@ export function ModeratorCommunicationsClient({
     }));
   };
 
-  const addAnnouncementBlock = (type: 'text' | 'image' | 'slider' | 'pdf') => {
+  const addAnnouncementBlock = (type: 'text' | 'image' | 'slider' | 'pdf' | 'gif') => {
     setAnnouncementForm((current) => ({
       ...current,
       content: [
@@ -420,7 +444,9 @@ export function ModeratorCommunicationsClient({
             ? createAnnouncementImageBlock()
             : type === 'slider'
               ? createAnnouncementSliderBlock()
-              : createAnnouncementPdfBlock(),
+              : type === 'gif'
+                ? createAnnouncementGifBlock()
+                : createAnnouncementPdfBlock(),
       ],
     }));
   };
@@ -514,6 +540,23 @@ export function ModeratorCommunicationsClient({
       transfer.fail('Failed');
     } finally {
       setPdfBusyBlockId(null);
+    }
+  };
+
+  const handleGifSearch = async (blockId: string, query: string) => {
+    if (!query.trim()) return;
+    setGifSearching((prev) => ({ ...prev, [blockId]: true }));
+    try {
+      // Tenor v1 — public test key, no account required
+      const url = `https://api.tenor.com/v1/search?q=${encodeURIComponent(query)}&key=LIVDSRZULELA&limit=12&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Tenor error ${res.status}`);
+      const json = (await res.json()) as { results: TenorResult[] };
+      setGifResults((prev) => ({ ...prev, [blockId]: json.results }));
+    } catch {
+      // silently fail — user can paste a GIF URL directly
+    } finally {
+      setGifSearching((prev) => ({ ...prev, [blockId]: false }));
     }
   };
 
@@ -857,7 +900,7 @@ export function ModeratorCommunicationsClient({
                 </div>
               </div>
               <div className="studio-cover-preview">
-                {announcementForm.coverImageUrl ? <img src={announcementForm.coverImageUrl} alt="Announcement cover preview" /> : <span>Cover preview</span>}
+                {announcementForm.coverImageUrl ? <img src={proxifyMediaUrl(announcementForm.coverImageUrl)} alt="Announcement cover preview" /> : <span>Cover preview</span>}
               </div>
             </div>
 
@@ -911,157 +954,256 @@ export function ModeratorCommunicationsClient({
               </div>
             ) : null}
 
-            <div className="studio-block-toolbar">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => addAnnouncementBlock('text')}><LayoutTemplate size={14} /> Text</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => addAnnouncementBlock('image')}><ImagePlus size={14} /> Image</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => addAnnouncementBlock('slider')}><SlidersHorizontal size={14} /> Slider</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => addAnnouncementBlock('pdf')}><FileText size={14} /> PDF</button>
+            {/* ---- Visual block picker ---- */}
+            <div>
+              <label className="studio-label" style={{ marginBottom: '0.75rem' }}>Add a content block</label>
+              <div className="studio-block-picker">
+                {([
+                  { type: 'text' as const, icon: <AlignLeft size={18} />, label: 'Text', desc: 'Heading + body paragraph' },
+                  { type: 'image' as const, icon: <ImagePlus size={18} />, label: 'Image', desc: 'Single photo with caption' },
+                  { type: 'slider' as const, icon: <SlidersHorizontal size={18} />, label: 'Slider', desc: 'Swipeable image gallery' },
+                  { type: 'pdf' as const, icon: <FileText size={18} />, label: 'PDF', desc: 'Page-by-page viewer + download' },
+                  { type: 'gif' as const, icon: <Film size={18} />, label: 'GIF', desc: 'Animated GIF via Giphy' },
+                ]).map(({ type, icon, label, desc }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className="studio-block-pick-btn"
+                    onClick={() => addAnnouncementBlock(type)}
+                  >
+                    <span className="studio-block-pick-icon">{icon}</span>
+                    <span className="studio-block-pick-label">{label}</span>
+                    <span className="studio-block-pick-desc">{desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="studio-block-list">
-              {announcementForm.content.map((block, index) => (
-                <div key={block.id} className="studio-block-card">
-                  <div className="studio-block-head">
-                    <strong>{block.type.toUpperCase()} block</strong>
-                    <div className="studio-inline-actions">
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => moveAnnouncementBlock(block.id, -1)} disabled={index === 0}>Up</button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => moveAnnouncementBlock(block.id, 1)} disabled={index === announcementForm.content.length - 1}>Down</button>
-                      <button type="button" className="btn btn-ghost btn-sm studio-danger-btn" onClick={() => removeAnnouncementBlock(block.id)}>Remove</button>
-                    </div>
-                  </div>
-
-                  {block.type === 'text' ? (
-                    <div className="studio-form-grid">
-                      <div>
-                        <label className="studio-label">Heading</label>
-                        <input className="input" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isTextBlock(current) ? { ...current, heading: event.target.value } : current)} />
+              {announcementForm.content.map((block, index) => {
+                const blockMeta: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
+                  text: { icon: <AlignLeft size={14} />, label: 'Text Block', color: '#a78bfa' },
+                  image: { icon: <ImagePlus size={14} />, label: 'Image Block', color: '#34d399' },
+                  slider: { icon: <SlidersHorizontal size={14} />, label: 'Slider Block', color: '#f59e0b' },
+                  pdf: { icon: <FileText size={14} />, label: 'PDF Block', color: '#60a5fa' },
+                  gif: { icon: <Film size={14} />, label: 'GIF Block', color: '#f472b6' },
+                };
+                const meta = blockMeta[block.type] ?? blockMeta.text;
+                return (
+                  <div key={block.id} className="studio-block-card">
+                    <div className="studio-block-head">
+                      <div className="studio-block-type-badge" style={{ '--badge-color': meta.color } as React.CSSProperties}>
+                        {meta.icon}
+                        <span>{meta.label}</span>
+                        <span className="studio-block-index">#{index + 1}</span>
                       </div>
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label className="studio-label">Body</label>
-                        <textarea className="input studio-textarea" value={block.body} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isTextBlock(current) ? { ...current, body: event.target.value } : current)} />
+                      <div className="studio-block-actions">
+                        <button type="button" className="studio-icon-btn" onClick={() => moveAnnouncementBlock(block.id, -1)} disabled={index === 0} title="Move up"><ChevronUp size={15} /></button>
+                        <button type="button" className="studio-icon-btn" onClick={() => moveAnnouncementBlock(block.id, 1)} disabled={index === announcementForm.content.length - 1} title="Move down"><ChevronDown size={15} /></button>
+                        <button type="button" className="studio-icon-btn studio-icon-btn-danger" onClick={() => removeAnnouncementBlock(block.id)} title="Remove block"><Trash2 size={15} /></button>
                       </div>
                     </div>
-                  ) : null}
 
-                  {block.type === 'image' ? (
-                    <div className="studio-block-stack">
+                    {block.type === 'text' ? (
                       <div className="studio-form-grid">
                         <div>
-                          <label className="studio-label">Heading</label>
-                          <input className="input" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => current.type === 'image' ? { ...current, heading: event.target.value } : current)} />
+                          <label className="studio-label">Heading <span className="studio-label-hint">(optional)</span></label>
+                          <input className="input" placeholder="Section heading…" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isTextBlock(current) ? { ...current, heading: event.target.value } : current)} />
                         </div>
-                        <div>
-                          <label className="studio-label">Image</label>
-                          <div className="studio-upload-row">
-                            <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBlockImageUpload(block.id, file); event.currentTarget.value = ''; }} />
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label className="studio-label">Body text</label>
+                          <textarea className="input studio-textarea" placeholder="Write your paragraph here…" value={block.body} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isTextBlock(current) ? { ...current, body: event.target.value } : current)} />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {block.type === 'image' ? (
+                      <div className="studio-block-stack">
+                        <div className="studio-form-grid">
+                          <div>
+                            <label className="studio-label">Heading <span className="studio-label-hint">(optional)</span></label>
+                            <input className="input" placeholder="Image section heading…" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => current.type === 'image' ? { ...current, heading: event.target.value } : current)} />
+                          </div>
+                          <div>
+                            <label className="studio-label">Upload image</label>
+                            <div className="studio-upload-row">
+                              <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleBlockImageUpload(block.id, file); event.currentTarget.value = ''; }} />
+                            </div>
+                          </div>
+                        </div>
+                        {block.imageUrl ? <img src={proxifyMediaUrl(block.imageUrl)} alt="Announcement block preview" className="studio-media-preview" /> : null}
+                        <div className="studio-form-grid">
+                          <div>
+                            <label className="studio-label">Caption</label>
+                            <input className="input" placeholder="Short caption…" value={block.caption ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => current.type === 'image' ? { ...current, caption: event.target.value } : current)} />
+                          </div>
+                          <div>
+                            <label className="studio-label">Description <span className="studio-label-hint">(optional)</span></label>
+                            <textarea className="input studio-textarea" placeholder="Extra text below the image…" value={block.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => current.type === 'image' ? { ...current, body: event.target.value } : current)} />
                           </div>
                         </div>
                       </div>
-                      {block.imageUrl ? <img src={block.imageUrl} alt="Announcement block preview" className="studio-media-preview" /> : null}
-                      <div className="studio-form-grid">
-                        <div>
-                          <label className="studio-label">Caption</label>
-                          <input className="input" value={block.caption ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => current.type === 'image' ? { ...current, caption: event.target.value } : current)} />
-                        </div>
-                        <div>
-                          <label className="studio-label">Body</label>
-                          <textarea className="input studio-textarea" value={block.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => current.type === 'image' ? { ...current, body: event.target.value } : current)} />
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
+                    ) : null}
 
-                  {block.type === 'slider' ? (
-                    <div className="studio-block-stack">
-                      <div className="studio-form-grid">
-                        <div>
-                          <label className="studio-label">Heading</label>
-                          <input className="input" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, heading: event.target.value } : current)} />
+                    {block.type === 'slider' ? (
+                      <div className="studio-block-stack">
+                        <div className="studio-form-grid">
+                          <div>
+                            <label className="studio-label">Slider heading <span className="studio-label-hint">(optional)</span></label>
+                            <input className="input" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, heading: event.target.value } : current)} />
+                          </div>
+                          <div>
+                            <label className="studio-label">Intro text <span className="studio-label-hint">(optional)</span></label>
+                            <textarea className="input studio-textarea" value={block.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, body: event.target.value } : current)} />
+                          </div>
                         </div>
-                        <div>
-                          <label className="studio-label">Block intro</label>
-                          <textarea className="input studio-textarea" value={block.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, body: event.target.value } : current)} />
-                        </div>
-                      </div>
-                      <div className="studio-slide-list">
-                        {block.slides.map((slide) => (
-                          <div key={slide.id} className="studio-slide-card">
-                            <div className="studio-form-grid">
-                              <div>
-                                <label className="studio-label">Slide image</label>
-                                <div className="studio-upload-row">
-                                  <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleSliderImageUpload(block.id, slide.id, file); event.currentTarget.value = ''; }} />
+                        <div className="studio-slide-list">
+                          {block.slides.map((slide, slideIdx) => (
+                            <div key={slide.id} className="studio-slide-card">
+                              <div className="studio-slide-head">
+                                <span className="studio-label" style={{ margin: 0 }}>Slide {slideIdx + 1}</span>
+                                <button type="button" className="studio-icon-btn studio-icon-btn-danger" onClick={() => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: current.slides.filter((entry) => entry.id !== slide.id) } : current)} disabled={block.slides.length === 1} title="Remove slide"><Trash2 size={13} /></button>
+                              </div>
+                              <div className="studio-form-grid">
+                                <div>
+                                  <label className="studio-label">Slide image</label>
+                                  <div className="studio-upload-row">
+                                    <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleSliderImageUpload(block.id, slide.id, file); event.currentTarget.value = ''; }} />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="studio-label">Caption</label>
+                                  <input className="input" value={slide.caption ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: current.slides.map((entry) => entry.id === slide.id ? { ...entry, caption: event.target.value } : entry) } : current)} />
                                 </div>
                               </div>
+                              {slide.imageUrl ? <img src={proxifyMediaUrl(slide.imageUrl)} alt="Slide preview" className="studio-media-preview" /> : null}
                               <div>
-                                <label className="studio-label">Caption</label>
-                                <input className="input" value={slide.caption ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: current.slides.map((entry) => entry.id === slide.id ? { ...entry, caption: event.target.value } : entry) } : current)} />
-                              </div>
-                            </div>
-                            {slide.imageUrl ? <img src={slide.imageUrl} alt="Slide preview" className="studio-media-preview" /> : null}
-                            <div className="studio-form-grid">
-                              <div>
-                                <label className="studio-label">Slide text</label>
+                                <label className="studio-label">Slide text <span className="studio-label-hint">(optional)</span></label>
                                 <textarea className="input studio-textarea" value={slide.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: current.slides.map((entry) => entry.id === slide.id ? { ...entry, body: event.target.value } : entry) } : current)} />
                               </div>
-                              <div className="studio-inline-actions studio-inline-actions-end">
-                                <button type="button" className="btn btn-ghost btn-sm studio-danger-btn" onClick={() => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: current.slides.filter((entry) => entry.id !== slide.id) } : current)} disabled={block.slides.length === 1}>
-                                  Remove slide
-                                </button>
-                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: [...current.slides, createAnnouncementSlide()] } : current)}>
+                          <Plus size={14} /> Add slide
+                        </button>
                       </div>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => updateAnnouncementBlock(block.id, (current) => isSliderBlock(current) ? { ...current, slides: [...current.slides, createAnnouncementSlide()] } : current)}>
-                        <Plus size={14} />
-                        Add slide
-                      </button>
-                    </div>
-                  ) : null}
+                    ) : null}
 
-                  {block.type === 'pdf' ? (
-                    <div className="studio-block-stack">
-                      <div className="studio-form-grid">
-                        <div>
-                          <label className="studio-label">Heading</label>
-                          <input className="input" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isPdfBlock(current) ? { ...current, heading: event.target.value } : current)} />
+                    {block.type === 'pdf' ? (
+                      <div className="studio-block-stack">
+                        <div className="studio-hint" style={{ fontSize: '0.82rem' }}>
+                          <FileText size={14} style={{ flexShrink: 0 }} />
+                          Upload a PDF — each page is automatically converted to a preview image. Employees can swipe through pages and click to zoom.
+                        </div>
+                        <div className="studio-form-grid">
+                          <div>
+                            <label className="studio-label">Heading <span className="studio-label-hint">(optional)</span></label>
+                            <input className="input" placeholder="PDF section heading…" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isPdfBlock(current) ? { ...current, heading: event.target.value } : current)} />
+                          </div>
+                          <div>
+                            <label className="studio-label">Display mode</label>
+                            <ModernSelect
+                              value={block.displayMode}
+                              onValueChange={v => updateAnnouncementBlock(block.id, (current) => isPdfBlock(current) ? { ...current, displayMode: v as AnnouncementPdfBlock['displayMode'] } : current)}
+                              options={[
+                                { label: 'Page slider + Download', value: 'slider' },
+                                { label: 'Download link only', value: 'download_only' },
+                              ]}
+                            />
+                          </div>
                         </div>
                         <div>
-                          <label className="studio-label">Display mode</label>
-                          <ModernSelect
-                            value={block.displayMode}
-                            onValueChange={v => updateAnnouncementBlock(block.id, (current) => isPdfBlock(current) ? { ...current, displayMode: v as AnnouncementPdfBlock['displayMode'] } : current)}
-                            options={[
-                              { label: 'Full Embed', value: 'full_embed' },
-                              { label: 'Preview Image', value: 'preview_image' },
-                              { label: 'Inline Viewer', value: 'inline_viewer' },
-                              { label: 'Compact Link', value: 'compact_link' }
-                            ]}
-                          />
+                          <label className="studio-label">PDF file</label>
+                          <div className="studio-upload-row">
+                            <input type="file" accept="application/pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePdfUpload(block.id, file); event.currentTarget.value = ''; }} />
+                          </div>
+                        </div>
+                        <div className="studio-form-grid">
+                          <div>
+                            <label className="studio-label">Description <span className="studio-label-hint">(optional)</span></label>
+                            <textarea className="input studio-textarea" placeholder="Brief description of the document…" value={block.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isPdfBlock(current) ? { ...current, body: event.target.value } : current)} />
+                          </div>
+                          <div className="studio-pdf-summary">
+                            <FileText size={18} />
+                            <strong>{block.fileName || 'No PDF selected yet'}</strong>
+                            <span>{pdfBusyBlockId === block.id ? 'Extracting pages…' : `${block.previewImages?.length ?? 0} page(s) ready`}</span>
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <label className="studio-label">PDF file</label>
-                        <div className="studio-upload-row">
-                          <input type="file" accept="application/pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handlePdfUpload(block.id, file); event.currentTarget.value = ''; }} />
+                    ) : null}
+
+                    {block.type === 'gif' ? (
+                      <div className="studio-block-stack">
+                        <div className="studio-form-grid">
+                          <div>
+                            <label className="studio-label">Heading <span className="studio-label-hint">(optional)</span></label>
+                            <input className="input" placeholder="GIF section heading…" value={block.heading ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, heading: event.target.value } : current)} />
+                          </div>
+                          <div>
+                            <label className="studio-label">Caption <span className="studio-label-hint">(optional)</span></label>
+                            <input className="input" placeholder="Short caption below the GIF…" value={block.caption ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, caption: event.target.value } : current)} />
+                          </div>
                         </div>
-                      </div>
-                      <div className="studio-form-grid">
+                        {/* Tenor GIF search */}
                         <div>
-                          <label className="studio-label">Body</label>
-                          <textarea className="input studio-textarea" value={block.body ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isPdfBlock(current) ? { ...current, body: event.target.value } : current)} />
+                          <label className="studio-label">Search GIFs (Tenor)</label>
+                          <div className="giphy-search-row">
+                            <input
+                              className="input"
+                              placeholder="e.g. celebration, welcome, congrats…"
+                              value={gifQuery[block.id] ?? ''}
+                              onChange={(e) => setGifQuery((prev) => ({ ...prev, [block.id]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === 'Enter') void handleGifSearch(block.id, gifQuery[block.id] ?? ''); }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => void handleGifSearch(block.id, gifQuery[block.id] ?? '')}
+                              disabled={gifSearching?.[block.id]}
+                            >
+                              {gifSearching?.[block.id] ? '…' : <Search size={15} />}
+                            </button>
+                          </div>
                         </div>
-                        <div className="studio-pdf-summary">
-                          <FileText size={18} />
-                          <strong>{block.fileName || 'No PDF selected yet'}</strong>
-                          <span>{pdfBusyBlockId === block.id ? 'Extracting pages...' : `${block.previewImages?.length ?? 0} page(s) ready for the slider.`}</span>
+                        {(gifResults[block.id]?.length ?? 0) > 0 ? (
+                          <div className="giphy-grid">
+                            {(gifResults[block.id] ?? []).map((gif) => (
+                              <button
+                                key={gif.id}
+                                type="button"
+                                className={`giphy-thumb ${block.gifId === gif.id ? 'giphy-thumb-active' : ''}`}
+                                onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: gif.media_formats.gif.url, gifId: gif.id } : current)}
+                                title={gif.title}
+                              >
+                                <img src={gif.media_formats.tinygif.url} alt={gif.title} />
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {/* Direct URL fallback */}
+                        <div>
+                          <label className="studio-label">Or paste GIF URL directly</label>
+                          <div className="giphy-search-row">
+                            <input
+                              className="input"
+                              placeholder="https://media.tenor.com/… or any .gif URL"
+                              value={block.gifUrl ?? ''}
+                              onChange={(e) => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: e.target.value, gifId: null } : current)}
+                            />
+                            {block.gifUrl ? (
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: '', gifId: null } : current)} title="Clear"><X size={15} /></button>
+                            ) : null}
+                          </div>
+                          {block.gifUrl ? (
+                            <img src={block.gifUrl} alt="GIF preview" className="studio-media-preview" style={{ marginTop: '0.75rem' }} />
+                          ) : null}
                         </div>
                       </div>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="studio-actions">
@@ -1500,6 +1642,13 @@ export function ModeratorCommunicationsClient({
           gap: 0.75rem;
         }
 
+        .studio-slide-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
         .studio-inline-actions-end {
           justify-content: flex-end;
           align-items: end;
@@ -1515,13 +1664,164 @@ export function ModeratorCommunicationsClient({
           align-content: start;
         }
 
-        .studio-pdf-summary strong {
-          font-size: 0.92rem;
+        .studio-pdf-summary strong { font-size: 0.92rem; }
+        .studio-pdf-summary span { color: var(--text-muted); font-size: 0.8rem; }
+
+        /* ---- Visual block picker ---- */
+        .studio-block-picker {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
         }
 
-        .studio-pdf-summary span {
+        .studio-block-pick-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.55rem;
+          padding: 0.55rem 1rem 0.55rem 0.65rem;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.09);
+          background: rgba(255, 255, 255, 0.04);
+          cursor: pointer;
+          transition: background 0.18s ease, border-color 0.18s ease, transform 0.16s ease;
+          white-space: nowrap;
+        }
+
+        .studio-block-pick-btn:hover {
+          background: rgba(124, 108, 255, 0.14);
+          border-color: rgba(124, 108, 255, 0.32);
+          transform: translateY(-1px);
+        }
+
+        .studio-block-pick-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 26px;
+          border-radius: 8px;
+          background: rgba(124, 108, 255, 0.18);
+          border: 1px solid rgba(124, 108, 255, 0.22);
+          color: #c4b5fd;
+          flex-shrink: 0;
+        }
+
+        .studio-block-pick-label {
+          font-size: 0.82rem;
+          font-weight: 800;
+          color: var(--text-primary);
+        }
+
+        .studio-block-pick-desc {
+          font-size: 0.72rem;
           color: var(--text-muted);
-          font-size: 0.8rem;
+        }
+
+        /* ---- Block type badge & icon actions ---- */
+        .studio-block-type-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.35rem 0.75rem 0.35rem 0.55rem;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--badge-color, #a78bfa) 30%, transparent);
+          background: color-mix(in srgb, var(--badge-color, #a78bfa) 14%, transparent);
+          color: var(--badge-color, #a78bfa);
+          font-size: 0.78rem;
+          font-weight: 800;
+        }
+
+        .studio-block-index {
+          font-weight: 400;
+          opacity: 0.6;
+          font-size: 0.72rem;
+        }
+
+        .studio-block-actions {
+          display: flex;
+          gap: 0.35rem;
+          align-items: center;
+        }
+
+        .studio-icon-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: background 0.18s ease, color 0.18s ease;
+        }
+
+        .studio-icon-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          color: white;
+        }
+
+        .studio-icon-btn:disabled {
+          opacity: 0.3;
+          cursor: default;
+        }
+
+        .studio-icon-btn-danger:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.14);
+          color: #fca5a5;
+          border-color: rgba(239, 68, 68, 0.22);
+        }
+
+        .studio-label-hint {
+          font-weight: 400;
+          opacity: 0.55;
+          text-transform: none;
+          letter-spacing: 0;
+        }
+
+        /* ---- Giphy UI ---- */
+        .giphy-search-row {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
+        }
+
+        .giphy-search-row .input {
+          flex: 1;
+        }
+
+        .giphy-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+          gap: 0.5rem;
+        }
+
+        .giphy-thumb {
+          border-radius: 12px;
+          overflow: hidden;
+          border: 2px solid transparent;
+          padding: 0;
+          cursor: pointer;
+          transition: border-color 0.18s ease, transform 0.18s ease;
+          background: rgba(255, 255, 255, 0.04);
+        }
+
+        .giphy-thumb:hover {
+          transform: scale(1.04);
+          border-color: rgba(124, 108, 255, 0.4);
+        }
+
+        .giphy-thumb-active {
+          border-color: #7c6cff;
+          box-shadow: 0 0 0 2px rgba(124, 108, 255, 0.3);
+        }
+
+        .giphy-thumb img {
+          display: block;
+          width: 100%;
+          height: 80px;
+          object-fit: cover;
         }
 
         @media (max-width: 1100px) {

@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated OCR assets (copied from node_modules during postinstall)
+    "public/tesseract/**",
+    "public/pdfjs/**",
+    // Local debug scripts (not shipped)
+    "check_status.js",
+    "debug_b1.js",
+    "reset_b1.js",
+    "reset_db.js",
   ]),
 ]);
 

@@ -54,6 +54,7 @@ import {
   shiftOTDate,
 } from '@/lib/ot';
 import { formatOTDate, formatTime } from '@/lib/utils';
+import { toast } from 'sonner';
 
 type ManagerUser = {
   id: string;
@@ -185,19 +186,40 @@ function getCalendarCellTone({
   return 'quiet';
 }
 
-function serializeExportCsv(columns: ExportColumn[], rows: ExportRow[]) {
+function formatExportCellValue(key: string, raw: string): string {
+  if (!raw) return '';
+  if (key === 'date') {
+    // ISO "2026-05-01" → "05/01/2026"
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+    return raw;
+  }
+  if (key === 'start_time' || key === 'end_time') {
+    return formatTime(raw); // "08:00" → "8:00 AM"
+  }
+  if (key === 'duration_hrs') {
+    const n = Number(raw);
+    return Number.isNaN(n) ? raw : String(n); // strip trailing zeros
+  }
+  return raw;
+}
+
+function serializeExportCsv(columns: ExportColumn[], rows: ExportRow[], formatted = false) {
   const escape = (value: string | number | undefined) => {
     const stringValue = String(value ?? '');
     if (/[",\n]/.test(stringValue)) {
       return `"${stringValue.replace(/"/g, '""')}"`;
     }
-
     return stringValue;
   };
 
   return [
     columns.map((column) => escape(column.label)).join(','),
-    ...rows.map((row) => columns.map((column) => escape(row[column.key])).join(',')),
+    ...rows.map((row) =>
+      columns.map((column) =>
+        escape(formatted ? formatExportCellValue(column.key, row[column.key] ?? '') : (row[column.key] ?? '')),
+      ).join(','),
+    ),
   ].join('\n');
 }
 
@@ -213,6 +235,137 @@ function downloadBlob(contents: string, fileName: string, mimeType: string) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadCsvProfessional(columns: ExportColumn[], rows: ExportRow[], label = 'ot-report') {
+  const today = new Date().toISOString().slice(0, 10);
+  const csv = serializeExportCsv(columns, rows, true);
+  // UTF-8 BOM ensures Excel opens without encoding issues
+  const bom = '﻿';
+  downloadBlob(bom + csv, `Outplex-${label}-${today}.csv`, 'text/csv');
+}
+
+// ── CSV sheet aggregation helpers (used by downloadExportCsv) ──────────────
+type CsvSheet = 'ot-data' | 'employee-summary' | 'lob-summary' | 'date-summary' | 'dashboard-kpis';
+
+function csvEsc(v: string | number): string {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function csvLine(vals: (string | number)[]): string { return vals.map(csvEsc).join(','); }
+
+function rowSection(row: ExportRow, today: string): string {
+  if (row.ot_status === 'cancelled') return 'Cancelled';
+  if ((row.date ?? '') > today) return 'Upcoming';
+  if (row.ot_status === 'claimed') return 'Claimed';
+  return 'Pending';
+}
+
+function buildCsvEmployeeSummary(rows: ExportRow[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const map = new Map<string, { name: string; id: string; email: string; sup: string; lob: string; claimed: number; pending: number; upcoming: number; cancelled: number; hrs: number }>();
+  for (const row of rows) {
+    const key = row.employee_id || row.employee_name || 'unassigned';
+    if (!map.has(key)) map.set(key, { name: row.employee_name ?? '', id: row.employee_id ?? '', email: row.employee_email ?? '', sup: row.employee_superior ?? '', lob: row.lob ?? '', claimed: 0, pending: 0, upcoming: 0, cancelled: 0, hrs: 0 });
+    const e = map.get(key)!;
+    const sec = rowSection(row, today);
+    if (sec === 'Claimed') e.claimed++;
+    else if (sec === 'Upcoming') e.upcoming++;
+    else if (sec === 'Cancelled') e.cancelled++;
+    else e.pending++;
+    e.hrs += Number(row.duration_hrs) || 0;
+  }
+  const lines = [csvLine(['Employee Name', 'Emp. ID', 'Email', 'Supervisor', 'LOB', 'Claimed', 'Pending', 'Upcoming', 'Cancelled', 'Total Slots', 'Total Hours'])];
+  [...map.values()].sort((a, b) => b.hrs - a.hrs).forEach(e => {
+    const total = e.claimed + e.pending + e.upcoming + e.cancelled;
+    lines.push(csvLine([e.name, e.id, e.email, e.sup, e.lob, e.claimed, e.pending, e.upcoming, e.cancelled, total, Math.round(e.hrs * 10) / 10]));
+  });
+  return lines.join('\n');
+}
+
+function buildCsvLobSummary(rows: ExportRow[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const map = new Map<string, { claimed: number; pending: number; upcoming: number; cancelled: number; hrs: number }>();
+  for (const row of rows) {
+    const lob = row.lob || 'Unknown';
+    if (!map.has(lob)) map.set(lob, { claimed: 0, pending: 0, upcoming: 0, cancelled: 0, hrs: 0 });
+    const e = map.get(lob)!;
+    const sec = rowSection(row, today);
+    if (sec === 'Claimed') e.claimed++;
+    else if (sec === 'Upcoming') e.upcoming++;
+    else if (sec === 'Cancelled') e.cancelled++;
+    else e.pending++;
+    e.hrs += Number(row.duration_hrs) || 0;
+  }
+  const lines = [csvLine(['LOB', 'Claimed', 'Pending', 'Upcoming', 'Cancelled', 'Total Slots', 'Total Hours'])];
+  [...map.entries()].sort((a, b) => b[1].hrs - a[1].hrs).forEach(([lob, e]) => {
+    const total = e.claimed + e.pending + e.upcoming + e.cancelled;
+    lines.push(csvLine([lob, e.claimed, e.pending, e.upcoming, e.cancelled, total, Math.round(e.hrs * 10) / 10]));
+  });
+  return lines.join('\n');
+}
+
+function buildCsvDateSummary(rows: ExportRow[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const map = new Map<string, { day: string; claimed: number; pending: number; upcoming: number; cancelled: number; hrs: number }>();
+  for (const row of rows) {
+    const date = row.date || '';
+    if (!map.has(date)) {
+      const d = date ? new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' }) : '';
+      map.set(date, { day: d, claimed: 0, pending: 0, upcoming: 0, cancelled: 0, hrs: 0 });
+    }
+    const e = map.get(date)!;
+    const sec = rowSection(row, today);
+    if (sec === 'Claimed') e.claimed++;
+    else if (sec === 'Upcoming') e.upcoming++;
+    else if (sec === 'Cancelled') e.cancelled++;
+    else e.pending++;
+    e.hrs += Number(row.duration_hrs) || 0;
+  }
+  const lines = [csvLine(['Date', 'Day', 'Claimed', 'Pending', 'Upcoming', 'Cancelled', 'Total Slots', 'Total Hours'])];
+  [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([date, e]) => {
+    const total = e.claimed + e.pending + e.upcoming + e.cancelled;
+    lines.push(csvLine([date, e.day, e.claimed, e.pending, e.upcoming, e.cancelled, total, Math.round(e.hrs * 10) / 10]));
+  });
+  return lines.join('\n');
+}
+
+function buildCsvDashboardKpis(rows: ExportRow[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  let claimed = 0, pending = 0, upcoming = 0, cancelled = 0, totalHrs = 0;
+  const empHrs = new Map<string, number>();
+  const lobHrs = new Map<string, number>();
+  const dateCt = new Map<string, number>();
+  for (const row of rows) {
+    const sec = rowSection(row, today);
+    const hrs = Number(row.duration_hrs) || 0;
+    totalHrs += hrs;
+    if (sec === 'Claimed') claimed++;
+    else if (sec === 'Upcoming') upcoming++;
+    else if (sec === 'Cancelled') cancelled++;
+    else pending++;
+    const eKey = row.employee_id || row.employee_name || 'unassigned';
+    empHrs.set(eKey, (empHrs.get(eKey) ?? 0) + hrs);
+    if (row.lob) lobHrs.set(row.lob, (lobHrs.get(row.lob) ?? 0) + hrs);
+    if (row.date) dateCt.set(row.date, (dateCt.get(row.date) ?? 0) + 1);
+  }
+  const topEmpKey = [...empHrs.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+  const topEmp = rows.find(r => (r.employee_id || r.employee_name) === topEmpKey)?.employee_name ?? topEmpKey;
+  const topLob = [...lobHrs.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+  const peakDate = [...dateCt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+  const lines = [
+    csvLine(['Metric', 'Value']),
+    csvLine(['Total OT Hours', Math.round(totalHrs * 10) / 10]),
+    csvLine(['Total Slots', rows.length]),
+    csvLine(['Claimed Slots', claimed]),
+    csvLine(['Pending Slots', pending]),
+    csvLine(['Upcoming Slots', upcoming]),
+    csvLine(['Cancelled Slots', cancelled]),
+    csvLine(['Top Employee (by hrs)', topEmp]),
+    csvLine(['Top LOB (by hrs)', topLob]),
+    csvLine(['Peak Date (most slots)', peakDate]),
+  ];
+  return lines.join('\n');
 }
 
 function toTimeInputValue(value: string) {
@@ -269,6 +422,7 @@ export function OTManagerClient({
   const [selectedExportRowIndex, setSelectedExportRowIndex] = useState<number | null>(null);
   const [exportRowQuery, setExportRowQuery] = useState('');
   const [supervisorFilter, setSupervisorFilter] = useState<string | 'all' | 'my-team'>('all');
+  const [exportingXlsx, setExportingXlsx] = useState(false);
 
   const currentRole = currentUser.role;
   const isB1 = currentRole === 'moderator_b1';
@@ -990,12 +1144,67 @@ export function OTManagerClient({
     setSelectedExportRowIndex(null);
   };
 
-  const downloadExportCsv = () => {
-    const csv = serializeExportCsv(
-      visibleExportColumns,
-      filteredExportRows.map(({ row }) => row),
-    );
-    downloadBlob(csv, `ot-manager-export-${Date.now()}.csv`, 'text/csv');
+  const downloadExportCsv = (sheet: CsvSheet = 'ot-data') => {
+    const today = new Date().toISOString().slice(0, 10);
+    const label = exportStudioMode === 'claimed_report' ? 'claimed-report' : 'manager-export';
+    const bom = '﻿';
+
+    if (sheet === 'ot-data') {
+      downloadCsvProfessional(visibleExportColumns, filteredExportRows.map(({ row }) => row), label);
+      return;
+    }
+
+    const allRows = filteredExportRows.map(({ row }) => row);
+    let csv = '';
+    let filename = '';
+
+    if (sheet === 'employee-summary') {
+      csv = buildCsvEmployeeSummary(allRows);
+      filename = `Outplex-${label}-by-employee-${today}.csv`;
+    } else if (sheet === 'lob-summary') {
+      csv = buildCsvLobSummary(allRows);
+      filename = `Outplex-${label}-by-lob-${today}.csv`;
+    } else if (sheet === 'date-summary') {
+      csv = buildCsvDateSummary(allRows);
+      filename = `Outplex-${label}-by-date-${today}.csv`;
+    } else {
+      csv = buildCsvDashboardKpis(allRows);
+      filename = `Outplex-${label}-dashboard-kpis-${today}.csv`;
+    }
+
+    downloadBlob(bom + csv, filename, 'text/csv');
+  };
+
+  const downloadExportXlsx = async () => {
+    setExportingXlsx(true);
+    try {
+      const params = new URLSearchParams({ status: filter });
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (supervisorFilter !== 'all') params.set('supervisorFilter', String(supervisorFilter));
+      if (employeeQuery.trim()) params.set('employeeQuery', employeeQuery.trim());
+
+      const res = await fetch(`/api/ot/export/xlsx?${params.toString()}`);
+      if (!res.ok) {
+        const { error } = await res.json() as { error?: string };
+        toast.error(error ?? 'Unable to generate the Excel report.');
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Outplex-OT-Report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Unable to generate the Excel report.');
+    } finally {
+      setExportingXlsx(false);
+    }
   };
 
   const downloadExportPdf = (
@@ -1016,13 +1225,7 @@ export function OTManagerClient({
         lineWidth: 0.1,
       },
       columnStyles: Object.fromEntries(
-        columns.map((column, index) => [
-          index,
-          {
-            halign: column.align,
-            cellWidth: column.width * (exportPdfOrientation === 'portrait' ? 0.55 : 0.72),
-          },
-        ]),
+        columns.map((column, index) => [index, { halign: column.align }]),
       ),
       headStyles: {
         fillColor: [24, 30, 47],
@@ -1120,7 +1323,7 @@ export function OTManagerClient({
                 onClick={() => {
                   const cols = createExportColumns();
                   const rows = buildExportRows(dashboardClaimedSlots);
-                  downloadBlob(serializeExportCsv(cols, rows), 'claimed-ot-report.csv', 'text/csv');
+                  downloadCsvProfessional(cols, rows, 'claimed-report');
                 }}
               >
                 <FileSpreadsheet size={15} /> CSV
@@ -1977,8 +2180,38 @@ export function OTManagerClient({
                 <button className="btn btn-ghost" onClick={() => downloadExportPdf()}>
                   <FileText size={15} /> Download PDF
                 </button>
-                <button className="btn btn-primary" onClick={downloadExportCsv}>
-                  <Download size={15} /> Download CSV
+                <ActionMenu
+                  trigger={
+                    <button className="btn btn-ghost">
+                      <Download size={15} /> CSV <ChevronDown size={13} />
+                    </button>
+                  }
+                >
+                  <ActionMenuLabel>Select sheet to download</ActionMenuLabel>
+                  <ActionMenuItem onClick={() => downloadExportCsv('ot-data')}>
+                    OT Data (all rows)
+                  </ActionMenuItem>
+                  <ActionMenuItem onClick={() => downloadExportCsv('employee-summary')}>
+                    Employee Summary
+                  </ActionMenuItem>
+                  <ActionMenuItem onClick={() => downloadExportCsv('lob-summary')}>
+                    LOB Summary
+                  </ActionMenuItem>
+                  <ActionMenuItem onClick={() => downloadExportCsv('date-summary')}>
+                    Date Summary
+                  </ActionMenuItem>
+                  <ActionMenuSeparator />
+                  <ActionMenuItem onClick={() => downloadExportCsv('dashboard-kpis')}>
+                    Dashboard KPIs
+                  </ActionMenuItem>
+                </ActionMenu>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => void downloadExportXlsx()}
+                  disabled={exportingXlsx}
+                >
+                  <FileSpreadsheet size={15} />
+                  {exportingXlsx ? 'Generating…' : 'Download XLSX'}
                 </button>
               </div>
             </div>

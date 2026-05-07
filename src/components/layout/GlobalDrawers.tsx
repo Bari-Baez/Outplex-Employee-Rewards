@@ -5,6 +5,7 @@ import type { BroadcastNotification, StoreThemeConfig } from '@/types/database';
 import { useAppStore } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
 import { formatDop } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { CheckCircle2, Clipboard, MessageSquare, Minus, Phone, Plus, ShoppingBag, Store, Trash2, X, BellDot, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -218,7 +219,7 @@ export function GlobalDrawers() {
                     <div key={ci.product.id} className="emp-cart-item">
                       {ci.product.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={ci.product.image_url} alt={ci.product.name} className="emp-cart-img" />
+                        <img src={proxifyMediaUrl(ci.product.image_url)} alt={ci.product.name} className="emp-cart-img" />
                       ) : (
                         <div className="emp-cart-img emp-cart-img-fallback">
                           {ci.product.name.charAt(0)}
@@ -449,7 +450,7 @@ export function GlobalDrawers() {
               }}>
                 <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {selectedBroadcast.author?.avatar_url ? (
-                    <img src={selectedBroadcast.author.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '10px', objectFit: 'cover' }} />
+                    <img src={proxifyMediaUrl(selectedBroadcast.author.avatar_url)} alt="" style={{ width: '100%', height: '100%', borderRadius: '10px', objectFit: 'cover' }} />
                   ) : (
                     <BellDot size={20} color="var(--text-muted)" />
                   )}

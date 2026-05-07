@@ -36,6 +36,7 @@ import type {
   User,
 } from '@/types/database';
 import { getInitials } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { useAppStore } from '@/lib/store';
 import type { UserRole } from '@/types/database';
 import { useAppAvailability } from '@/components/layout/AppAvailabilityProvider';
@@ -955,7 +956,7 @@ export function TopNavShell({ user }: TopNavShellProps) {
               {user?.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img 
-                  src={user.avatar_url} 
+                  src={proxifyMediaUrl(user.avatar_url)} 
                   alt={user.name} 
                   referrerPolicy="no-referrer"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 

@@ -61,6 +61,7 @@ import {
   type SavedRaffleDraft,
 } from '@/lib/raffles/runtime';
 import type { ApiResponse, Raffle, StoreItem } from '@/types/database';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 
 function fmtDate(value: string | null) {
   return value
@@ -1141,7 +1142,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                             disabled={!ok && !sel}
                             style={{ opacity: isExhausted && !sel ? 0.5 : 1, cursor: isExhausted && !sel ? 'not-allowed' : 'pointer' }}
                           >
-                            <div className="store-prize-thumb">{item.image_url ? <img src={item.image_url} alt={item.name} /> : <Package size={18} />}</div>
+                            <div className="store-prize-thumb">{item.image_url ? <img src={proxifyMediaUrl(item.image_url)} alt={item.name} /> : <Package size={18} />}</div>
                             <div className="store-prize-copy">
                               <div className="store-prize-title">{item.name}</div>
                               <div className="store-prize-meta">
@@ -1159,7 +1160,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                     <div style={{ marginBottom: '0.75rem' }}>
                       <label className="field-label">Image URL</label>
                       <div className="manual-prize-image-row">
-                        <div className="manual-prize-preview">{slotDraft.imageUrl ? <img src={slotDraft.imageUrl} alt={slotDraft.title} /> : <ImagePlus size={20} />}</div>
+                        <div className="manual-prize-preview">{slotDraft.imageUrl ? <img src={proxifyMediaUrl(slotDraft.imageUrl)} alt={slotDraft.title} /> : <ImagePlus size={20} />}</div>
                         <input className="input" value={slotDraft.imageUrl} onChange={(e) => setSlotDraft((d) => ({ ...d, imageUrl: e.target.value }))} placeholder="https://... optional" />
                       </div>
                     </div>
@@ -1189,7 +1190,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                             <div className="bundle-item-thumb">
                               {bi.imageUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={bi.imageUrl} alt={bi.name} />
+                                <img src={proxifyMediaUrl(bi.imageUrl)} alt={bi.name} />
                               ) : (
                                 <Package size={16} />
                               )}
@@ -1738,7 +1739,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                               <div className="winner-prize-summary-thumb">
                                 {assignment.imageUrl ? (
                                   // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={assignment.imageUrl} alt={assignment.prizeTitle} />
+                                  <img src={proxifyMediaUrl(assignment.imageUrl)} alt={assignment.prizeTitle} />
                                 ) : (
                                   <Gift size={15} />
                                 )}

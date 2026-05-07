@@ -1,6 +1,7 @@
 import type {
   AnnouncementBlock,
   AnnouncementDurationDays,
+  AnnouncementGifBlock,
   AnnouncementImageBlock,
   AnnouncementPdfBlock,
   AnnouncementSlide,
@@ -65,8 +66,19 @@ export function createAnnouncementPdfBlock(): AnnouncementPdfBlock {
     body: '',
     fileUrl: '',
     fileName: '',
-    displayMode: 'document',
+    displayMode: 'slider',
     previewImages: [],
+  };
+}
+
+export function createAnnouncementGifBlock(): AnnouncementGifBlock {
+  return {
+    id: createId('gif'),
+    type: 'gif',
+    heading: '',
+    caption: '',
+    gifUrl: '',
+    gifId: null,
   };
 }
 
@@ -204,7 +216,10 @@ export function normalizeAnnouncementBlocks(value: unknown): AnnouncementBlock[]
     if (candidate.type === 'pdf') {
       const fileUrl = normalizeString(candidate.fileUrl).trim();
       if (!fileUrl) continue;
-      const displayMode = normalizeString(candidate.displayMode).trim() as AnnouncementPdfDisplayMode;
+      const rawMode = normalizeString(candidate.displayMode).trim();
+      // Migrate old modes ('document', 'both', 'full_embed', 'inline_viewer', 'preview_image', 'compact_link') -> 'slider'
+      const displayMode: AnnouncementPdfDisplayMode =
+        rawMode === 'download_only' ? 'download_only' : 'slider';
       blocks.push({
         id,
         type: 'pdf',
@@ -212,9 +227,24 @@ export function normalizeAnnouncementBlocks(value: unknown): AnnouncementBlock[]
         body,
         fileUrl,
         fileName: normalizeString(candidate.fileName).trim(),
-        displayMode: displayMode === 'slider' || displayMode === 'both' ? displayMode : 'document',
+        displayMode,
         previewImages: normalizeStringArray(candidate.previewImages),
       });
+      continue;
+    }
+
+    if (candidate.type === 'gif') {
+      const gifUrl = normalizeString(candidate.gifUrl).trim();
+      if (!gifUrl) continue;
+      blocks.push({
+        id,
+        type: 'gif',
+        heading: normalizeString(candidate.heading).trim(),
+        caption: normalizeString(candidate.caption).trim(),
+        gifUrl,
+        gifId: normalizeString(candidate.gifId).trim() || null,
+      });
+      continue;
     }
   }
 

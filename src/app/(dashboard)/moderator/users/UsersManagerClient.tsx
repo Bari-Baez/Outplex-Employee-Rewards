@@ -23,6 +23,7 @@ import Papa from 'papaparse';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { UserRole, LedgerEntry, User } from '@/types/database';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { canEditTool } from '@/lib/permissions';
 import { SupervisorFilter } from '@/components/SupervisorFilter';
 import { PromptDialog } from '@/components/ui/PromptDialog';
@@ -921,7 +922,7 @@ export function UsersManagerClient({
                         <div className="directory-avatar" aria-hidden>
                           {employee.avatar_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={employee.avatar_url} alt="" />
+                            <img src={proxifyMediaUrl(employee.avatar_url)} alt="" />
                           ) : (
                             <span>{initialsFromName(employee.name)}</span>
                           )}

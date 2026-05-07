@@ -5,11 +5,13 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://outplexemplyeerewards
 // ── Content-Security-Policy ───────────────────────────────────────────────────
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://lh3.googleusercontent.com https://picsum.photos",
   `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://slack.com https://*.slack.com ${appUrl}`,
+  "worker-src 'self' blob:",
+  "child-src 'self' blob:",
   "frame-src 'self' https://www.africau.edu",
   "media-src 'self' blob:",
   "object-src 'none'",
@@ -38,6 +40,10 @@ const corsHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Prevent webpack from bundling these Node.js packages so __dirname
+  // and require() resolve correctly at runtime in API routes.
+  serverExternalPackages: ['tesseract.js', 'tesseract.js-core'],
+
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },

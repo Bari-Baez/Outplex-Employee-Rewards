@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatDop } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
 import {
   AlertCircle,
   BarChart3,
@@ -831,7 +832,7 @@ function ProductsTab({
                 <div className="product-thumb">
                   {product.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={product.image_url} alt={product.name} />
+                    <img src={proxifyMediaUrl(product.image_url)} alt={product.name} />
                   ) : (
                     <div className="product-thumb-fallback"><ImageIcon size={20} /></div>
                   )}
@@ -1069,7 +1070,7 @@ function OrdersTab({
                   <div className="buyer-avatar">
                     {order.buyer?.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={order.buyer.avatar_url} alt="" />
+                      <img src={proxifyMediaUrl(order.buyer.avatar_url)} alt="" />
                     ) : (
                       <span>{order.buyer?.name?.[0] || '?'}</span>
                     )}
@@ -1299,7 +1300,7 @@ function ProfileTab({
         <div className="profile-preview-logo" style={{ background: draft.accent_color }}>
           {draft.logo_image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={draft.logo_image} alt="" />
+            <img src={proxifyMediaUrl(draft.logo_image)} alt="" />
           ) : (
             <StoreIcon size={20} />
           )}
