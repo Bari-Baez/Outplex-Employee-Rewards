@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlignLeft,
@@ -215,8 +215,29 @@ export function ModeratorCommunicationsClient({
   const [gifQuery, setGifQuery] = useState<Record<string, string>>({});
   const [gifResults, setGifResults] = useState<Record<string, TenorResult[]>>({});
   const [gifSearching, setGifSearching] = useState<Record<string, boolean>>({});
+  const gifDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const transfer = useTransferState({ resetAfterMs: 1500 });
   const { isSectionEnabled } = useAppAvailability();
+
+  // Auto-load trending GIFs whenever a GIF block first appears
+  const gifBlockIds = announcementForm.content.filter((b) => b.type === 'gif').map((b) => b.id);
+  const gifBlockIdsKey = gifBlockIds.join(',');
+  useEffect(() => {
+    for (const blockId of gifBlockIds) {
+      if (!(blockId in gifResults)) {
+        setGifSearching((prev) => ({ ...prev, [blockId]: true }));
+        const url = `https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=16&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`;
+        fetch(url)
+          .then((res) => res.json())
+          .then((json: { results: TenorResult[] }) => {
+            setGifResults((prev) => ({ ...prev, [blockId]: json.results }));
+          })
+          .catch(() => { /* silent */ })
+          .finally(() => setGifSearching((prev) => ({ ...prev, [blockId]: false })));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gifBlockIdsKey]);
 
   const isTabPublicEnabled = (tab: StudioTab) =>
     isSectionEnabled('communications', tab, { userRole: isStoreLimited ? 'employee' : 'moderator_a1', bypassForAdmin: false });
@@ -543,12 +564,14 @@ export function ModeratorCommunicationsClient({
     }
   };
 
-  const handleGifSearch = async (blockId: string, query: string) => {
-    if (!query.trim()) return;
+  const handleGifSearch = useCallback(async (blockId: string, query: string) => {
     setGifSearching((prev) => ({ ...prev, [blockId]: true }));
     try {
+      const q = query.trim();
       // Tenor v1 — public test key, no account required
-      const url = `https://api.tenor.com/v1/search?q=${encodeURIComponent(query)}&key=LIVDSRZULELA&limit=12&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`;
+      const url = q
+        ? `https://api.tenor.com/v1/search?q=${encodeURIComponent(q)}&key=LIVDSRZULELA&limit=16&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`
+        : `https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=16&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Tenor error ${res.status}`);
       const json = (await res.json()) as { results: TenorResult[] };
@@ -558,7 +581,7 @@ export function ModeratorCommunicationsClient({
     } finally {
       setGifSearching((prev) => ({ ...prev, [blockId]: false }));
     }
-  };
+  }, []);
 
   const handleSaveAnnouncement = async () => {
     setBusy('announcement');
@@ -1145,62 +1168,108 @@ export function ModeratorCommunicationsClient({
                             <input className="input" placeholder="Short caption below the GIF…" value={block.caption ?? ''} onChange={(event) => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, caption: event.target.value } : current)} />
                           </div>
                         </div>
-                        {/* Tenor GIF search */}
-                        <div>
-                          <label className="studio-label">Search GIFs (Tenor)</label>
-                          <div className="giphy-search-row">
+
+                        {/* ---- GIF Picker Panel ---- */}
+                        <div className="gif-picker-panel">
+                          {/* Search bar */}
+                          <div className="gif-picker-bar">
+                            <Search size={15} className="gif-picker-bar-icon" />
                             <input
-                              className="input"
-                              placeholder="e.g. celebration, welcome, congrats…"
+                              className="gif-picker-input"
+                              placeholder="Search GIFs… meme, sun, celebrate, welcome…"
                               value={gifQuery[block.id] ?? ''}
-                              onChange={(e) => setGifQuery((prev) => ({ ...prev, [block.id]: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === 'Enter') void handleGifSearch(block.id, gifQuery[block.id] ?? ''); }}
+                              onChange={(e) => {
+                                const q = e.target.value;
+                                setGifQuery((prev) => ({ ...prev, [block.id]: q }));
+                                clearTimeout(gifDebounceRef.current[block.id]);
+                                gifDebounceRef.current[block.id] = setTimeout(() => {
+                                  void handleGifSearch(block.id, q);
+                                }, 380);
+                              }}
                             />
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => void handleGifSearch(block.id, gifQuery[block.id] ?? '')}
-                              disabled={gifSearching?.[block.id]}
-                            >
-                              {gifSearching?.[block.id] ? '…' : <Search size={15} />}
-                            </button>
-                          </div>
-                        </div>
-                        {(gifResults[block.id]?.length ?? 0) > 0 ? (
-                          <div className="giphy-grid">
-                            {(gifResults[block.id] ?? []).map((gif) => (
+                            {gifSearching[block.id] && (
+                              <span className="gif-picker-spinner" />
+                            )}
+                            {(gifQuery[block.id] ?? '') && (
                               <button
-                                key={gif.id}
                                 type="button"
-                                className={`giphy-thumb ${block.gifId === gif.id ? 'giphy-thumb-active' : ''}`}
-                                onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: gif.media_formats.gif.url, gifId: gif.id } : current)}
-                                title={gif.title}
+                                className="gif-picker-clear"
+                                onClick={() => {
+                                  setGifQuery((prev) => ({ ...prev, [block.id]: '' }));
+                                  void handleGifSearch(block.id, '');
+                                }}
                               >
-                                <img src={gif.media_formats.tinygif.url} alt={gif.title} />
+                                <X size={13} />
                               </button>
-                            ))}
+                            )}
                           </div>
-                        ) : null}
-                        {/* Direct URL fallback */}
-                        <div>
-                          <label className="studio-label">Or paste GIF URL directly</label>
-                          <div className="giphy-search-row">
-                            <input
-                              className="input"
-                              placeholder="https://media.tenor.com/… or any .gif URL"
-                              value={block.gifUrl ?? ''}
-                              onChange={(e) => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: e.target.value, gifId: null } : current)}
-                            />
-                            {block.gifUrl ? (
-                              <button type="button" className="btn btn-ghost btn-sm" onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: '', gifId: null } : current)} title="Clear"><X size={15} /></button>
-                            ) : null}
+
+                          {/* Section label */}
+                          <div className="gif-picker-section-label">
+                            {(gifQuery[block.id] ?? '') ? 'Search results' : 'Trending GIFs'}
                           </div>
+
+                          {/* GIF grid */}
+                          <div className="gif-picker-grid">
+                            {gifSearching[block.id] ? (
+                              Array.from({ length: 8 }).map((_, i) => (
+                                <div key={i} className="gif-picker-skeleton" />
+                              ))
+                            ) : (gifResults[block.id]?.length ?? 0) > 0 ? (
+                              gifResults[block.id].map((gif) => (
+                                <button
+                                  key={gif.id}
+                                  type="button"
+                                  className={`gif-picker-thumb ${block.gifId === gif.id ? 'gif-picker-thumb-active' : ''}`}
+                                  onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: gif.media_formats.gif.url, gifId: gif.id } : current)}
+                                  title={gif.title}
+                                >
+                                  <img src={gif.media_formats.tinygif.url} alt={gif.title} loading="lazy" />
+                                  {block.gifId === gif.id && (
+                                    <span className="gif-picker-check">✓</span>
+                                  )}
+                                </button>
+                              ))
+                            ) : (
+                              <div className="gif-picker-empty">No results — try a different search</div>
+                            )}
+                          </div>
+
+                          {/* Selected GIF preview */}
                           {block.gifUrl ? (
-                            <img src={block.gifUrl} alt="GIF preview" className="studio-media-preview" style={{ marginTop: '0.75rem' }} />
+                            <div className="gif-picker-selected-bar">
+                              <img src={block.gifUrl} alt="Selected GIF" className="gif-picker-selected-thumb" />
+                              <div className="gif-picker-selected-info">
+                                <span>GIF selected</span>
+                                <button
+                                  type="button"
+                                  className="studio-icon-btn studio-icon-btn-danger"
+                                  style={{ width: 28, height: 28 }}
+                                  onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: '', gifId: null } : current)}
+                                  title="Remove GIF"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            </div>
                           ) : null}
+
+                          {/* URL fallback */}
+                          <details className="gif-picker-url-fallback">
+                            <summary>Or paste a GIF URL directly</summary>
+                            <div className="gif-picker-url-row">
+                              <input
+                                className="input"
+                                placeholder="https://media.tenor.com/… or any .gif URL"
+                                value={block.gifUrl ?? ''}
+                                onChange={(e) => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: e.target.value, gifId: null } : current)}
+                              />
+                            </div>
+                          </details>
                         </div>
                       </div>
                     ) : null}
+
                   </div>
                 );
               })}
@@ -1780,48 +1849,225 @@ export function ModeratorCommunicationsClient({
           letter-spacing: 0;
         }
 
-        /* ---- Giphy UI ---- */
-        .giphy-search-row {
+        /* ---- GIF Picker Panel ---- */
+        .gif-picker-panel {
           display: flex;
-          gap: 0.5rem;
+          flex-direction: column;
+          gap: 0.6rem;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 18px;
+          overflow: hidden;
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .gif-picker-bar {
+          display: flex;
           align-items: center;
-        }
-
-        .giphy-search-row .input {
-          flex: 1;
-        }
-
-        .giphy-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
           gap: 0.5rem;
+          padding: 0.6rem 0.8rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          background: rgba(255, 255, 255, 0.03);
         }
 
-        .giphy-thumb {
-          border-radius: 12px;
+        .gif-picker-bar-icon {
+          color: var(--text-muted);
+          flex-shrink: 0;
+        }
+
+        .gif-picker-input {
+          flex: 1;
+          background: transparent;
+          border: none;
+          outline: none;
+          font-size: 0.88rem;
+          color: var(--text-primary);
+          font-family: inherit;
+        }
+
+        .gif-picker-input::placeholder {
+          color: var(--text-muted);
+        }
+
+        .gif-picker-spinner {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          border: 2px solid rgba(124, 108, 255, 0.3);
+          border-top-color: #a78bfa;
+          animation: gif-spin 0.7s linear infinite;
+          flex-shrink: 0;
+        }
+
+        @keyframes gif-spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .gif-picker-clear {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          border: none;
+          background: rgba(255, 255, 255, 0.1);
+          color: var(--text-muted);
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: background 0.15s ease;
+        }
+
+        .gif-picker-clear:hover {
+          background: rgba(239, 68, 68, 0.2);
+          color: #fca5a5;
+        }
+
+        .gif-picker-section-label {
+          padding: 0.35rem 0.8rem 0;
+          font-size: 0.7rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+
+        .gif-picker-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 3px;
+          padding: 0 0.5rem 0.5rem;
+          max-height: 260px;
+          overflow-y: auto;
+        }
+
+        .gif-picker-grid::-webkit-scrollbar { width: 4px; }
+        .gif-picker-grid::-webkit-scrollbar-track { background: transparent; }
+        .gif-picker-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+        .gif-picker-thumb {
+          position: relative;
+          border-radius: 8px;
           overflow: hidden;
           border: 2px solid transparent;
           padding: 0;
           cursor: pointer;
-          transition: border-color 0.18s ease, transform 0.18s ease;
           background: rgba(255, 255, 255, 0.04);
+          transition: border-color 0.15s ease, transform 0.15s ease;
+          aspect-ratio: 4/3;
         }
 
-        .giphy-thumb:hover {
-          transform: scale(1.04);
-          border-color: rgba(124, 108, 255, 0.4);
-        }
-
-        .giphy-thumb-active {
-          border-color: #7c6cff;
-          box-shadow: 0 0 0 2px rgba(124, 108, 255, 0.3);
-        }
-
-        .giphy-thumb img {
+        .gif-picker-thumb img {
           display: block;
           width: 100%;
-          height: 80px;
+          height: 100%;
           object-fit: cover;
+        }
+
+        .gif-picker-thumb:hover {
+          transform: scale(1.03);
+          border-color: rgba(167, 139, 250, 0.5);
+          z-index: 1;
+        }
+
+        .gif-picker-thumb-active {
+          border-color: #a78bfa;
+          box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.4);
+        }
+
+        .gif-picker-check {
+          position: absolute;
+          top: 3px;
+          right: 4px;
+          background: #a78bfa;
+          color: white;
+          font-size: 0.65rem;
+          font-weight: 900;
+          border-radius: 50%;
+          width: 16px;
+          height: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+        }
+
+        .gif-picker-skeleton {
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.06);
+          aspect-ratio: 4/3;
+          animation: gif-pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes gif-pulse {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.8; }
+        }
+
+        .gif-picker-empty {
+          grid-column: 1 / -1;
+          padding: 1.5rem;
+          text-align: center;
+          color: var(--text-muted);
+          font-size: 0.82rem;
+        }
+
+        .gif-picker-selected-bar {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.5rem 0.8rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          background: rgba(167, 139, 250, 0.06);
+        }
+
+        .gif-picker-selected-thumb {
+          width: 56px;
+          height: 42px;
+          object-fit: cover;
+          border-radius: 6px;
+          flex-shrink: 0;
+        }
+
+        .gif-picker-selected-info {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex: 1;
+          font-size: 0.8rem;
+          color: #c4b5fd;
+          font-weight: 600;
+        }
+
+        .gif-picker-url-fallback {
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          padding: 0.5rem 0.8rem;
+        }
+
+        .gif-picker-url-fallback summary {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          cursor: pointer;
+          user-select: none;
+          list-style: none;
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+        }
+
+        .gif-picker-url-fallback summary::-webkit-details-marker { display: none; }
+
+        .gif-picker-url-fallback summary::before {
+          content: '▸';
+          font-size: 0.7rem;
+          transition: transform 0.18s;
+        }
+
+        .gif-picker-url-fallback[open] summary::before {
+          transform: rotate(90deg);
+        }
+
+        .gif-picker-url-row {
+          margin-top: 0.5rem;
         }
 
         @media (max-width: 1100px) {
@@ -1835,6 +2081,9 @@ export function ModeratorCommunicationsClient({
           .studio-form-grid,
           .studio-stats-row {
             grid-template-columns: 1fr;
+          }
+          .gif-picker-grid {
+            grid-template-columns: repeat(3, 1fr);
           }
         }
       `}</style>

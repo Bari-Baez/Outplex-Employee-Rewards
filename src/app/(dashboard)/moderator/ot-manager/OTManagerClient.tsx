@@ -423,6 +423,10 @@ export function OTManagerClient({
   const [exportRowQuery, setExportRowQuery] = useState('');
   const [supervisorFilter, setSupervisorFilter] = useState<string | 'all' | 'my-team'>('all');
   const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [cancelingSlotId, setCancelingSlotId] = useState<string | null>(null);
+  const [exportStudioDateFrom, setExportStudioDateFrom] = useState('');
+  const [exportStudioDateTo, setExportStudioDateTo] = useState('');
+  const [exportStudioFetchLoading, setExportStudioFetchLoading] = useState(false);
 
   const currentRole = currentUser.role;
   const isB1 = currentRole === 'moderator_b1';
@@ -924,6 +928,25 @@ export function OTManagerClient({
     setDeleteDialog({ slot, step: 1 });
   };
 
+  const handleCancel = async (slot: OTSlot) => {
+    setCancelingSlotId(slot.id);
+    try {
+      const response = await fetch(`/api/ot/slots/${slot.id}/cancel`, { method: 'POST' });
+      const payload = (await response.json()) as { data?: OTSlot; error?: string; message?: string };
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error ?? 'Unable to cancel OT slot.');
+      }
+      setSlots((current) => current.map((existing) => (existing.id === slot.id ? { ...existing, status: 'cancelled' } : existing)));
+      setStatusTone('success');
+      setStatusMessage(payload.message ?? 'OT slot cancelled. The employee was notified.');
+    } catch (error) {
+      setStatusTone('danger');
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to cancel OT slot.');
+    } finally {
+      setCancelingSlotId(null);
+    }
+  };
+
   const buildExportRows = (sourceSlots: OTSlot[]): ExportRow[] => {
     return sourceSlots.map((slot) => {
       const linkedUser = usersById.get(slot.claimed_by ?? '');
@@ -1050,19 +1073,45 @@ export function OTManagerClient({
     setExportStudioOpen(true);
   };
 
-  const openManagerExportStudio = () => {
-    openExportStudio({
-      sourceSlots: filteredSlots,
-      title: 'Export Studio',
-      subtitle: 'Review, rename columns, and fine-tune the OT table before downloading.',
-      mode: 'manager',
-    });
+  const loadExportStudioFromApi = async (fromDate: string, toDate: string) => {
+    setExportStudioFetchLoading(true);
+    try {
+      const params = new URLSearchParams({ status: filter });
+      if (fromDate) params.set('dateFrom', fromDate);
+      if (toDate) params.set('dateTo', toDate);
+      if (supervisorFilter !== 'all') params.set('supervisorFilter', String(supervisorFilter));
+      if (employeeQuery.trim()) params.set('employeeQuery', employeeQuery.trim());
+
+      const res = await fetch(`/api/ot/export/preview?${params.toString()}`);
+      if (!res.ok) {
+        const { error } = await res.json() as { error?: string };
+        toast.error(error ?? 'Unable to load preview data.');
+        return;
+      }
+      const { rows } = await res.json() as { rows: ExportRow[] };
+      setExportRows(rows);
+    } catch {
+      toast.error('Unable to load preview data.');
+    } finally {
+      setExportStudioFetchLoading(false);
+    }
   };
 
-  const refreshExportStudio = () => {
-    const sourceSlots = exportStudioMode === 'claimed_report' ? dashboardClaimedSlots : filteredSlots;
-    setExportRows(buildExportRows(sourceSlots));
+  const openManagerExportStudio = () => {
+    const nextColumns = createExportColumns();
+    setExportColumns(nextColumns);
+    setSelectedExportColumnKey(nextColumns[0]?.key ?? EXPORT_COLUMN_KEYS[0]);
+    const initFrom = dateFrom || shiftOTDate(currentMoment.date, -60);
+    const initTo   = dateTo   || shiftOTDate(currentMoment.date, 90);
+    setExportStudioDateFrom(initFrom);
+    setExportStudioDateTo(initTo);
+    setExportStudioTitle('Export Studio');
+    setExportStudioSubtitle('Select date range and download the OT report.');
+    setExportStudioMode('manager');
     setSelectedExportRowIndex(null);
+    setExportRowQuery('');
+    setExportStudioOpen(true);
+    void loadExportStudioFromApi(initFrom, initTo);
   };
 
   const updateExportColumnLabel = (key: string, value: string) => {
@@ -1320,13 +1369,11 @@ export function OTManagerClient({
               </button>
               <button
                 className="btn btn-ghost"
-                onClick={() => {
-                  const cols = createExportColumns();
-                  const rows = buildExportRows(dashboardClaimedSlots);
-                  downloadCsvProfessional(cols, rows, 'claimed-report');
-                }}
+                onClick={() => void downloadExportXlsx()}
+                disabled={exportingXlsx}
               >
-                <FileSpreadsheet size={15} /> CSV
+                <FileSpreadsheet size={15} />
+                {exportingXlsx ? 'Generating…' : 'XLSX'}
               </button>
               <button
                 className="btn btn-ghost"
@@ -1983,7 +2030,7 @@ export function OTManagerClient({
                 ]}
               />
               <button className="btn btn-ghost" onClick={openManagerExportStudio}>
-                <Download size={15} /> CSV
+                <Download size={15} /> Export
               </button>
               <button
                 className="btn btn-ghost"
@@ -2122,9 +2169,52 @@ export function OTManagerClient({
                       </td>
                       <td>{usersById.get(slot.claimed_by ?? '')?.supervisor || '—'}</td>
                       <td>
-                        <span className={`badge ${slot.status === 'claimed' ? 'badge-claimed' : 'badge-available'}`}>
-                          {slot.status}
-                        </span>
+                        {(() => {
+                          const nowTime = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
+                          let ds: 'upcoming' | 'present' | 'unclaimed' | 'claimed' | 'cancelled';
+                          if (slot.status === 'cancelled') ds = 'cancelled';
+                          else if (slot.status === 'claimed') ds = 'claimed';
+                          else if (slot.date > currentMoment.date) ds = 'upcoming';
+                          else if (slot.date < currentMoment.date) ds = 'unclaimed';
+                          else if (nowTime < String(slot.start_time).slice(0, 5)) ds = 'upcoming';
+                          else if (nowTime <= String(slot.end_time).slice(0, 5)) ds = 'present';
+                          else ds = 'unclaimed';
+                          const badgeCls = {
+                            upcoming:  'badge-upcoming',
+                            present:   'badge-present',
+                            unclaimed: 'badge-available',
+                            claimed:   'badge-claimed',
+                            cancelled: 'badge-cancelled',
+                          }[ds];
+                          const badgeLabel = {
+                            upcoming:  'Upcoming',
+                            present:   'Present',
+                            unclaimed: 'Unclaimed',
+                            claimed:   'Claimed',
+                            cancelled: 'Cancelled',
+                          }[ds];
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span className={`badge ${badgeCls}`}>{badgeLabel}</span>
+                              {slot.status !== 'cancelled' && !isReadOnly && (
+                                <ActionMenu
+                                  trigger={
+                                    <button className="btn btn-ghost btn-sm" style={{ padding: '2px 4px' }}>
+                                      <ChevronDown size={12} />
+                                    </button>
+                                  }
+                                >
+                                  <ActionMenuItem
+                                    onClick={() => void handleCancel(slot)}
+                                    disabled={cancelingSlotId === slot.id}
+                                  >
+                                    {cancelingSlotId === slot.id ? 'Cancelling…' : 'Cancel Slot'}
+                                  </ActionMenuItem>
+                                </ActionMenu>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       {currentUser.role !== 'moderator_b1' && (
                         <td>
@@ -2174,37 +2264,12 @@ export function OTManagerClient({
                 </p>
               </div>
               <div className="otm-export-actions">
-                <button className="btn btn-ghost" onClick={refreshExportStudio}>
-                  Refresh Rows
+                <button className="btn btn-ghost" onClick={() => setExportStudioOpen(false)}>
+                  ← Back
                 </button>
                 <button className="btn btn-ghost" onClick={() => downloadExportPdf()}>
                   <FileText size={15} /> Download PDF
                 </button>
-                <ActionMenu
-                  trigger={
-                    <button className="btn btn-ghost">
-                      <Download size={15} /> CSV <ChevronDown size={13} />
-                    </button>
-                  }
-                >
-                  <ActionMenuLabel>Select sheet to download</ActionMenuLabel>
-                  <ActionMenuItem onClick={() => downloadExportCsv('ot-data')}>
-                    OT Data (all rows)
-                  </ActionMenuItem>
-                  <ActionMenuItem onClick={() => downloadExportCsv('employee-summary')}>
-                    Employee Summary
-                  </ActionMenuItem>
-                  <ActionMenuItem onClick={() => downloadExportCsv('lob-summary')}>
-                    LOB Summary
-                  </ActionMenuItem>
-                  <ActionMenuItem onClick={() => downloadExportCsv('date-summary')}>
-                    Date Summary
-                  </ActionMenuItem>
-                  <ActionMenuSeparator />
-                  <ActionMenuItem onClick={() => downloadExportCsv('dashboard-kpis')}>
-                    Dashboard KPIs
-                  </ActionMenuItem>
-                </ActionMenu>
                 <button
                   className="btn btn-primary"
                   onClick={() => void downloadExportXlsx()}
@@ -2226,13 +2291,11 @@ export function OTManagerClient({
                 <strong>{visibleExportColumns.length}</strong>
               </div>
               <div className="summary-mini-card">
-                <span>Filters</span>
+                <span>Date Range</span>
                 <strong>
-                  {exportStudioMode === 'claimed_report'
-                    ? `${dashboardDateFrom || normalizedDashboardDateFrom} to ${dashboardDateTo || normalizedDashboardDateTo}`
-                    : quickRange === 'all'
-                      ? 'Manual / all dates'
-                      : quickRange.replace(/_/g, ' ')}
+                  {exportStudioDateFrom && exportStudioDateTo
+                    ? `${exportStudioDateFrom} → ${exportStudioDateTo}`
+                    : 'All dates'}
                 </strong>
               </div>
               <div className="summary-mini-card">
@@ -2242,6 +2305,23 @@ export function OTManagerClient({
             </div>
 
             <div className="otm-export-toolbar">
+              <ModernDatePicker
+                label="From"
+                date={exportStudioDateFrom}
+                onDateChange={v => setExportStudioDateFrom(v)}
+              />
+              <ModernDatePicker
+                label="To"
+                date={exportStudioDateTo}
+                onDateChange={v => setExportStudioDateTo(v)}
+              />
+              <button
+                className="btn btn-ghost"
+                onClick={() => void loadExportStudioFromApi(exportStudioDateFrom, exportStudioDateTo)}
+                disabled={exportStudioFetchLoading}
+              >
+                {exportStudioFetchLoading ? 'Loading…' : 'Load'}
+              </button>
               <label className="otm-filter-field otm-export-search">
                 <span>Search rows</span>
                 <input
@@ -2251,23 +2331,6 @@ export function OTManagerClient({
                   placeholder="Filter by employee, email, date, LOB..."
                 />
               </label>
-              <button className="btn btn-ghost" onClick={addExportRow}>
-                Add row
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={duplicateSelectedExportRow}
-                disabled={selectedExportRowIndex === null}
-              >
-                Duplicate selected
-              </button>
-              <button
-                className="btn btn-ghost otm-danger-btn"
-                onClick={deleteSelectedExportRow}
-                disabled={selectedExportRowIndex === null}
-              >
-                Delete selected
-              </button>
             </div>
 
             <div className="otm-export-format-grid">
@@ -2340,51 +2403,40 @@ export function OTManagerClient({
               </div>
             </div>
 
-            <div className="otm-export-table-shell">
-              <table className="data-table otm-export-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 48 }}>#</th>
-                    {visibleExportColumns.map((column) => (
-                      <th key={column.key}>
-                        <input
-                          className="input otm-export-header-input"
-                          value={column.label}
-                          onChange={(event) => updateExportColumnLabel(column.key, event.target.value)}
-                        />
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredExportRows.map(({ row, rowIndex }, visibleIndex) => (
-                    <tr
-                      key={`export-row-${rowIndex}`}
-                      className={selectedExportRowIndex === rowIndex ? 'otm-export-row-selected' : ''}
-                    >
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setSelectedExportRowIndex(rowIndex)}
-                        >
-                          {visibleIndex + 1}
-                        </button>
-                      </td>
+            <div className="otm-export-table-shell" style={{ overflowX: 'auto' }}>
+              {exportStudioFetchLoading ? (
+                <div className="text-muted" style={{ padding: '2rem', textAlign: 'center' }}>Loading rows…</div>
+              ) : (
+                <table className="data-table otm-export-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 48 }}>#</th>
                       {visibleExportColumns.map((column) => (
-                        <td key={`${column.key}-${rowIndex}`} style={{ textAlign: column.align }}>
-                          <input
-                            className="input otm-export-cell-input"
-                            value={row[column.key] ?? ''}
-                            onChange={(event) => updateExportCell(rowIndex, column.key, event.target.value)}
-                            style={{ minWidth: column.width }}
-                          />
-                        </td>
+                        <th key={column.key} style={{ whiteSpace: 'nowrap' }}>{column.label}</th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredExportRows.map(({ row }, visibleIndex) => (
+                      <tr key={`export-row-${visibleIndex}`}>
+                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{visibleIndex + 1}</td>
+                        {visibleExportColumns.map((column) => (
+                          <td key={column.key} style={{ textAlign: column.align, whiteSpace: 'nowrap', minWidth: column.width }}>
+                            {row[column.key] ?? ''}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {filteredExportRows.length === 0 && !exportStudioFetchLoading && (
+                      <tr>
+                        <td colSpan={visibleExportColumns.length + 1} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1.5rem' }}>
+                          No rows match the current filters.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

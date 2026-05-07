@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outplex Employee Rewards — Flujos de Trabajo y Arquitectura</title>
+  
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      background: #fff;
+    }
+    h1 { color: #111; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    h2 { color: #222; margin-top: 40px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    h3 { color: #444; }
+    p, li { font-size: 16px; color: #444; }
+    blockquote {
+      background: #f9f9f9;
+      border-left: 5px solid #0070f3;
+      margin: 20px 0;
+      padding: 15px;
+      border-radius: 4px;
+    }
+    .mermaid {
+      margin: 30px 0;
+      display: flex;
+      justify-content: center;
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #eaeaea;
+    }
+    @media print {
+      body { padding: 0; max-width: 100%; }
+      .mermaid { break-inside: avoid; border: none; background: transparent; }
+      h2 { break-after: avoid; }
+    }
+  </style>
+
+  <!-- Usamos versiones estables sin módulos para máxima compatibilidad -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+  
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      // 1. Inicializar Mermaid
+      mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+      // 2. Parsear el Markdown a HTML
+      const mdContent = document.getElementById('markdown-content').textContent;
+      document.getElementById('rendered-content').innerHTML = marked.parse(mdContent);
+
+      // 3. Buscar los bloques de código que son "mermaid"
+      const mermaidBlocks = document.querySelectorAll('code.language-mermaid');
+      
+      mermaidBlocks.forEach((block, index) => {
+        // block.textContent recupera el texto crudo (decodificando los &gt; a >)
+        const rawText = block.textContent;
+        const preElement = block.parentElement;
+        
+        // Crear el div que Mermaid necesita
+        const mermaidDiv = document.createElement('div');
+        mermaidDiv.className = 'mermaid';
+        mermaidDiv.textContent = rawText;
+        
+        // Reemplazar el <pre> con nuestro <div class="mermaid">
+        preElement.parentNode.replaceChild(mermaidDiv, preElement);
+      });
+
+      // 4. Renderizar todos los diagramas
+      mermaid.run({ nodes: document.querySelectorAll('.mermaid') }).catch(err => {
+        console.error("Error renderizando mermaid:", err);
+      });
+    });
+  </script>
+</head>
+<body>
+
+  <!-- Aquí se inyectará el contenido HTML procesado -->
+  <div id="rendered-content">Cargando diagramas... Si no cargan en 3 segundos, verifica tu conexión a internet.</div>
+
+  <!-- El contenido Markdown original oculto -->
+  <script type="text/markdown" id="markdown-content">
+# Outplex Employee Rewards — Flujos de Trabajo y Arquitectura
+
+Este documento describe los procesos lógicos y el ciclo de vida de los usuarios dentro de la plataforma Outplex Employee Rewards.
+
+## 1. Arquitectura y Seguridad Base
+
+La aplicación utiliza un modelo de seguridad basado en roles (RBAC) gestionado a través de Supabase y validado en cada petición por el Middleware de Next.js.
+
+### Roles del Sistema:
+- **Agente (Employee):** Usuario estándar. Puede ganar puntos, comprar, participar en rifas y reclamar horas extras.
+- **Moderador (L1/B1):** Gestiona inventario, aprueba órdenes, crea turnos de OT y publica anuncios.
+- **Administrador (Admin):** Control total del sistema, gestión de usuarios, asignación manual de puntos y configuración global.
+
+---
+
+## 2. Flujo de Autenticación y Onboarding
+
+Cuando un usuario intenta entrar a la plataforma, debe pasar por varios filtros de seguridad para garantizar que pertenece a Outplex y que ha sido autorizado.
+
+```mermaid
+graph TD
+    A[Inicio: Usuario en Landing] --> B{Método de Login}
+    B -->|Slack OIDC| C[Autorización Slack]
+    B -->|Email/Password| D[Formulario Manual]
+    
+    C --> E{Validación de Dominio}
+    D --> E
+    
+    E -->|No es @outplex.com| F[Rechazo: Acceso Denegado]
+    E -->|Es @outplex.com| G[Sesión Supabase Creada]
+    
+    G --> H{¿Usuario Aprobado?}
+    
+    H -->|is_approved = false| I[Pantalla ApprovalGuard / Pendiente]
+    I -.->|Admin aprueba| J[Dashboard]
+    
+    H -->|is_approved = true| J
+```
+
+> **ApprovalGuard:** Es un componente crítico que atrapa a cualquier usuario nuevo. Aunque logren iniciar sesión con un correo válido de la empresa, no podrán ver el dashboard hasta que RRHH (Admin) marque su perfil como `is_approved = true`.
+
+---
+
+## 3. Economía Interna: Sistema de Puntos
+
+El corazón de la plataforma es el sistema de puntos. Funciona como una cuenta bancaria inmutable (`points_ledger`). Nunca se actualiza el saldo de un usuario directamente sin dejar un registro en el ledger.
+
+```mermaid
+graph LR
+    A[Billetera del Usuario] --> B{Acción}
+    
+    B -->|Completar OT / Bono| C[+ Puntos Sumados]
+    B -->|Comprar en Tienda| D[- Puntos Restados]
+    B -->|Comprar Ticket Rifa| E[- Puntos Restados]
+    
+    C --> F[(Tabla: points_ledger)]
+    D --> F
+    E --> F
+    
+    F -.->|Disparador Trigger| G[Actualiza total en public.users]
+```
+
+---
+
+## 4. Flujo de la Tienda (NYT Store)
+
+El ciclo de vida de una orden desde que el agente la solicita hasta que se le entrega físicamente.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pendiente: Agente compra artículo
+    
+    state Pendiente {
+        [*] --> VerificandoStock
+    }
+    
+    Pendiente --> Cancelada: Moderador Rechaza
+    Cancelada --> [*]: Puntos Reembolsados
+    
+    Pendiente --> Aprobada: Moderador Aprueba
+    
+    state Aprobada {
+        [*] --> PreparandoLogística
+    }
+    
+    Aprobada --> ListaParaRecogida: Artículo en Counter
+    
+    ListaParaRecogida --> Completada: Agente Recoge Físicamente
+    Completada --> [*]: Transacción Cerrada
+```
+
+---
+
+## 5. Flujo de Horas Extras (OT Calendar)
+
+Cómo se publican, reclaman y aprueban las horas extras.
+
+```mermaid
+sequenceDiagram
+    participant M as Moderador
+    participant S as Sistema
+    participant A as Agente
+    
+    M->>S: Sube Batch de OT Lote
+    S->>S: Estado = Draft
+    M->>S: Publica Batch
+    S->>A: Notificación Broadcast "Nuevo OT"
+    
+    A->>S: Ve slots disponibles
+    A->>S: Reclama slot específico
+    S->>S: Verifica conflictos y Cambia estado a Claimed
+    S->>A: Confirmación de OT
+    
+    Note over M,A: Pasa el día del turno
+    
+    M->>S: Marca turno como Completado
+    S->>A: Otorga puntos al Agente automáticamente
+```
+
+---
+
+## 6. Flujo de Tiendas de Empleados (Emprendimiento Interno)
+
+Este flujo permite a los empleados vender sus propios productos a otros compañeros. Aquí los puntos NO se usan; se usa moneda local (DOP) coordinada externamente.
+
+```mermaid
+graph TD
+    A[Empleado] -->|Crea solicitud de Tienda| B[Pendiente de Aprobación]
+    B -->|Moderador Aprueba| C[Tienda Activa]
+    
+    C --> D[Empleado publica productos]
+    D --> E[Otros Agentes ven el catálogo]
+    
+    E -->|Hacen Pedido| F[Orden Pendiente]
+    F -->|Vendedor prepara| G[Lista para recoger o Enviar]
+    G -->|Entrega física| H[Completada]
+    
+    F -.-> N[Nota: El pago DOP se coordina por Slack o Efectivo]
+```
+
+---
+
+## 7. Rifas y Sorteos
+
+Manejo de los sorteos programados.
+
+```mermaid
+graph TD
+    A[Moderador crea Rifa] --> B{Estado inicial}
+    
+    B -->|Fecha futura| C[Upcoming]
+    B -->|Fecha actual| D[Live]
+    
+    D --> E[Agentes compran tickets con puntos]
+    E --> F[Llega fecha límite]
+    
+    F --> G[Sistema cierra la rifa]
+    G --> H[Se ejecuta sorteo aleatorio]
+    H --> I[Se asigna ganador y se notifica]
+    I --> J[Completed]
+```
+  </script>
+</body>
+</html>

@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   // ── Generate XLSX ─────────────────────────────────────────────────────────
   let buffer: Buffer;
   try {
-    buffer = await generateOTExcel(slots, usersById, meta);
+    buffer = await generateOTExcel(slots, usersById, meta, new Date());
   } catch (err) {
     console.error('[ot/export/xlsx]', err);
     return NextResponse.json({ error: 'Failed to generate Excel file.' }, { status: 500 });
