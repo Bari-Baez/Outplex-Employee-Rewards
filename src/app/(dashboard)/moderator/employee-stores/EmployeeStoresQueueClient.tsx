@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo, useState } from 'react';
 import {
@@ -46,7 +46,7 @@ interface EmployeeStoresQueueClientProps {
   currentUser: User;
   initialRequests: RequestWithUser[];
   initialStores: StoreWithOwner[];
-  initialProducts?: (EmployeeStoreProduct & {
+  initialProducts?: (EmployeeStoreProduct & { status?: 'active' | 'suspended' | 'pending_review'; moderation_note?: string | null;
     store: {
       id: string;
       name: string;
@@ -83,7 +83,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
   const isB1 = currentRole === 'moderator_b1';
   const isReadOnly = !canEditTool(currentRole, 'employee-stores');
 
-  const pendingCount = requests.filter((r) => r.status === 'pending').length;
+  const pendingCount = requests.filter((r) => r.status === 'pending_review').length;
   const approvedCount = requests.filter((r) => r.status === 'approved').length;
   const rejectedCount = requests.filter((r) => r.status === 'rejected').length;
 
@@ -145,8 +145,8 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
   const filteredProducts = useMemo(() => {
     const q = query.trim().toLowerCase();
     const statusPriority = (p: typeof products[number]) => {
-      if (p.status === 'pending') return 0;
-      if (p.is_suspended) return 1;
+      if (p.status === 'pending_review') return 0;
+      if ((p.status === 'suspended')) return 1;
       if (p.status === 'rejected') return 2;
       return 3;
     };
@@ -171,6 +171,44 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
   const openDecision = (target: DecisionTarget, decision: 'approved' | 'rejected') => {
     setDialog({ target, decision });
     setDialogNotes('');
+  };
+
+    const confirmSuspendProduct = async () => {
+    if (!suspendProductDialog) return;
+    if (!dialogNotes.trim()) {
+      setStatusMessage({ tone: 'danger', text: 'Reason is required for suspending a product.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/moderator/employee-store/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: suspendProductDialog.id,
+          status: 'suspended',
+          reviewNotes: dialogNotes.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Unable to suspend product.');
+
+      const updatedProduct = json.product;
+      setProducts((current) =>
+        current.map((p) =>
+          p.id === updatedProduct.id
+            ? { ...p, status: updatedProduct.status, moderation_note: updatedProduct.moderation_note }
+            : p
+        )
+      );
+      setStatusMessage({ tone: 'success', text: 'Product suspended successfully.' });
+      setSuspendProductDialog(null);
+      setDialogNotes('');
+    } catch (err: any) {
+      setStatusMessage({ tone: 'danger', text: err.message });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDecision = async () => {
@@ -379,9 +417,9 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
         {currentRole !== 'moderator_b1' && (
           <button className={`btn ${tab === 'products' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('products')}>
             <Package size={16} /> Product Queue
-            {products.filter(p => p.status === 'pending').length > 0 && 
+            {products.filter(p => p.status === 'pending_review').length > 0 && 
               <span className="queue-badge" style={{ background: 'var(--brand-primary)' }}>
-                {products.filter(p => p.status === 'pending').length}
+                {products.filter(p => p.status === 'pending_review').length}
               </span>
             }
           </button>
@@ -421,7 +459,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
             className="input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={tab === 'queue' ? 'Search by employee, store name…' : tab === 'products' ? 'Search products…' : 'Search active stores…'}
+            placeholder={tab === 'queue' ? 'Search by employee, store nameâ€¦' : tab === 'products' ? 'Search productsâ€¦' : 'Search active storesâ€¦'}
           />
         </label>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -458,8 +496,8 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     <div className="request-info">
                       <div className="request-user">
                         <strong>{req.user?.name ?? 'Unknown employee'}</strong>
-                        <span>{req.user?.employee_id ?? 'No ID'} · {req.user?.email ?? 'no email'}</span>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {req.user?.supervisor || '—'}</div>
+                        <span>{req.user?.employee_id ?? 'No ID'} Â· {req.user?.email ?? 'no email'}</span>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {req.user?.supervisor || 'â€”'}</div>
                       </div>
                       <div className="request-store">
                         <span className="request-store-name">&ldquo;{req.store_name}&rdquo;</span>
@@ -469,7 +507,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                       <div className="request-meta">
                         <span>Submitted {new Date(req.created_at).toLocaleString()}</span>
                         {req.reviewed_at && req.reviewer && (
-                          <span>· Reviewed by {req.reviewer.name} on {new Date(req.reviewed_at).toLocaleString()}</span>
+                          <span>Â· Reviewed by {req.reviewer.name} on {new Date(req.reviewed_at).toLocaleString()}</span>
                         )}
                       </div>
                       {req.review_notes && (
@@ -478,7 +516,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     </div>
                   </div>
                   <div className="request-actions">
-                    {req.status === 'pending' ? (
+                    {req.status === 'pending_review' ? (
                       <>
                         <button className="btn btn-success btn-sm" onClick={() => openDecision({ type: 'store', id: req.id }, 'approved')} disabled={isReadOnly}>
                           <CheckCircle2 size={14} /> Approve
@@ -508,7 +546,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
           ) : (
             <div className="request-list">
               {filteredProducts.map((prod) => {
-                const statusLabel = prod.is_suspended ? 'suspended' : prod.status;
+                const statusLabel = prod.status;
                 const statusColors: Record<string, { bg: string; border: string; color: string }> = {
                   pending:   { bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.3)',  color: '#fbbf24' },
                   active:    { bg: 'rgba(34,197,94,0.1)',   border: 'rgba(34,197,94,0.3)',   color: '#22c55e' },
@@ -517,7 +555,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                 };
                 const sc = statusColors[statusLabel ?? 'active'] ?? statusColors.active;
                 return (
-                  <article key={prod.id} className="request-row" style={{ borderColor: prod.status === 'pending' ? 'rgba(245,158,11,0.35)' : undefined }}>
+                  <article key={prod.id} className="request-row" style={{ borderColor: prod.status === 'pending_review' ? 'rgba(245,158,11,0.35)' : undefined }}>
                     <div className="request-row-left">
                       <div className="product-thumb-sm">
                         {prod.image_url ? (
@@ -532,15 +570,15 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <strong>{prod.name}</strong>
                             <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              {statusLabel === 'pending' ? 'Pending review' : statusLabel === 'active' ? 'Active' : statusLabel === 'rejected' ? 'Rejected' : 'Suspended'}
+                              {statusLabel === 'pending_review' ? 'Pending review' : statusLabel === 'active' ? 'Active' : statusLabel === 'rejected' ? 'Rejected' : 'Suspended'}
                             </span>
                           </div>
-                          <span>{prod.store?.name || 'Unknown Store'} · RD$ {prod.price_dop.toLocaleString()}</span>
-                          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Superior: {prod.store?.owner?.supervisor || '—'}</div>
+                          <span>{prod.store?.name || 'Unknown Store'} Â· RD$ {prod.price_dop.toLocaleString()}</span>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Superior: {prod.store?.owner?.supervisor || 'â€”'}</div>
                         </div>
                         {prod.description && <p className="request-desc">{prod.description}</p>}
                         {prod.is_suspended && prod.suspend_reason && (
-                          <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: '0.25rem' }}>Motivo de suspensión: {prod.suspend_reason}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: '0.25rem' }}>Motivo de suspensiÃ³n: {prod.suspend_reason}</div>
                         )}
                         <div className="request-meta">
                           <span>Submitted {new Date(prod.created_at).toLocaleString()}</span>
@@ -550,7 +588,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     <div className="request-row-right">
                       {currentUser.role !== 'moderator_b1' && (
                         <div className="request-actions" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: '0.8rem' }}>
-                          {prod.status === 'pending' ? (
+                          {prod.status === 'pending_review' ? (
                             <div style={{ display: 'flex', gap: '0.4rem' }}>
                               <button
                                 className="btn btn-ghost btn-sm btn-danger-ghost"
@@ -652,7 +690,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                       <div>
                         <strong>{store.owner?.name}</strong>
                         <span>{store.owner?.email}</span>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {store.owner?.supervisor || '—'}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {store.owner?.supervisor || 'â€”'}</div>
                       </div>
                     </div>
                     {!isReadOnly && (
@@ -706,6 +744,41 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
         </section>
       )}
 
+            {suspendProductDialog && (
+        <div className="modal-backdrop" onClick={() => !saving && setSuspendProductDialog(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <><PauseCircle size={22} style={{ color: '#f59e0b' }} /><h3>Suspend product</h3></>
+            </div>
+            <p className="text-muted" style={{ margin: 0 }}>
+              The product will be hidden from the store and the employee will be notified. They must edit the product and resubmit it for review.
+            </p>
+            <label className="form-field">
+              <span>Reason for suspension *</span>
+              <textarea
+                className="input"
+                rows={4}
+                value={dialogNotes}
+                onChange={(e) => setDialogNotes(e.target.value)}
+                placeholder="Explain why this product violates store policies..."
+                autoFocus
+              />
+            </label>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setSuspendProductDialog(null)} disabled={saving}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                style={{ background: '#f59e0b' }}
+                onClick={() => void confirmSuspendProduct()}
+                disabled={saving || dialogNotes.trim().length < 5}
+              >
+                {saving ? <Loader2 size={16} className="spin" /> : 'Suspend Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {dialog && (
         <div className="modal-backdrop" onClick={() => !saving && setDialog(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -728,7 +801,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                 rows={4}
                 value={dialogNotes}
                 onChange={(e) => setDialogNotes(e.target.value)}
-                placeholder={dialog.decision === 'approved' ? 'Anything the employee should know…' : 'Why is this request being rejected?'}
+                placeholder={dialog.decision === 'approved' ? 'Anything the employee should knowâ€¦' : 'Why is this request being rejected?'}
               />
             </label>
             <div className="modal-actions">
@@ -831,7 +904,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                 rows={3}
                 value={dialogNotes}
                 onChange={(e) => setDialogNotes(e.target.value)}
-                placeholder="Reason for suspending this store…"
+                placeholder="Reason for suspending this storeâ€¦"
               />
             </label>
             <div className="modal-actions">
@@ -968,3 +1041,6 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
     </div>
   );
 }
+
+
+

@@ -30,3 +30,14 @@ const langCount = copyFiles(join(root, 'node_modules', '@tesseract.js-data', 'en
 console.log('  ok langs (' + langCount + ' files)');
 
 console.log('Tesseract assets ready.');
+
+// Copy PDF.js worker
+const pdfjsDest = join(root, 'public', 'pdfjs');
+ensureDir(pdfjsDest);
+const pdfWorkerSrc = join(root, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.mjs');
+if (existsSync(pdfWorkerSrc)) {
+  copyFileSync(pdfWorkerSrc, join(pdfjsDest, 'pdf.worker.min.mjs'));
+  console.log('PDF.js worker ready.');
+} else {
+  console.warn('PDF.js worker not found at ' + pdfWorkerSrc);
+}

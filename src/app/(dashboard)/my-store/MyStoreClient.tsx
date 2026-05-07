@@ -1,32 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useMemo, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { formatDop } from '@/lib/utils';
-import { proxifyMediaUrl } from '@/lib/media-proxy';
-import {
-  AlertCircle,
-  BarChart3,
-  CheckCircle2,
-  ClipboardList,
-  Clock,
-  Image as ImageIcon,
-  Loader2,
-  Package,
-  Palette,
-  PencilLine,
-  Plus,
-  Save,
-  Sparkles,
-  Store as StoreIcon,
-  Tag,
-  Trash2,
-  X,
-  Upload,
-  ChevronLeft,
-  ChevronRight,
-  Lock,
-} from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Clock3, Edit2, Eye, EyeOff, LayoutDashboard, MoreVertical, Package, Plus, Save, Settings, ShoppingBag, Trash2, TrendingUp, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { TransferProgress } from '@/components/uploads/TransferProgress';
 import { useTransferState } from '@/components/uploads/useTransferState';
@@ -140,7 +114,7 @@ export function MyStoreClient({
 }: {
   initialStore: EmployeeStore | null;
   initialLatestRequest: EmployeeStoreRequest | null;
-  initialProducts: EmployeeStoreProduct[];
+  initialProducts: ExtendedEmployeeStoreProduct[];
   initialOrders?: SellerOrder[];
   moderationNotifications?: Notification[];
   roleAllowed?: boolean;
@@ -148,7 +122,9 @@ export function MyStoreClient({
   const router = useRouter();
   const [store, setStore] = useState<EmployeeStore | null>(initialStore);
   const [request, setRequest] = useState<EmployeeStoreRequest | null>(initialLatestRequest);
-  const [products, setProducts] = useState<EmployeeStoreProduct[]>(initialProducts);
+    const [products, setProducts] = useState<ExtendedEmployeeStoreProduct[]>(initialProducts);
+  const suspendedProduct = products.find(p => p.status === 'suspended');
+  const [showSuspensionAlert, setShowSuspensionAlert] = useState(!!suspendedProduct);
   const [orders, setOrders] = useState<SellerOrder[]>(initialOrders);
   const [notifications, setNotifications] = useState<Notification[]>(moderationNotifications);
   const [message, setMessage] = useState<{ tone: 'success' | 'danger' | 'info'; text: string } | null>(null);
@@ -163,7 +139,7 @@ export function MyStoreClient({
           <div>
             <h1 className="my-store-title">My Store</h1>
             <p className="my-store-subtitle">
-              Manage your personal micro-store — list products in Dominican pesos, track inventory, and receive orders
+              Manage your personal micro-store â€” list products in Dominican pesos, track inventory, and receive orders
               directly from fellow employees.
             </p>
           </div>
@@ -185,7 +161,7 @@ export function MyStoreClient({
         <div>
           <h1 className="my-store-title">My Store</h1>
           <p className="my-store-subtitle">
-            Manage your personal micro-store — list products in Dominican pesos, track inventory, and receive orders
+            Manage your personal micro-store â€” list products in Dominican pesos, track inventory, and receive orders
             directly from fellow employees.
           </p>
         </div>
@@ -281,9 +257,9 @@ export function MyStoreClient({
               marginBottom: '2rem',
               textAlign: 'left'
             }}>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem' }}>Motivo de la suspensión:</div>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem' }}>Motivo de la suspensiÃ³n:</div>
               <div style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontStyle: 'italic', lineHeight: 1.5 }}>
-                &ldquo;{store.suspend_reason || 'No se proporcionó un motivo específico.'}&rdquo;
+                &ldquo;{store.suspend_reason || 'No se proporcionÃ³ un motivo especÃ­fico.'}&rdquo;
               </div>
             </div>
 
@@ -393,7 +369,7 @@ function RequestAccessForm({
             rows={5}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="At least 20 characters — include the type of products, delivery preferences, and any relevant info for the reviewer."
+            placeholder="At least 20 characters â€” include the type of products, delivery preferences, and any relevant info for the reviewer."
           />
           <span className="form-hint">{description.trim().length}/20 characters minimum</span>
         </label>
@@ -403,7 +379,7 @@ function RequestAccessForm({
         <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
         <span>
           I understand that my store will be reviewed by a moderator and must comply with Outplex policies. The platform is
-          only an intermediary and does not process any payments — all transactions occur directly between the buyer and me.
+          only an intermediary and does not process any payments â€” all transactions occur directly between the buyer and me.
         </span>
       </label>
 
@@ -427,7 +403,7 @@ function PendingRequestCard({ request }: { request: EmployeeStoreRequest }) {
       <div>
         <h2 className="section-title">Your request is under review</h2>
         <p className="text-muted">
-          Submitted on {new Date(request.created_at).toLocaleString()}. A moderator will approve or reject it shortly —
+          Submitted on {new Date(request.created_at).toLocaleString()}. A moderator will approve or reject it shortly â€”
           you&apos;ll receive a notification as soon as there&apos;s an update.
         </p>
         <div className="pending-preview">
@@ -493,10 +469,10 @@ function StoreEditor({
   onMessage,
 }: {
   store: EmployeeStore;
-  products: EmployeeStoreProduct[];
+  products: ExtendedEmployeeStoreProduct[];
   orders: SellerOrder[];
   onStoreUpdated: (next: EmployeeStore) => void;
-  onProductsChanged: (next: EmployeeStoreProduct[]) => void;
+  onProductsChanged: (next: ExtendedEmployeeStoreProduct[]) => void;
   onOrdersChanged: (next: SellerOrder[]) => void;
   onMessage: (tone: 'success' | 'danger' | 'info', text: string) => void;
 }) {
@@ -517,12 +493,12 @@ function StoreEditor({
         <div className="stat-card">
           <div className="stat-label">Low stock</div>
           <div className="stat-value">{lowStockCount}</div>
-          <div className="stat-helper">Items with ≤ 3 units left</div>
+          <div className="stat-helper">Items with â‰¤ 3 units left</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Inventory value</div>
           <div className="stat-value">{formatDop(totalValue)}</div>
-          <div className="stat-helper">Price × stock across catalog</div>
+          <div className="stat-helper">Price Ã— stock across catalog</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Store slug</div>
@@ -567,8 +543,8 @@ function ProductsTab({
   onMessage,
 }: {
   store: EmployeeStore;
-  products: EmployeeStoreProduct[];
-  onProductsChanged: (next: EmployeeStoreProduct[]) => void;
+  products: ExtendedEmployeeStoreProduct[];
+  onProductsChanged: (next: ExtendedEmployeeStoreProduct[]) => void;
   onMessage: (tone: 'success' | 'danger' | 'info', text: string) => void;
 }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft());
@@ -581,8 +557,8 @@ function ProductsTab({
   const draftCost = toNonNegativeInt(draft.cost_dop);
   const draftProfit = toNonNegativeInt(draft.profit_dop);
   const draftTotal = draftCost + draftProfit;
-  const isSuspended = products.some((product) => product.is_suspended);
-  const hasBlockedModerationFlow = products.some((product) => product.is_suspended || product.status === 'pending');
+  const isSuspended = products.some((product) => (product.status === 'suspended'));
+  const hasBlockedModerationFlow = products.some((product) => (product.status === 'suspended') || product.status === 'pending_review');
   const canCreate =
     !hasBlockedModerationFlow &&
     draft.name.trim().length >= 2 &&
@@ -628,7 +604,7 @@ function ProductsTab({
     }
   };
 
-  const startEdit = (product: EmployeeStoreProduct) => {
+  const startEdit = (product: ExtendedEmployeeStoreProduct) => {
     setEditingId(product.id);
       setEditDraft({
         name: product.name,
@@ -698,7 +674,7 @@ function ProductsTab({
     }
   };
 
-  const toggleActive = async (product: EmployeeStoreProduct) => {
+  const toggleActive = async (product: ExtendedEmployeeStoreProduct) => {
     setSavingId(product.id);
     try {
       const res = await fetch(`/api/employee-store/products/${product.id}`, {
@@ -720,7 +696,7 @@ function ProductsTab({
     <section className="card editor-panel">
       <div className="editor-panel-head">
         <div>
-          <h2 className="section-title">Products · {store.name}</h2>
+          <h2 className="section-title">Products Â· {store.name}</h2>
           <p className="text-muted">Add items, set prices in DOP, and keep your inventory current.</p>
         </div>
       </div>
@@ -740,7 +716,7 @@ function ProductsTab({
             <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Product name" />
           </label>
           <label className="form-field" style={{ flex: 1 }}>
-            <span>Costo de producción (DOP) *</span>
+            <span>Costo de producciÃ³n (DOP) *</span>
             <input
               className="input"
               type="number"
@@ -803,29 +779,29 @@ function ProductsTab({
             const isEditing = editingId === product.id;
             const isSaving = savingId === product.id;
             return (
-              <article key={product.id} className={`product-card ${!product.is_active || product.is_suspended ? 'product-card-inactive' : ''} ${product.is_suspended ? 'product-card-suspended' : ''}`}>
-                {product.is_suspended && (
+              <article key={product.id} className={`product-card ${!product.is_active || (product.status === 'suspended') ? 'product-card-inactive' : ''} ${(product.status === 'suspended') ? 'product-card-suspended' : ''}`}>
+                {(product.status === 'suspended') && (
                   <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '10px 10px 0 0', padding: '0.6rem 0.9rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '0.78rem' }}>
-                      <strong style={{ color: '#fbbf24', display: 'block', marginBottom: '0.15rem' }}>Suspendido por moderación</strong>
-                      {product.suspend_reason && <span style={{ color: '#fcd34d' }}>{product.suspend_reason}</span>}
-                      <span style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.2rem' }}>Edita este producto y envíalo a revisión para reactivarlo. No puedes agregar ni eliminar productos mientras esté suspendido.</span>
+                      <strong style={{ color: '#fbbf24', display: 'block', marginBottom: '0.15rem' }}>Suspendido por moderaciÃ³n</strong>
+                      {product.moderation_note && <span style={{ color: '#fcd34d' }}>{product.moderation_note}</span>}
+                      <span style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.2rem' }}>Edita este producto y envÃ­alo a revisiÃ³n para reactivarlo. No puedes agregar ni eliminar productos mientras estÃ© suspendido.</span>
                     </div>
                   </div>
                 )}
-                {!product.is_suspended && product.status === 'pending' && (
+                {!(product.status === 'suspended') && product.status === 'pending_review' && (
                   <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.28)', borderRadius: '10px 10px 0 0', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Clock size={13} style={{ color: '#818cf8', flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.76rem', color: '#a5b4fc', fontWeight: 600 }}>En revisión por moderación</span>
+                    <span style={{ fontSize: '0.76rem', color: '#a5b4fc', fontWeight: 600 }}>En revisiÃ³n por moderaciÃ³n</span>
                   </div>
                 )}
-                {!product.is_suspended && product.status === 'rejected' && (
+                {!(product.status === 'suspended') && product.status === 'rejected' && (
                   <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '10px 10px 0 0', padding: '0.6rem 0.9rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <AlertCircle size={14} style={{ color: '#f87171', flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '0.78rem' }}>
-                      <strong style={{ color: '#fca5a5', display: 'block', marginBottom: '0.15rem' }}>Rechazado por moderación</strong>
-                      <span style={{ color: 'var(--text-muted)' }}>Edita este producto para enviarlo a revisión nuevamente.</span>
+                      <strong style={{ color: '#fca5a5', display: 'block', marginBottom: '0.15rem' }}>Rechazado por moderaciÃ³n</strong>
+                      <span style={{ color: 'var(--text-muted)' }}>Edita este producto para enviarlo a revisiÃ³n nuevamente.</span>
                     </div>
                   </div>
                 )}
@@ -898,10 +874,10 @@ function ProductsTab({
                       <span className={`product-stock ${product.stock === 0 ? 'product-stock-empty' : ''}`}>{product.stock} in stock</span>
                     </div>
                     <div className="metric-helper">
-                      Costo: {formatDop(product.cost_dop ?? 0)} · Ganancia: {formatDop(Math.max(0, product.price_dop - (product.cost_dop ?? 0)))}
+                      Costo: {formatDop(product.cost_dop ?? 0)} Â· Ganancia: {formatDop(Math.max(0, product.price_dop - (product.cost_dop ?? 0)))}
                     </div>
                     <div className="product-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(product)} disabled={isSaving || product.is_suspended || product.status === 'pending'}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(product)} disabled={isSaving || (product.status === 'suspended') || product.status === 'pending_review'}>
                         {product.is_active ? 'Hide' : 'Show'}
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={() => startEdit(product)} disabled={isSaving}>
@@ -1020,11 +996,11 @@ function OrdersTab({
 
     if (draft.mode === 'scheduled') {
       if (!pickupAtIso || !pickupDeadlineIso) {
-        onMessage('danger', 'Debes seleccionar fecha de retiro y fecha límite.');
+        onMessage('danger', 'Debes seleccionar fecha de retiro y fecha lÃ­mite.');
         return;
       }
       if (new Date(pickupDeadlineIso).getTime() <= new Date(pickupAtIso).getTime()) {
-        onMessage('danger', 'La fecha límite debe ser después de la fecha de retiro.');
+        onMessage('danger', 'La fecha lÃ­mite debe ser despuÃ©s de la fecha de retiro.');
         return;
       }
     }
@@ -1124,7 +1100,7 @@ function OrdersTab({
                             />
                           </div>
 
-                          <label className="meta-label">Límite de retiro</label>
+                          <label className="meta-label">LÃ­mite de retiro</label>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
                             <ModernDatePicker
                               date={getPickupDraft(order).pickupDeadline.split('T')[0]}
@@ -1361,7 +1337,7 @@ function ProfileTab({
         </div>
 
         <div className="form-field">
-          <span>Modo de Operación</span>
+          <span>Modo de OperaciÃ³n</span>
           <select
             className="input"
             disabled={draft.status === 'paused'}
@@ -1388,15 +1364,15 @@ function ProfileTab({
               }
             }}
           >
-            <option value="active" style={{ background: '#0f172a', color: '#4ade80' }}>● Abierta 24/7 (Siempre Disponible)</option>
-            <option value="scheduled" style={{ background: '#0f172a', color: '#facc15' }}>● Programada (Sigue tu Horario)</option>
-            <option value="manual_closed" style={{ background: '#0f172a', color: '#f87171' }}>● Cerrada (Manual / Override)</option>
+            <option value="active" style={{ background: '#0f172a', color: '#4ade80' }}>â— Abierta 24/7 (Siempre Disponible)</option>
+            <option value="scheduled" style={{ background: '#0f172a', color: '#facc15' }}>â— Programada (Sigue tu Horario)</option>
+            <option value="manual_closed" style={{ background: '#0f172a', color: '#f87171' }}>â— Cerrada (Manual / Override)</option>
           </select>
           <p className="field-helper" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }}>
             {draft.status === 'paused' ? 'Habilita la visibilidad para cambiar el modo.' : 
-             !draft.is_open ? 'La tienda mostrará un aviso de cerrada permanentemente.' :
-             draft.status === 'scheduled' ? 'Se abrirá automáticamente según las horas debajo.' :
-             'La tienda estará abierta todo el día, todos los días.'}
+             !draft.is_open ? 'La tienda mostrarÃ¡ un aviso de cerrada permanentemente.' :
+             draft.status === 'scheduled' ? 'Se abrirÃ¡ automÃ¡ticamente segÃºn las horas debajo.' :
+             'La tienda estarÃ¡ abierta todo el dÃ­a, todos los dÃ­as.'}
           </p>
         </div>
       </div>
@@ -1447,9 +1423,9 @@ function ProfileTab({
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.2rem' }}>
           <div>
-            <h3 className="section-title" style={{ fontSize: '1.1rem', marginBottom: '0.2rem' }}>Horario de Operación</h3>
+            <h3 className="section-title" style={{ fontSize: '1.1rem', marginBottom: '0.2rem' }}>Horario de OperaciÃ³n</h3>
             <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-              Configura tus horas estándar. Si la tienda se marca como &ldquo;Cerrada&rdquo; arriba, este horario se ignorará.
+              Configura tus horas estÃ¡ndar. Si la tienda se marca como &ldquo;Cerrada&rdquo; arriba, este horario se ignorarÃ¡.
             </p>
           </div>
           <button
@@ -1526,7 +1502,7 @@ function ProfileTab({
 // ============================================================
 // Dashboard Tab (placeholder until Phase 4)
 // ============================================================
-function DashboardTab({ products, orders }: { products: EmployeeStoreProduct[]; orders: SellerOrder[] }) {
+function DashboardTab({ products, orders }: { products: ExtendedEmployeeStoreProduct[]; orders: SellerOrder[] }) {
   const active = products.filter((p) => p.is_active);
   const totalStock = active.reduce((sum, p) => sum + p.stock, 0);
   const avgPrice = active.length > 0 ? active.reduce((s, p) => s + p.price_dop, 0) / active.length : 0;
@@ -1604,12 +1580,12 @@ function DashboardTab({ products, orders }: { products: EmployeeStoreProduct[]; 
           <div className="metric-helper">Dinero para ti</div>
         </div>
         <div className="dashboard-metric">
-          <div className="metric-label">Reinversión (mes)</div>
+          <div className="metric-label">ReinversiÃ³n (mes)</div>
           <div className="metric-value">{formatDop(reinvestment)}</div>
-          <div className="metric-helper">Presupuesto para producción</div>
+          <div className="metric-helper">Presupuesto para producciÃ³n</div>
         </div>
         <div className="dashboard-metric">
-          <div className="metric-label">Compradores únicos</div>
+          <div className="metric-label">Compradores Ãºnicos</div>
           <div className="metric-value">{uniqueBuyers}</div>
           <div className="metric-helper">Clientes que compraron este mes</div>
         </div>
@@ -1625,16 +1601,16 @@ function DashboardTab({ products, orders }: { products: EmployeeStoreProduct[]; 
         </div>
       </div>
       <div className="card" style={{ marginTop: '0.5rem', padding: '1rem' }}>
-        <div className="section-title" style={{ fontSize: '1rem' }}>Gráfico rápido de ventas (mes actual)</div>
+        <div className="section-title" style={{ fontSize: '1rem' }}>GrÃ¡fico rÃ¡pido de ventas (mes actual)</div>
         {Object.keys(dailyBars).length === 0 ? (
-          <p className="text-muted" style={{ marginTop: '0.6rem' }}>Aún no hay ventas completadas este mes.</p>
+          <p className="text-muted" style={{ marginTop: '0.6rem' }}>AÃºn no hay ventas completadas este mes.</p>
         ) : (
           <div style={{ display: 'grid', gap: '0.45rem', marginTop: '0.8rem' }}>
             {Object.entries(dailyBars)
               .sort(([a], [b]) => Number(a) - Number(b))
               .map(([day, total]) => (
                 <div key={day} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 95px', gap: '0.6rem', alignItems: 'center' }}>
-                  <span className="text-muted">Día {day}</span>
+                  <span className="text-muted">DÃ­a {day}</span>
                   <div style={{ width: '100%', height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                     <div
                       style={{
@@ -1836,3 +1812,7 @@ const styles = `
   .comp-state-chip-on { background: rgba(34,197,94,0.1); color: #4ade80; border-color: rgba(34,197,94,0.2); }
   .comp-state-chip-off { background: rgba(239,68,68,0.08); color: #f87171; border-color: rgba(239,68,68,0.15); }
 `;
+
+
+
+

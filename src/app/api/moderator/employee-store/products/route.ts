@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+﻿import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { enforceSectionAvailability } from '@/lib/availability/section-guard';
 
@@ -63,8 +63,8 @@ export async function PATCH(request: Request) {
     return maintenance;
   }
 
-  const body = await request.json();
-  const { productId, status, reviewNotes, is_suspended, suspend_reason } = body;
+    const body = await request.json();
+  const { productId, status, reviewNotes } = body;
 
   if (!productId) {
     return NextResponse.json({ error: 'Missing productId' }, { status: 400 });
@@ -76,17 +76,13 @@ export async function PATCH(request: Request) {
   if (status) {
     updates.status = status;
     updates.is_active = status === 'active';
-    if (status === 'active') {
-      updates.is_suspended = false;
-      updates.suspend_reason = null;
+    if (status === 'active' || status === 'rejected') {
+      updates.moderation_note = reviewNotes || null;
+      notifyType = status === 'active' ? 'approved' : 'rejected';
+    } else if (status === 'suspended') {
+      updates.moderation_note = reviewNotes || null;
+      notifyType = 'suspended';
     }
-    notifyType = status === 'active' ? 'approved' : 'rejected';
-  }
-  
-  if (typeof is_suspended === 'boolean') {
-    updates.is_suspended = is_suspended;
-    updates.suspend_reason = suspend_reason || null;
-    if (is_suspended) notifyType = 'suspended';
   }
 
   if (Object.keys(updates).length === 0) {
@@ -117,13 +113,13 @@ export async function PATCH(request: Request) {
       let notifContent = '';
       if (notifyType === 'approved') {
         notifTitle = 'Producto Aprobado';
-        notifContent = `Tu producto "${product.name}" ha sido aprobado y ya está disponible en la tienda.`;
+        notifContent = Tu producto " + product.name + " ha sido aprobado y ya está disponible en la tienda.;
       } else if (notifyType === 'rejected') {
         notifTitle = 'Producto Rechazado';
-        notifContent = `Tu producto "${product.name}" no fue aprobado${reviewNotes ? ': ' + reviewNotes : '.'}`;
+        notifContent = Tu producto " + product.name + " no fue aprobado + (reviewNotes ? ': ' + reviewNotes : '.');
       } else if (notifyType === 'suspended') {
         notifTitle = 'Producto Suspendido';
-        notifContent = `Tu producto "${product.name}" ha sido suspendido por moderación${suspend_reason ? '. Motivo: ' + suspend_reason : '.'}`;
+        notifContent = Tu producto " + product.name + " ha sido suspendido por moderación + (reviewNotes ? '. Motivo: ' + reviewNotes : '.');
       }
 
       if (notifTitle) {
@@ -131,7 +127,7 @@ export async function PATCH(request: Request) {
           user_id: store.owner_id,
           title: notifTitle,
           message: notifContent,
-          type: 'store',
+          type: 'system', // Set type to system as requested
           is_read: false,
         });
       }
@@ -202,7 +198,7 @@ export async function DELETE(request: Request) {
         user_id: store.owner_id,
         title: 'Producto Eliminado',
         message: `Tu producto "${product.name}" fue eliminado por moderacion.${reason ? ` Motivo: ${reason}` : ''}`,
-        type: 'store',
+        type: 'system',
         is_read: false,
       });
     }
@@ -210,3 +206,4 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ success: true });
 }
+

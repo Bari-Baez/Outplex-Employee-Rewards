@@ -1,26 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { useAppStore } from '@/lib/store';
-import { formatDop } from '@/lib/utils';
-import { proxifyMediaUrl } from '@/lib/media-proxy';
-import {
-  formatPoints,
-  getLowStockUrgencyCopy,
-  getStockLabel,
-  getStoreThemePresentation,
-  isLowStockItem,
-} from '@/lib/store-helpers';
-import type {
-  EmployeeStoreProduct,
-  EmployeeStoreProductReview,
-  StoreItem,
-  StoreThemeConfig,
-  StoreReview,
-  User,
-} from '@/types/database';
-import { AlertCircle, ArrowLeft, CheckCircle2, Clipboard, Clock3, Heart, Info, MessageSquare, Phone, ShoppingBag, Sparkles, Star, Store, Zap } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Clipboard, Clock3, Heart, Info, MessageSquare, Phone, ShoppingBag, Sparkles, Star, Store, Zap, Calendar } from 'lucide-react';
 
 type EmployeeReviewUser = Pick<User, 'id' | 'name' | 'avatar_url'>;
 type EmployeeProductReview = Pick<EmployeeStoreProductReview, 'id' | 'rating' | 'user_id'> & {
@@ -105,36 +85,78 @@ function isEmployeeStoreNew(store: EmployeeStorePublic) {
   return diffMs < NEW_EMPLOYEE_STORE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 }
 
-function isStoreCurrentlyOpen(store: EmployeeStorePublic) {
-  if (store.is_open === false) return false;
-  try {
-    if (store.operating_hours && typeof store.operating_hours === 'object') {
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const now = new Date();
-      const day = dayNames[now.getDay()];
-      const config = store.operating_hours[day];
-      if (config) {
-        if (config.isOpen === false) return false;
-        if (config.open && config.close) {
-          const currentMinutes = now.getHours() * 60 + now.getMinutes();
-          const [openH, openM] = String(config.open).split(':').map(Number);
-          const [closeH, closeM] = String(config.close).split(':').map(Number);
-          
-          if (!isNaN(openH) && !isNaN(closeH)) {
-            const openMinutes = openH * 60 + (openM || 0);
-            const closeMinutes = closeH * 60 + (closeM || 0);
-            if (currentMinutes < openMinutes || currentMinutes > closeMinutes) {
-              return false;
-            }
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[store] error parsing operating hours', err);
-    // fallback to open if metadata is corrupted
+const DAY_NAMES_EN = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const DAY_NAMES_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+function getSDTime() {
+  const sdDateStr = new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" });
+  return new Date(sdDateStr);
+}
+
+function formatSDTime(timeStr: string) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  const mStr = m < 10 ? "0$m" : m;
+  return "$h12:$mStr $ampm";
+}
+
+export function getStoreScheduleStatus(store: EmployeeStorePublic) {
+  if (store.is_open === false) return { isOpen: false, statusText: 'Cerrada', isManual: true };
+  if (!store.operating_hours || typeof store.operating_hours !== 'object') {
+    return { isOpen: true, statusText: 'Abierta', isManual: true };
   }
-  return true;
+
+  const sdNow = getSDTime();
+  const currentDayIndex = sdNow.getDay();
+  const currentDayEn = DAY_NAMES_EN[currentDayIndex];
+  const currentMinutes = sdNow.getHours() * 60 + sdNow.getMinutes();
+  
+  const config = (store.operating_hours as any)[currentDayEn];
+  let isOpenToday = false;
+  let todayOpenMin = 0;
+  let todayCloseMin = 0;
+  
+  if (config && config.isOpen !== false && config.open && config.close) {
+    const [openH, openM] = String(config.open).split(':').map(Number);
+    const [closeH, closeM] = String(config.close).split(':').map(Number);
+    if (!isNaN(openH) && !isNaN(closeH)) {
+      isOpenToday = true;
+      todayOpenMin = openH * 60 + (openM || 0);
+      todayCloseMin = closeH * 60 + (closeM || 0);
+    }
+  }
+
+  if (isOpenToday && currentMinutes >= todayOpenMin && currentMinutes <= todayCloseMin) {
+    const minLeft = todayCloseMin - currentMinutes;
+    const formattedRange = formatSDTime(config.open) + ' - ' + formatSDTime(config.close);
+    if (minLeft <= 60) {
+      return { isOpen: true, isClosingSoon: true, statusText: 'Cierra pronto · ' + formattedRange, isManual: false };
+    }
+    return { isOpen: true, statusText: formattedRange, isManual: false };
+  }
+
+  if (isOpenToday && currentMinutes < todayOpenMin) {
+    return { isOpen: false, statusText: 'Cerrada · Abre hoy a las ' + formatSDTime(config.open), isManual: false };
+  }
+
+  for (let i = 1; i <= 7; i++) {
+    const nextDayIndex = (currentDayIndex + i) % 7;
+    const nextDayEn = DAY_NAMES_EN[nextDayIndex];
+    const nextConfig = (store.operating_hours as any)[nextDayEn];
+    if (nextConfig && nextConfig.isOpen !== false && nextConfig.open && nextConfig.close) {
+      const dayEs = DAY_NAMES_ES[nextDayIndex];
+      const prefix = i === 1 ? 'mañana' : dayEs.toLowerCase();
+      return { isOpen: false, statusText: 'Cerrada · Abre ' + prefix + ' a las ' + formatSDTime(nextConfig.open), isManual: false };
+    }
+  }
+
+  return { isOpen: false, statusText: 'Cerrada', isManual: false };
+}
+
+function isStoreCurrentlyOpen(store: EmployeeStorePublic) {
+  return getStoreScheduleStatus(store).isOpen;
 }
 
 export function StoreClient({ items, profile, theme, employeeStores, buyerContactPrefs }: StoreClientProps) {
@@ -159,7 +181,8 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
   const [isRating, setIsRating] = useState(false);
   const [ratingError, setRatingError] = useState<string | null>(null);
   
-  const [selectedEmpItem, setSelectedEmpItem] = useState<EmployeeStoreProductPublic | null>(null);
+    const [selectedEmpItem, setSelectedEmpItem] = useState<EmployeeStoreProductPublic | null>(null);
+  const [scheduleModalStore, setScheduleModalStore] = useState<EmployeeStorePublic | null>(null);
 
   // Review state for employee products: map of productId -> avg, count, user's rating
   const [empReviewsMap, setEmpReviewsMap] = useState<Record<string, { avg: number; count: number; reviews: EmployeeProductReview[] }>>({});
@@ -478,7 +501,19 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 <Store size={14} />
                 {activeStore.products.length} producto{activeStore.products.length === 1 ? '' : 's'}
               </div>
-              <h1 className="store-title" style={{ fontSize: 'clamp(1.8rem, 3vw, 2.8rem)' }}>{activeStore.name}</h1>
+                            <h1 className="store-title" style={{ fontSize: 'clamp(1.8rem, 3vw, 2.8rem)', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                {activeStore.name}
+                {activeStore.status === 'scheduled' && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setScheduleModalStore(activeStore)}
+                    style={{ fontSize: '0.875rem', padding: '0.4rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    <Calendar size={14} /> Ver Horarios
+                  </button>
+                )}
+              </h1>
               {activeStore.description && <p className="store-subtitle">{activeStore.description}</p>}
             </>
           ) : (
@@ -488,7 +523,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 {visibleEmployeeStores.length} tienda{visibleEmployeeStores.length === 1 ? '' : 's'} activa{visibleEmployeeStores.length === 1 ? '' : 's'}
               </div>
               <h1 className="store-title">Tiendas de Empleados</h1>
-              <p className="store-subtitle">Compra productos de tus compañeros. Los precios son en pesos dominicanos.</p>
+              <p className="store-subtitle">Compra productos de tus compaÃ±eros. Los precios son en pesos dominicanos.</p>
             </>
           )}
         </div>
@@ -515,7 +550,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <div className="balance-copy">
                 {empCart.length > 0
                   ? `Total: ${formatDop(empCart.reduce((s, ci) => s + ci.product.price_dop * ci.quantity, 0))}`
-                  : 'Tu carrito de empleados está vacío.'}
+                  : 'Tu carrito de empleados estÃ¡ vacÃ­o.'}
               </div>
               {empCart.length > 0 && (
                 <button
@@ -546,7 +581,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <div className="category-header">
                 <div>
                   <div className="category-kicker">Saved</div>
-                  <h2 className="category-title">♥ Mis Favoritos</h2>
+                  <h2 className="category-title">â™¥ Mis Favoritos</h2>
                 </div>
                 <div className="category-count">{favoriteIds.size} item{favoriteIds.size === 1 ? '' : 's'}</div>
               </div>
@@ -771,7 +806,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       ))}
 
-      {/* ── Employee stores view ─────────────────────────── */}
+      {/* â”€â”€ Employee stores view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {storeMode === 'employee' && !activeStore && (
         <div className="store-sections animate-fade-in">
           {(() => {
@@ -805,9 +840,19 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                       }}
                     >
                       {isScheduled && (
-                        <div className="emp-store-scheduled-badge">
+                                                <div className="emp-store-scheduled-badge" style={statusInfo.isClosingSoon ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : {}}>
                           <Clock3 size={12} />
-                          Automático
+                          {statusInfo.statusText}
+                        </div>
+                      )}
+                      {isScheduled && (
+                        <div style={{ marginTop: '0.5rem' }}>
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setScheduleModalStore(store); }}
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}
+                          >
+                            <Calendar size={12} /> Ver Horarios
+                          </span>
                         </div>
                       )}
                       {isEmployeeStoreNew(store) && (
@@ -845,7 +890,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                         )}
                         <div className="emp-store-meta">
                           <span>{store.products.length} producto{store.products.length === 1 ? '' : 's'}</span>
-                          {store.owner && <span>• {store.owner.name}</span>}
+                          {store.owner && <span>â€¢ {store.owner.name}</span>}
                         </div>
                         {/* Calculate store average rating */}
                         {(() => {
@@ -872,13 +917,13 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       )}
 
-      {/* ── Active employee store products ───────────────── */}
+      {/* â”€â”€ Active employee store products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {storeMode === 'employee' && activeStore && (
         <div className="store-sections animate-fade-in">
           {activeStore.products.length === 0 ? (
             <div className="card" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
               <ShoppingBag size={40} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
-              <h2 style={{ marginBottom: '0.5rem' }}>Sin productos aún</h2>
+              <h2 style={{ marginBottom: '0.5rem' }}>Sin productos aÃºn</h2>
               <p style={{ color: 'var(--text-muted)', margin: 0 }}>Esta tienda no tiene productos disponibles en este momento.</p>
             </div>
           ) : (
@@ -892,7 +937,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <section key={cat} className="category-section">
                 <div className="category-header">
                   <div>
-                    <div className="category-kicker">Categoría</div>
+                    <div className="category-kicker">CategorÃ­a</div>
                     <h2 className="category-title">{cat}</h2>
                   </div>
                   <div className="category-count">{prods.length} producto{prods.length === 1 ? '' : 's'}</div>
@@ -954,7 +999,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                             <button
                               className="btn btn-primary"
                               disabled={outOfStock || !isStoreCurrentlyOpen(activeStore)}
-                              style={{ background: outOfStock || !isStoreCurrentlyOpen(activeStore) ? undefined : 'linear-gradient(135deg,#059669,#10b981)', flex: 1 }}
+                              style={{ background: outOfStock || !isStoreCurrentlyOpen(activeStore) ? undefined : activeStore?.accent_color ? "linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})" : 'linear-gradient(135deg,#059669,#10b981)', flex: 1 }}
                               onClick={() => {
                                 const { reviews, ...prodData } = product;
                                 addToEmpCart({ ...prodData, cost_dop: product.cost_dop, status: product.status, store: { id: activeStore.id, slug: activeStore.slug, name: activeStore.name, owner_id: activeStore.owner_id } });
@@ -977,7 +1022,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       )}
 
-      {/* ── Employee Product Quick View Modal ─────────────────────── */}
+      {/* â”€â”€ Employee Product Quick View Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {selectedEmpItem && (
         <div className="modal-overlay" onClick={() => setSelectedEmpItem(null)}>
           <div className="store-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
@@ -1001,7 +1046,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               </div>
               
               <div style={{ padding: '1rem', background: 'var(--bg-elevated)', borderRadius: 12, marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>¿Te gusta este producto?</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Â¿Te gusta este producto?</div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -1024,7 +1069,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               </div>
 
               <p className="description-copy" style={{ color: 'var(--text-secondary)' }}>
-                {selectedEmpItem.description || 'Sin descripción disponible.'}
+                {selectedEmpItem.description || 'Sin descripciÃ³n disponible.'}
               </p>
 
               <div className="store-modal-actions">
@@ -1032,7 +1077,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 <button
                   className="btn btn-primary"
                   disabled={selectedEmpItem.stock === 0 || !activeStore || !isStoreCurrentlyOpen(activeStore)}
-                  style={{ background: selectedEmpItem.stock === 0 || !activeStore || !isStoreCurrentlyOpen(activeStore) ? undefined : 'linear-gradient(135deg,#059669,#10b981)' }}
+                  style={{ background: selectedEmpItem.stock === 0 || !activeStore || !isStoreCurrentlyOpen(activeStore) ? undefined : activeStore?.accent_color ? "linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})" : 'linear-gradient(135deg,#059669,#10b981)' }}
                   onClick={() => {
                     if (activeStore) {
                       const { reviews, ...prodData } = selectedEmpItem;
@@ -1050,16 +1095,16 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       )}
 
-      {/* ── Order Created Popup ───────────────────────────── */}
+      {/* â”€â”€ Order Created Popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {ordersCreated.length > 0 && (
         <div className="modal-overlay" onClick={() => setOrdersCreated([])}>
           <div className="store-modal animate-fade-in" style={{ maxWidth: 540, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
             <div className="store-modal-copy" style={{ padding: '0.5rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: '50%', background: 'linear-gradient(135deg,#059669,#10b981)', marginBottom: '1rem' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: '50%', background: activeStore?.accent_color ? "linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})" : 'linear-gradient(135deg,#059669,#10b981)', marginBottom: '1rem' }}>
                   <CheckCircle2 size={28} color="white" />
                 </div>
-                <h2 style={{ margin: 0 }}>¡Tu solicitud de orden fue generada!</h2>
+                <h2 style={{ margin: 0 }}>Â¡Tu solicitud de orden fue generada!</h2>
                 <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '0.9rem' }}>
                   Contacta al vendedor para coordinar la entrega.
                 </p>
@@ -1104,7 +1149,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                       onClick={() => void copyEmail(info.seller.email)}
                     >
                       <Clipboard size={16} />
-                      {copiedEmail === info.seller.email ? '¡Copiado!' : `Copiar email: ${info.seller.email}`}
+                      {copiedEmail === info.seller.email ? 'Â¡Copiado!' : `Copiar email: ${info.seller.email}`}
                     </button>
                   </div>
                 </div>
@@ -1162,14 +1207,14 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Calificaciones</span>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fbbf24' }}>★ {reviewsMap[selectedItem.id].avg.toFixed(1)}</span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({reviewsMap[selectedItem.id].count} reseña{reviewsMap[selectedItem.id].count !== 1 ? 's' : ''})</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fbbf24' }}>â˜… {reviewsMap[selectedItem.id].avg.toFixed(1)}</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({reviewsMap[selectedItem.id].count} reseÃ±a{reviewsMap[selectedItem.id].count !== 1 ? 's' : ''})</span>
                     </div>
                   </div>
                   
                   {/* Rating Selector */}
                   <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Tu calificación:</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Tu calificaciÃ³n:</div>
                     <div className="fhub-rating-row" style={{ display: 'flex', gap: '0.5rem' }}>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button
@@ -1192,9 +1237,9 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                     {reviewsMap[selectedItem.id].reviews.slice(0, 5).map((review, i) => (
                       <div key={i} style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', fontSize: '0.875rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                          <span style={{ color: '#fbbf24' }}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                          <span style={{ color: '#fbbf24' }}>{'â˜…'.repeat(review.rating)}{'â˜†'.repeat(5 - review.rating)}</span>
                           <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                            {review.user?.name || 'Anónimo'}
+                            {review.user?.name || 'AnÃ³nimo'}
                           </span>
                         </div>
                         {review.comment && <p style={{ margin: 0, color: 'var(--text-muted)' }}>{review.comment}</p>}
@@ -1708,14 +1753,14 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           }
         }
 
-        /* ── Store Layout Fix ─────────────────── */
+        /* â”€â”€ Store Layout Fix â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .store-shell {
           position: relative;
           min-height: 100vh;
           padding-top: 140px; /* Space for the floating Dock */
         }
 
-        /* ── Store mode toggle ─────────────────── */
+        /* â”€â”€ Store mode toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .store-mode-toggle {
           position: relative;
           z-index: 50; /* Above content, below Dock */
@@ -1794,7 +1839,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           color: var(--text-primary);
         }
 
-        /* ── Employee stores grid ──────────────── */
+        /* â”€â”€ Employee stores grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .emp-stores-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -1980,3 +2025,10 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
     </div>
   );
 }
+
+
+
+
+
+
+
