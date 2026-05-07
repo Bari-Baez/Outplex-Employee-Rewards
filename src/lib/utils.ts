@@ -19,6 +19,12 @@ export function calcDuration(startTime: string, endTime: string): number {
 }
 
 export type OTDateFormat = 'auto' | 'mdy' | 'dmy';
+export type OTMeridiem = 'am' | 'pm';
+export type ParsedFlexibleTime = {
+  value: string;
+  isAmbiguous: boolean;
+  normalizedInput: string;
+};
 
 /**
  * Format a date string to display label
@@ -97,28 +103,90 @@ export function getInitials(name: string): string {
  * "4:00 PM"   → "16:00"
  * "16:00"     → "16:00" (passthrough)
  */
+function normalizeTimeInput(rawTime: string) {
+  return rawTime
+    .trim()
+    .toLowerCase()
+    .replace(/\u00a0/g, ' ')
+    .replace(/\.(?=[ap]m\b)/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^(\d{1,2})([ap])$/, '$1 $2m')
+    .replace(/^(\d{1,2})([ap]m)$/, '$1 $2')
+    .replace(/^(\d{1,2}:\d{2})([ap])$/, '$1 $2m')
+    .replace(/^(\d{1,2}:\d{2})([ap]m)$/, '$1 $2')
+    .replace(/^(\d{1,2}:\d{2}:\d{2})([ap]m)$/, '$1 $2')
+    .trim();
+}
+
+export function parseFlexibleTime(
+  rawTime: string,
+  options?: { defaultMeridiem?: OTMeridiem | null },
+): ParsedFlexibleTime {
+  if (!rawTime) {
+    return { value: '', isAmbiguous: false, normalizedInput: '' };
+  }
+
+  const normalizedInput = normalizeTimeInput(rawTime);
+  const match = normalizedInput.match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?(?:\s*([ap]m))?$/i);
+  if (!match) {
+    return { value: '', isAmbiguous: false, normalizedInput };
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] ?? '0');
+  const meridiem = (match[3]?.toLowerCase() as OTMeridiem | undefined) ?? null;
+
+  if (
+    Number.isNaN(hours) ||
+    Number.isNaN(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return { value: '', isAmbiguous: false, normalizedInput };
+  }
+
+  if (meridiem) {
+    if (hours > 12 || hours === 0) {
+      return { value: '', isAmbiguous: false, normalizedInput };
+    }
+    if (meridiem === 'pm' && hours !== 12) hours += 12;
+    if (meridiem === 'am' && hours === 12) hours = 0;
+    return {
+      value: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`,
+      isAmbiguous: false,
+      normalizedInput,
+    };
+  }
+
+  if (hours > 12) {
+    return {
+      value: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`,
+      isAmbiguous: false,
+      normalizedInput,
+    };
+  }
+
+  const defaultMeridiem = options?.defaultMeridiem ?? null;
+  if (!defaultMeridiem) {
+    return { value: '', isAmbiguous: true, normalizedInput };
+  }
+
+  if (defaultMeridiem === 'pm' && hours !== 12) hours += 12;
+  if (defaultMeridiem === 'am' && hours === 12) hours = 0;
+
+  return {
+    value: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`,
+    isAmbiguous: false,
+    normalizedInput,
+  };
+}
+
 export function parseSpanishTime(rawTime: string): string {
   if (!rawTime) return '';
-  const cleaned = rawTime.trim().toLowerCase();
-
-  // Already in HH:MM or HH:MM:SS 24h format
-  if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(cleaned)) {
-    const [h, m] = cleaned.split(':').map(Number);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  }
-
-  // Match patterns like "4:00 p.m.", "4:00 PM", "4:00PM", "4:00:00 am"
-  const match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(a\.?m\.?|p\.?m\.?)$/);
-  if (match) {
-    let hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    const period = match[3].replace(/\./g, '');
-    if (period === 'pm' && hours !== 12) hours += 12;
-    if (period === 'am' && hours === 12) hours = 0;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  }
-
-  return rawTime; // fallback
+  const parsed = parseFlexibleTime(rawTime);
+  return parsed.value || rawTime;
 }
 
 /**
