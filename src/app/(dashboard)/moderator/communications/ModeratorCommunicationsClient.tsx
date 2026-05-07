@@ -181,10 +181,8 @@ function isGifBlock(block: AnnouncementBlock): block is AnnouncementGifBlock {
 interface TenorResult {
   id: string;
   title: string;
-  media_formats: {
-    gif: { url: string };
-    tinygif: { url: string };
-  };
+  gif: string;    // full-size GIF URL
+  tinygif: string; // thumbnail GIF URL
 }
 
 export function ModeratorCommunicationsClient({
@@ -226,8 +224,7 @@ export function ModeratorCommunicationsClient({
     for (const blockId of gifBlockIds) {
       if (!(blockId in gifResults)) {
         setGifSearching((prev) => ({ ...prev, [blockId]: true }));
-        const url = `https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=16&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`;
-        fetch(url)
+        fetch('/api/gif/search')
           .then((res) => res.json())
           .then((json: { results: TenorResult[] }) => {
             setGifResults((prev) => ({ ...prev, [blockId]: json.results }));
@@ -567,17 +564,13 @@ export function ModeratorCommunicationsClient({
   const handleGifSearch = useCallback(async (blockId: string, query: string) => {
     setGifSearching((prev) => ({ ...prev, [blockId]: true }));
     try {
-      const q = query.trim();
-      // Tenor v1 — public test key, no account required
-      const url = q
-        ? `https://api.tenor.com/v1/search?q=${encodeURIComponent(q)}&key=LIVDSRZULELA&limit=16&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`
-        : `https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=16&media_filter=minimal&contentfilter=medium&client_key=outplex_internal`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Tenor error ${res.status}`);
+      const params = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+      const res = await fetch(`/api/gif/search${params}`);
+      if (!res.ok) throw new Error(`GIF search error ${res.status}`);
       const json = (await res.json()) as { results: TenorResult[] };
       setGifResults((prev) => ({ ...prev, [blockId]: json.results }));
     } catch {
-      // silently fail — user can paste a GIF URL directly
+      // silently fail
     } finally {
       setGifSearching((prev) => ({ ...prev, [blockId]: false }));
     }
@@ -887,26 +880,69 @@ export function ModeratorCommunicationsClient({
               <div className="studio-stat-card"><strong>{announcementStats.drafts}</strong><span>Drafts</span></div>
             </div>
 
-            <div className="studio-form-grid">
-              <div>
-                <label className="studio-label">Title</label>
-                <input className="input" value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="Announcement title" />
+            {/* ── Top metadata strip ── */}
+            <div className="studio-meta-strip">
+              <div className="studio-meta-strip-row">
+                <div className="studio-meta-field studio-meta-field-grow">
+                  <label className="studio-label">Title</label>
+                  <input className="input" value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="Announcement title" />
+                </div>
+                <div className="studio-meta-field">
+                  <label className="studio-label">Visible for</label>
+                  <ModernSelect
+                    value={String(announcementForm.durationDays)}
+                    onValueChange={v => setAnnouncementForm(current => ({ ...current, durationDays: Number(v) as AnnouncementDurationDays }))}
+                    options={ANNOUNCEMENT_DURATION_OPTIONS.map(value => ({
+                      label: announcementDurationLabel(value),
+                      value: String(value)
+                    }))}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="studio-label">Duration</label>
-                <ModernSelect
-                  value={String(announcementForm.durationDays)}
-                  onValueChange={v => setAnnouncementForm(current => ({ ...current, durationDays: Number(v) as AnnouncementDurationDays }))}
-                  options={ANNOUNCEMENT_DURATION_OPTIONS.map(value => ({
-                    label: announcementDurationLabel(value),
-                    value: String(value)
-                  }))}
-                />
+
+              {/* Publication mode — always visible at top */}
+              <div className="studio-pub-mode-row">
+                <span className="studio-pub-mode-label">Publish as:</span>
+                <div className="studio-mode-row">
+                  {([
+                    ['draft', 'Draft'],
+                    ['scheduled', 'Schedule'],
+                    ['published', 'Publish now'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`studio-mode-chip ${announcementForm.action === value ? 'studio-mode-chip-active' : ''}`}
+                      onClick={() => setAnnouncementForm((current) => ({ ...current, action: value }))}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {announcementForm.action === 'scheduled' && (
+                  <div className="studio-schedule-inline">
+                    <ModernDatePicker
+                      date={announcementForm.publishAt.split('T')[0] || ''}
+                      onDateChange={v => {
+                        const time = announcementForm.publishAt.split('T')[1] || '00:00';
+                        setAnnouncementForm(current => ({ ...current, publishAt: `${v}T${time}` }));
+                      }}
+                    />
+                    <ModernTimePicker
+                      time={announcementForm.publishAt.split('T')[1] || ''}
+                      onTimeChange={v => {
+                        const date = announcementForm.publishAt.split('T')[0] || new Date().toISOString().split('T')[0];
+                        setAnnouncementForm(current => ({ ...current, publishAt: `${date}T${v}` }));
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
-            <div style={{ marginTop: '1rem' }}>
-              <label className="studio-label">Excerpt</label>
+            {/* ── Excerpt ── */}
+            <div>
+              <label className="studio-label">Excerpt <span className="studio-label-hint">(shown on announcement card)</span></label>
               <textarea
                 className="input studio-textarea"
                 value={announcementForm.excerpt}
@@ -915,59 +951,24 @@ export function ModeratorCommunicationsClient({
               />
             </div>
 
-            <div className="studio-form-grid" style={{ marginTop: '1rem' }}>
-              <div>
-                <label className="studio-label">Cover image</label>
-                <div className="studio-upload-row">
-                  <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAnnouncementCoverUpload(file); event.currentTarget.value = ''; }} />
-                </div>
+            {/* ── Cover image — compact strip ── */}
+            <div className="studio-cover-strip">
+              <div className="studio-cover-strip-thumb">
+                {announcementForm.coverImageUrl
+                  ? <img src={announcementForm.coverImageUrl} alt="Cover" />
+                  : <span className="studio-cover-strip-placeholder">No cover</span>}
               </div>
-              <div className="studio-cover-preview">
-                {announcementForm.coverImageUrl ? <img src={proxifyMediaUrl(announcementForm.coverImageUrl)} alt="Announcement cover preview" /> : <span>Cover preview</span>}
-              </div>
-            </div>
-
-            <div style={{ marginTop: '1rem' }}>
-              <label className="studio-label">Publication mode</label>
-              <div className="studio-mode-row">
-                {([
-                  ['draft', 'Save draft'],
-                  ['scheduled', 'Schedule'],
-                  ['published', 'Publish now'],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`studio-mode-chip ${announcementForm.action === value ? 'studio-mode-chip-active' : ''}`}
-                    onClick={() => setAnnouncementForm((current) => ({ ...current, action: value }))}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="studio-cover-strip-right">
+                <span className="studio-label">Cover image <span className="studio-label-hint">(optional)</span></span>
+                <label className="studio-cover-upload-btn">
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleAnnouncementCoverUpload(file); event.currentTarget.value = ''; }} />
+                  Choose image
+                </label>
+                {announcementForm.coverImageUrl && (
+                  <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem' }} onClick={() => setAnnouncementForm(c => ({ ...c, coverImageUrl: '' }))}>Remove</button>
+                )}
               </div>
             </div>
-
-            {announcementForm.action === 'scheduled' ? (
-              <div style={{ marginTop: '1rem' }}>
-                <label className="studio-label">Publish date and time</label>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <ModernDatePicker
-                    date={announcementForm.publishAt.split('T')[0] || ''}
-                    onDateChange={v => {
-                      const time = announcementForm.publishAt.split('T')[1] || '00:00';
-                      setAnnouncementForm(current => ({ ...current, publishAt: `${v}T${time}` }));
-                    }}
-                  />
-                  <ModernTimePicker
-                    time={announcementForm.publishAt.split('T')[1] || ''}
-                    onTimeChange={v => {
-                      const date = announcementForm.publishAt.split('T')[0] || new Date().toISOString().split('T')[0];
-                      setAnnouncementForm(current => ({ ...current, publishAt: `${date}T${v}` }));
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
 
             {isStoreLimited ? (
               <div className={`studio-hint ${targetAnnouncementCount >= 1 ? 'studio-hint-danger' : ''}`}>
@@ -979,7 +980,7 @@ export function ModeratorCommunicationsClient({
 
             {/* ---- Visual block picker ---- */}
             <div>
-              <label className="studio-label" style={{ marginBottom: '0.75rem' }}>Add a content block</label>
+              <label className="studio-label" style={{ marginBottom: '0.55rem' }}>Add a content block</label>
               <div className="studio-block-picker">
                 {([
                   { type: 'text' as const, icon: <AlignLeft size={18} />, label: 'Text', desc: 'Heading + body paragraph' },
@@ -1054,7 +1055,7 @@ export function ModeratorCommunicationsClient({
                             </div>
                           </div>
                         </div>
-                        {block.imageUrl ? <img src={proxifyMediaUrl(block.imageUrl)} alt="Announcement block preview" className="studio-media-preview" /> : null}
+                        {block.imageUrl ? <img src={block.imageUrl} alt="Announcement block preview" className="studio-media-preview" /> : null}
                         <div className="studio-form-grid">
                           <div>
                             <label className="studio-label">Caption</label>
@@ -1221,10 +1222,10 @@ export function ModeratorCommunicationsClient({
                                   key={gif.id}
                                   type="button"
                                   className={`gif-picker-thumb ${block.gifId === gif.id ? 'gif-picker-thumb-active' : ''}`}
-                                  onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: gif.media_formats.gif.url, gifId: gif.id } : current)}
+                                  onClick={() => updateAnnouncementBlock(block.id, (current) => isGifBlock(current) ? { ...current, gifUrl: gif.gif, gifId: gif.id } : current)}
                                   title={gif.title}
                                 >
-                                  <img src={gif.media_formats.tinygif.url} alt={gif.title} loading="lazy" />
+                                  <img src={gif.tinygif} alt={gif.title} loading="lazy" />
                                   {block.gifId === gif.id && (
                                     <span className="gif-picker-check">✓</span>
                                   )}
@@ -1275,19 +1276,27 @@ export function ModeratorCommunicationsClient({
               })}
             </div>
 
-            <div className="studio-actions">
-              <button type="button" className="btn btn-primary" onClick={() => void handleSaveAnnouncement()} disabled={busy === 'announcement'}>
-                {busy === 'announcement' ? <Save size={15} /> : announcementForm.action === 'published' ? <Send size={15} /> : <Save size={15} />}
-                {busy === 'announcement'
-                  ? 'Saving...'
-                  : announcementForm.action === 'published'
-                    ? editingAnnouncementId
-                      ? 'Update and publish'
-                      : 'Publish announcement'
-                    : announcementForm.action === 'scheduled'
-                      ? 'Schedule announcement'
-                      : 'Save draft'}
-              </button>
+            <div className="studio-sticky-actions">
+              <div className="studio-sticky-actions-left">
+                <span className="studio-sticky-mode-label">
+                  {announcementForm.action === 'published' ? '🟢 Publish now' : announcementForm.action === 'scheduled' ? '🕐 Scheduled' : '📝 Draft'}
+                </span>
+              </div>
+              <div className="studio-sticky-actions-right">
+                {editingAnnouncementId && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={resetAnnouncementEditor}>Cancel</button>
+                )}
+                <button type="button" className="btn btn-primary" onClick={() => void handleSaveAnnouncement()} disabled={busy === 'announcement'}>
+                  {busy === 'announcement' ? <Save size={15} /> : announcementForm.action === 'published' ? <Send size={15} /> : <Save size={15} />}
+                  {busy === 'announcement'
+                    ? 'Saving...'
+                    : announcementForm.action === 'published'
+                      ? editingAnnouncementId ? 'Update & publish' : 'Publish now'
+                      : announcementForm.action === 'scheduled'
+                        ? 'Schedule'
+                        : 'Save draft'}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -1309,27 +1318,22 @@ export function ModeratorCommunicationsClient({
                   <p>Open any draft, scheduled post, or live announcement to keep iterating.</p>
                 </div>
               </div>
-              <div className="studio-list">
+              <div className="studio-compact-list">
                 {announcements.length === 0 ? (
                   <div className="studio-empty">No announcements yet.</div>
                 ) : (
                   announcements.map((item) => (
-                    <article key={item.id} className="studio-list-card">
-                      <div className="studio-list-card-top">
-                        <div className={`studio-status-pill studio-status-pill-${item.status}`}>{item.status}</div>
-                        <span className="studio-list-date">{formatCommunicationDate(item.publish_at ?? item.created_at)}</span>
+                    <div key={item.id} className="studio-compact-row">
+                      <div className={`studio-status-dot studio-status-dot-${item.status}`} title={item.status} />
+                      <div className="studio-compact-row-body">
+                        <span className="studio-compact-row-title">{item.title}</span>
+                        <span className="studio-compact-row-meta">{formatCommunicationDate(item.publish_at ?? item.created_at)} · {announcementDurationLabel(item.duration_days)}</span>
                       </div>
-                      <h3>{item.title}</h3>
-                      <p>{item.excerpt || 'No excerpt added yet.'}</p>
-                      <div className="studio-list-meta">
-                        <span>{announcementDurationLabel(item.duration_days)}</span>
-                        <span>{item.author?.name ?? currentModeratorName}</span>
+                      <div className="studio-compact-row-actions">
+                        <button type="button" className="studio-compact-btn" onClick={() => { setEditingAnnouncementId(item.id); setAnnouncementForm(toAnnouncementForm(item)); }}>Edit</button>
+                        <button type="button" className="studio-compact-btn studio-compact-btn-danger" onClick={() => setDeleteConfirm({ type: 'announcement', id: item.id })}>Delete</button>
                       </div>
-                      <div className="studio-inline-actions">
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditingAnnouncementId(item.id); setAnnouncementForm(toAnnouncementForm(item)); }}>Edit</button>
-                        <button type="button" className="btn btn-ghost btn-sm studio-danger-btn" onClick={() => setDeleteConfirm({ type: 'announcement', id: item.id })}>Delete</button>
-                      </div>
-                    </article>
+                    </div>
                   ))
                 )}
               </div>
@@ -1668,31 +1672,233 @@ export function ModeratorCommunicationsClient({
           color: var(--text-secondary);
         }
 
-        .studio-cover-preview,
-        .studio-media-preview {
+        /* ── Compact meta strip ── */
+        .studio-meta-strip {
+          display: grid;
+          gap: 0.65rem;
+          padding: 0.85rem 1rem;
+          border: 1px solid rgba(255, 255, 255, 0.07);
           border-radius: 18px;
-          overflow: hidden;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.03);
+          background: rgba(255, 255, 255, 0.02);
         }
 
-        .studio-cover-preview {
-          min-height: 188px;
+        .studio-meta-strip-row {
+          display: flex;
+          gap: 0.75rem;
+          align-items: flex-end;
+          flex-wrap: wrap;
+        }
+
+        .studio-meta-field {
+          display: grid;
+          gap: 0.3rem;
+        }
+
+        .studio-meta-field-grow { flex: 1; min-width: 200px; }
+
+        .studio-pub-mode-row {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          flex-wrap: wrap;
+          padding-top: 0.5rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .studio-pub-mode-label {
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          white-space: nowrap;
+        }
+
+        .studio-schedule-inline {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+
+        /* ── Compact cover strip ── */
+        .studio-cover-strip {
+          display: flex;
+          align-items: center;
+          gap: 0.85rem;
+          padding: 0.65rem 0.85rem;
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .studio-cover-strip-thumb {
+          width: 72px;
+          height: 52px;
+          border-radius: 10px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.04);
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .studio-cover-strip-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .studio-cover-strip-placeholder {
+          font-size: 0.7rem;
+          color: var(--text-muted);
+          text-align: center;
+        }
+
+        .studio-cover-strip-right {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+          flex-wrap: wrap;
+        }
+
+        .studio-cover-upload-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          padding: 0.35rem 0.85rem;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.05);
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: background 0.16s ease;
+        }
+
+        .studio-cover-upload-btn:hover {
+          background: rgba(255, 255, 255, 0.09);
+        }
+
+        /* ── Sticky actions bar ── */
+        .studio-sticky-actions {
+          position: sticky;
+          bottom: 0;
+          z-index: 20;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          padding: 0.65rem 1rem;
+          border-radius: 14px;
+          border: 1px solid rgba(124, 108, 255, 0.2);
+          background: rgba(12, 16, 30, 0.94);
+          backdrop-filter: blur(12px);
+          margin-top: 0.25rem;
+        }
+
+        .studio-sticky-actions-left {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+        }
+
+        .studio-sticky-actions-right {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .studio-sticky-mode-label {
+          font-size: 0.78rem;
+          font-weight: 700;
           color: var(--text-muted);
         }
 
-        .studio-cover-preview img,
+        /* ── Compact announcement list ── */
+        .studio-compact-list {
+          display: grid;
+          gap: 2px;
+        }
+
+        .studio-compact-row {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.6rem 0.75rem;
+          border-radius: 10px;
+          transition: background 0.14s ease;
+        }
+
+        .studio-compact-row:hover {
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        .studio-status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+
+        .studio-status-dot-published { background: #34d399; }
+        .studio-status-dot-scheduled { background: #f59e0b; }
+        .studio-status-dot-draft { background: rgba(148, 163, 184, 0.4); }
+
+        .studio-compact-row-body {
+          flex: 1;
+          min-width: 0;
+          display: grid;
+          gap: 0.1rem;
+        }
+
+        .studio-compact-row-title {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .studio-compact-row-meta {
+          font-size: 0.72rem;
+          color: var(--text-muted);
+        }
+
+        .studio-compact-row-actions {
+          display: flex;
+          gap: 0.35rem;
+          flex-shrink: 0;
+        }
+
+        .studio-compact-btn {
+          padding: 0.25rem 0.6rem;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.09);
+          background: rgba(255, 255, 255, 0.04);
+          font-size: 0.72rem;
+          font-weight: 700;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: background 0.14s ease;
+        }
+
+        .studio-compact-btn:hover { background: rgba(255,255,255,0.09); }
+        .studio-compact-btn-danger { color: #fca5a5; }
+        .studio-compact-btn-danger:hover { background: rgba(239,68,68,0.12); }
+
         .studio-media-preview {
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          max-height: 220px;
           width: 100%;
           display: block;
           object-fit: cover;
-        }
-
-        .studio-media-preview {
-          max-height: 260px;
         }
 
         .studio-block-list,
