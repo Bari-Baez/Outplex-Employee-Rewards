@@ -336,32 +336,68 @@ export async function processFileBuffer(
   let globalDate: string | null = null;
 
   try {
-    const XLSX = await import('xlsx');
-    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-    
-    const targetSheetName =
-      workbook.SheetNames.find((n) => /raw/i.test(n)) ??
-      workbook.SheetNames.find((n) => /regular/i.test(n)) ??
-      workbook.SheetNames[0];
-    
-    if (!targetSheetName) throw new Error('No valid sheet found');
-    const sheet = workbook.Sheets[targetSheetName];
+    const ext = fileName.toLowerCase().split('.').pop() ?? '';
+    const isCsv = ext === 'csv';
+    let sheetName = fileName;
 
-    // Read as 2D array to find headers and date
-    rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+    if (isCsv) {
+      // Parse CSV manually — handle quoted fields
+      const text = new TextDecoder().decode(buffer);
+      rawRows = text.split(/\r?\n/).filter(l => l.trim()).map(line => {
+        const fields: string[] = [];
+        let field = '';
+        let inQuote = false;
+        for (const ch of line) {
+          if (ch === '"') { inQuote = !inQuote; continue; }
+          if (ch === ',' && !inQuote) { fields.push(field.trim()); field = ''; continue; }
+          field += ch;
+        }
+        fields.push(field.trim());
+        return fields;
+      });
+    } else {
+      const ExcelJS = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      // exceljs types predate Node 22 Buffer<ArrayBufferLike> — safe at runtime
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await wb.xlsx.load(new Uint8Array(buffer) as any);
+
+      const targetSheet =
+        wb.worksheets.find((ws) => /raw/i.test(ws.name)) ??
+        wb.worksheets.find((ws) => /regular/i.test(ws.name)) ??
+        wb.worksheets[0];
+
+      if (!targetSheet) throw new Error('No valid sheet found');
+      sheetName = targetSheet.name;
+
+      targetSheet.eachRow({ includeEmpty: false }, (row) => {
+        const values = (row.values as unknown[]).slice(1); // exceljs rows are 1-indexed
+        rawRows.push(values.map((v) => {
+          if (v === null || v === undefined) return '';
+          if (v instanceof Date) return v.toLocaleDateString('en-US');
+          if (typeof v === 'object') {
+            if ('result' in (v as object)) return String((v as { result: unknown }).result ?? '');
+            if ('text' in (v as object)) return String((v as { text: unknown }).text ?? '');
+            return '';
+          }
+          return String(v);
+        }));
+      });
+    }
 
     // 1. Detect global metadata from title area if possible
-    globalDate = extractReportDate(rawRows, fileName, targetSheetName);
+    globalDate = extractReportDate(rawRows, fileName, sheetName);
     const globalLob = extractGlobalLob(rawRows);
 
     // 2. Detect the real header row
     const headerIdx = detectHeaderRow(rawRows);
-    
-    // 3. Convert to objects starting from detected header
-    const dataRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      range: headerIdx, 
-      defval: '', 
-      raw: false 
+
+    // 3. Convert to objects starting from detected header (headerIdx = header row)
+    const headerRow = (rawRows[headerIdx] ?? []) as string[];
+    const dataRows: Record<string, unknown>[] = rawRows.slice(headerIdx + 1).map((row) => {
+      const obj: Record<string, unknown> = {};
+      headerRow.forEach((key, i) => { obj[key] = (row as string[])[i] ?? ''; });
+      return obj;
     });
 
     const normalizedRows: ParsedCsvRow[] = [];
