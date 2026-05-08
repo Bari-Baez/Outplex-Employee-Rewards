@@ -1,6 +1,7 @@
 ﻿'use client';
 
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Clock3, Edit2, Eye, EyeOff, LayoutDashboard, MoreVertical, Package, Plus, Save, Settings, ShoppingBag, Trash2, TrendingUp, X } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Clock3, Edit2, Eye, EyeOff, ImageIcon, LayoutDashboard, Loader2, Lock, MoreVertical, Package, Palette, PencilLine, Plus, Save, Settings, ShoppingBag, Sparkles, Store as StoreIcon, Tag, Trash2, TrendingUp, Upload, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { TransferProgress } from '@/components/uploads/TransferProgress';
 import { useTransferState } from '@/components/uploads/useTransferState';
@@ -9,6 +10,14 @@ import { ModernTimePicker } from '@/components/ui/TimePicker';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { EmployeeStore, EmployeeStoreProduct, EmployeeStoreRequest, Notification } from '@/types/database';
 import { uploadFormDataWithProgress } from '@/lib/file-transfer';
+import { createClient } from '@/lib/supabase/client';
+import { formatDop } from '@/lib/utils';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
+
+type ExtendedEmployeeStoreProduct = EmployeeStoreProduct & {
+  status?: 'pending' | 'pending_review' | 'active' | 'rejected' | 'suspended' | 'out_of_stock' | 'draft';
+  moderation_note?: string | null;
+};
 
 type TabKey = 'products' | 'orders' | 'profile' | 'dashboard';
 

@@ -113,13 +113,13 @@ export async function PATCH(request: Request) {
       let notifContent = '';
       if (notifyType === 'approved') {
         notifTitle = 'Producto Aprobado';
-        notifContent = Tu producto " + product.name + " ha sido aprobado y ya está disponible en la tienda.;
+        notifContent = `Tu producto "${product.name}" ha sido aprobado y ya está disponible en la tienda.`;
       } else if (notifyType === 'rejected') {
         notifTitle = 'Producto Rechazado';
-        notifContent = Tu producto " + product.name + " no fue aprobado + (reviewNotes ? ': ' + reviewNotes : '.');
+        notifContent = `Tu producto "${product.name}" no fue aprobado${reviewNotes ? ': ' + reviewNotes : '.'}`;
       } else if (notifyType === 'suspended') {
         notifTitle = 'Producto Suspendido';
-        notifContent = Tu producto " + product.name + " ha sido suspendido por moderación + (reviewNotes ? '. Motivo: ' + reviewNotes : '.');
+        notifContent = `Tu producto "${product.name}" ha sido suspendido por moderación${reviewNotes ? '. Motivo: ' + reviewNotes : '.'}`;
       }
 
       if (notifTitle) {

@@ -1,6 +1,13 @@
 ﻿'use client';
 
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AlertCircle, ArrowLeft, CheckCircle2, Clipboard, Clock3, Heart, Info, MessageSquare, Phone, ShoppingBag, Sparkles, Star, Store, Zap, Calendar } from 'lucide-react';
+import type { User, EmployeeStoreProduct, EmployeeStoreProductReview, StoreItem, StoreThemeConfig, StoreReview } from '@/types/database';
+import { useAppStore } from '@/lib/store';
+import { toast } from 'sonner';
+import { proxifyMediaUrl } from '@/lib/media-proxy';
+import { formatDop } from '@/lib/utils';
+import { isLowStockItem, getLowStockUrgencyCopy, getStockLabel, formatPoints, getStoreThemePresentation } from '@/lib/store-helpers';
 
 type EmployeeReviewUser = Pick<User, 'id' | 'name' | 'avatar_url'>;
 type EmployeeProductReview = Pick<EmployeeStoreProductReview, 'id' | 'rating' | 'user_id'> & {
@@ -828,6 +835,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 {filtered.map((store) => {
                   const isOpen = isStoreCurrentlyOpen(store);
                   const isScheduled = store.status === 'scheduled';
+                  const statusInfo = getStoreScheduleStatus(store);
                   return (
                     <button
                       key={store.id}

@@ -384,7 +384,7 @@ export interface AppShellBadge {
 // Employee Store (Phase 2)
 // ============================================
 
-export type EmployeeStoreRequestStatus = 'pending' | 'approved' | 'rejected';
+export type EmployeeStoreRequestStatus = 'pending' | 'pending_review' | 'approved' | 'rejected';
 export type EmployeeStoreStatus = 'active' | 'paused' | 'closed' | 'scheduled' | 'suspended';
 export type EmployeeStoreOrderStatus = 'pending' | 'ready_for_pickup' | 'completed' | 'cancelled';
 export type EmployeeStoreContactMethod = 'slack' | 'whatsapp' | 'email' | 'none';
@@ -451,7 +451,8 @@ export interface EmployeeStoreProduct {
   is_active: boolean;
   is_suspended?: boolean;
   suspend_reason?: string | null;
-  status?: 'pending' | 'active' | 'rejected' | 'out_of_stock' | 'draft';
+  moderation_note?: string | null;
+  status?: 'pending' | 'pending_review' | 'active' | 'rejected' | 'suspended' | 'out_of_stock' | 'draft';
   created_at: string;
   updated_at: string;
   store?: Pick<EmployeeStore, 'id' | 'slug' | 'name' | 'owner_id'>;

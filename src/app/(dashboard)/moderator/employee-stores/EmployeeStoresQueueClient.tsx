@@ -46,7 +46,7 @@ interface EmployeeStoresQueueClientProps {
   currentUser: User;
   initialRequests: RequestWithUser[];
   initialStores: StoreWithOwner[];
-  initialProducts?: (EmployeeStoreProduct & { status?: 'active' | 'suspended' | 'pending_review'; moderation_note?: string | null;
+  initialProducts?: (Omit<EmployeeStoreProduct, 'status'> & { status?: 'active' | 'suspended' | 'pending_review' | 'rejected'; moderation_note?: string | null;
     store: {
       id: string;
       name: string;
@@ -173,8 +173,8 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
     setDialogNotes('');
   };
 
-    const confirmSuspendProduct = async () => {
-    if (!suspendProductDialog) return;
+  const confirmSuspendProduct = async () => {
+    if (!suspendDialog) return;
     if (!dialogNotes.trim()) {
       setStatusMessage({ tone: 'danger', text: 'Reason is required for suspending a product.' });
       return;
@@ -185,7 +185,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productId: suspendProductDialog.id,
+          productId: suspendDialog.id,
           status: 'suspended',
           reviewNotes: dialogNotes.trim(),
         }),
@@ -202,10 +202,10 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
         )
       );
       setStatusMessage({ tone: 'success', text: 'Product suspended successfully.' });
-      setSuspendProductDialog(null);
+      setSuspendDialog(null);
       setDialogNotes('');
-    } catch (err: any) {
-      setStatusMessage({ tone: 'danger', text: err.message });
+    } catch (err: unknown) {
+      setStatusMessage({ tone: 'danger', text: err instanceof Error ? err.message : 'Unable to suspend product.' });
     } finally {
       setSaving(false);
     }
@@ -266,33 +266,6 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
       router.refresh();
     } catch (err) {
       setStatusMessage({ tone: 'danger', text: err instanceof Error ? err.message : 'Unable to save decision.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const confirmSuspendProduct = async () => {
-    if (!suspendDialog) return;
-    setSaving(true);
-    try {
-      const res = await fetch('/api/moderator/employee-store/products', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: suspendDialog.id,
-          is_suspended: true,
-          suspend_reason: dialogNotes.trim() || null,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Unable to suspend product.');
-      setProducts(current => current.map(p => p.id === suspendDialog.id ? { ...p, is_suspended: true, suspend_reason: dialogNotes.trim() || null } : p));
-      setStatusMessage({ tone: 'success', text: 'Product suspended and user notified.' });
-      setSuspendDialog(null);
-      setDialogNotes('');
-      router.refresh();
-    } catch (err) {
-      setStatusMessage({ tone: 'danger', text: err instanceof Error ? err.message : 'Unable to suspend product.' });
     } finally {
       setSaving(false);
     }
@@ -744,8 +717,8 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
         </section>
       )}
 
-            {suspendProductDialog && (
-        <div className="modal-backdrop" onClick={() => !saving && setSuspendProductDialog(null)}>
+            {suspendDialog && (
+        <div className="modal-backdrop" onClick={() => !saving && setSuspendDialog(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <><PauseCircle size={22} style={{ color: '#f59e0b' }} /><h3>Suspend product</h3></>
@@ -765,7 +738,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
               />
             </label>
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setSuspendProductDialog(null)} disabled={saving}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setSuspendDialog(null)} disabled={saving}>Cancel</button>
               <button
                 className="btn btn-primary"
                 style={{ background: '#f59e0b' }}
@@ -813,41 +786,6 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
               >
                 {saving ? <Loader2 size={16} className="spinning" /> : dialog.decision === 'approved' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
                 {dialog.decision === 'approved' ? 'Approve' : 'Reject'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {suspendDialog && (
-        <div className="modal-backdrop" onClick={() => !saving && setSuspendDialog(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <XCircle size={22} style={{ color: '#f59e0b' }} /><h3>Suspend Product</h3>
-            </div>
-            <p className="text-muted" style={{ margin: 0 }}>
-              The owner will be notified with the reason. The product will be hidden from the store.
-            </p>
-            <label className="form-field">
-              <span>Suspension Reason *</span>
-              <textarea
-                className="input"
-                rows={4}
-                value={dialogNotes}
-                onChange={(e) => setDialogNotes(e.target.value)}
-                placeholder="Reason for suspension..."
-              />
-            </label>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" disabled={saving} onClick={() => setSuspendDialog(null)}>Cancel</button>
-              <button
-                className="btn btn-primary btn-danger"
-                style={{ background: '#f59e0b' }}
-                disabled={saving || !dialogNotes.trim()}
-                onClick={() => void confirmSuspendProduct()}
-              >
-                {saving ? <Loader2 size={16} className="spinning" /> : <XCircle size={16} />}
-                Suspend Product
               </button>
             </div>
           </div>
