@@ -1184,7 +1184,7 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button className="btn btn-ghost" style={{ fontSize: '0.8rem' }} onClick={() => window.location.href = `/api/forms/${draft.id}/export`}>
-                    <Download size={14} /> Exportar CSV
+                    <Download size={14} /> Exportar Excel
                   </button>
                   {googleConnected && (
                     <button

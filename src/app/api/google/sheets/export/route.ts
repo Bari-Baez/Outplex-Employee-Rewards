@@ -4,7 +4,11 @@ import { getValidAccessToken } from '@/lib/google/oauth';
 import type { FormField } from '@/lib/forms/types';
 import { isFormModeratorRole } from '@/lib/forms/auth';
 
-interface SheetsCreateResponse { spreadsheetId: string; spreadsheetUrl: string }
+interface SheetsCreateResponse {
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+  sheets: Array<{ properties: { title: string } }>;
+}
 interface SheetsValuesResponse { updatedCells: number }
 
 export async function POST(req: NextRequest) {
@@ -47,7 +51,10 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ properties: { title: `${title} — Respuestas` } }),
+      body: JSON.stringify({
+        properties: { title: `${title} — Respuestas` },
+        sheets: [{ properties: { title: 'Respuestas' } }],
+      }),
     });
 
     if (!createRes.ok) {
@@ -55,7 +62,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Sheets API error: ${text}` }, { status: createRes.status });
     }
 
-    const { spreadsheetId, spreadsheetUrl } = await createRes.json() as SheetsCreateResponse;
+    const createData = await createRes.json() as SheetsCreateResponse;
+    const { spreadsheetId, spreadsheetUrl } = createData;
+    const sheetTitle = createData.sheets?.[0]?.properties?.title ?? 'Respuestas';
 
     // 2. Build rows
     const headers = ['Empleado', 'Correo', 'ID Empleado', 'Fecha de envío', ...fields.map((f) => f.label)];
@@ -78,7 +87,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Write data
     const updateRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:append?valueInputOption=RAW`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetTitle)}!A1:append?valueInputOption=RAW`,
       {
         method: 'POST',
         headers: {
