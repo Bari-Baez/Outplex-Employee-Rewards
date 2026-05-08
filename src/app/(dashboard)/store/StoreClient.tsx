@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AlertCircle, ArrowLeft, CheckCircle2, Clipboard, Clock3, Heart, Info, MessageSquare, Phone, ShoppingBag, Sparkles, Star, Store, Zap, Calendar } from 'lucide-react';
@@ -105,8 +105,8 @@ function formatSDTime(timeStr: string) {
   const [h, m] = timeStr.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
-  const mStr = m < 10 ? "0$m" : m;
-  return "$h12:$mStr $ampm";
+  const mStr = m < 10 ? `0${m}` : `${m}`;
+  return `${h12}:${mStr} ${ampm}`;
 }
 
 export function getStoreScheduleStatus(store: EmployeeStorePublic) {
@@ -139,13 +139,13 @@ export function getStoreScheduleStatus(store: EmployeeStorePublic) {
     const minLeft = todayCloseMin - currentMinutes;
     const formattedRange = formatSDTime(config.open) + ' - ' + formatSDTime(config.close);
     if (minLeft <= 60) {
-      return { isOpen: true, isClosingSoon: true, statusText: 'Cierra pronto · ' + formattedRange, isManual: false };
+      return { isOpen: true, isClosingSoon: true, statusText: 'Cierra pronto - ' + formattedRange, isManual: false };
     }
     return { isOpen: true, statusText: formattedRange, isManual: false };
   }
 
   if (isOpenToday && currentMinutes < todayOpenMin) {
-    return { isOpen: false, statusText: 'Cerrada · Abre hoy a las ' + formatSDTime(config.open), isManual: false };
+    return { isOpen: false, statusText: 'Cerrada - Abre hoy a las ' + formatSDTime(config.open), isManual: false };
   }
 
   for (let i = 1; i <= 7; i++) {
@@ -155,7 +155,7 @@ export function getStoreScheduleStatus(store: EmployeeStorePublic) {
     if (nextConfig && nextConfig.isOpen !== false && nextConfig.open && nextConfig.close) {
       const dayEs = DAY_NAMES_ES[nextDayIndex];
       const prefix = i === 1 ? 'mañana' : dayEs.toLowerCase();
-      return { isOpen: false, statusText: 'Cerrada · Abre ' + prefix + ' a las ' + formatSDTime(nextConfig.open), isManual: false };
+      return { isOpen: false, statusText: 'Cerrada - Abre ' + prefix + ' a las ' + formatSDTime(nextConfig.open), isManual: false };
     }
   }
 
@@ -508,19 +508,19 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 <Store size={14} />
                 {activeStore.products.length} producto{activeStore.products.length === 1 ? '' : 's'}
               </div>
-                            <h1 className="store-title" style={{ fontSize: 'clamp(1.8rem, 3vw, 2.8rem)', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <h1 className="store-title" style={{ fontSize: 'clamp(1.8rem, 3vw, 2.8rem)', margin: 0 }}>
                 {activeStore.name}
-                {activeStore.status === 'scheduled' && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setScheduleModalStore(activeStore)}
-                    style={{ fontSize: '0.875rem', padding: '0.4rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                  >
-                    <Calendar size={14} /> Ver Horarios
-                  </button>
-                )}
               </h1>
+              {activeStore.status === 'scheduled' && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setScheduleModalStore(activeStore)}
+                  style={{ fontSize: '0.875rem', padding: '0.4rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', zIndex: 10, cursor: 'pointer', marginTop: '0.5rem', width: 'fit-content' }}
+                >
+                  <Calendar size={14} /> Ver Horarios
+                </button>
+              )}
               {activeStore.description && <p className="store-subtitle">{activeStore.description}</p>}
             </>
           ) : (
@@ -530,7 +530,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 {visibleEmployeeStores.length} tienda{visibleEmployeeStores.length === 1 ? '' : 's'} activa{visibleEmployeeStores.length === 1 ? '' : 's'}
               </div>
               <h1 className="store-title">Tiendas de Empleados</h1>
-              <p className="store-subtitle">Compra productos de tus compaÃ±eros. Los precios son en pesos dominicanos.</p>
+              <p className="store-subtitle">Compra productos de tus compañeros. Los precios son en pesos dominicanos.</p>
             </>
           )}
         </div>
@@ -557,7 +557,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <div className="balance-copy">
                 {empCart.length > 0
                   ? `Total: ${formatDop(empCart.reduce((s, ci) => s + ci.product.price_dop * ci.quantity, 0))}`
-                  : 'Tu carrito de empleados estÃ¡ vacÃ­o.'}
+                  : 'Tu carrito de empleados está vacío.'}
               </div>
               {empCart.length > 0 && (
                 <button
@@ -588,7 +588,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <div className="category-header">
                 <div>
                   <div className="category-kicker">Saved</div>
-                  <h2 className="category-title">â™¥ Mis Favoritos</h2>
+                  <h2 className="category-title">♥ Mis Favoritos</h2>
                 </div>
                 <div className="category-count">{favoriteIds.size} item{favoriteIds.size === 1 ? '' : 's'}</div>
               </div>
@@ -813,7 +813,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       ))}
 
-      {/* â”€â”€ Employee stores view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ────────────────────────── Employee stores view ────────────────────────── */}
       {storeMode === 'employee' && !activeStore && (
         <div className="store-sections animate-fade-in">
           {(() => {
@@ -847,8 +847,8 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                         position: 'relative'
                       }}
                     >
-                      {isScheduled && (
-                                                <div className="emp-store-scheduled-badge" style={statusInfo.isClosingSoon ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : {}}>
+                      {isScheduled && isOpen && (
+                        <div className="emp-store-scheduled-badge" style={statusInfo.isClosingSoon ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : {}}>
                           <Clock3 size={12} />
                           {statusInfo.statusText}
                         </div>
@@ -871,7 +871,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                       {!isOpen && (
                         <div className="emp-store-closed-overlay">
                           <Clock3 size={14} />
-                          Cerrada
+                          {statusInfo.statusText}
                         </div>
                       )}
                       <div
@@ -898,7 +898,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                         )}
                         <div className="emp-store-meta">
                           <span>{store.products.length} producto{store.products.length === 1 ? '' : 's'}</span>
-                          {store.owner && <span>â€¢ {store.owner.name}</span>}
+                          {store.owner && <span> • {store.owner.name}</span>}
                         </div>
                         {/* Calculate store average rating */}
                         {(() => {
@@ -925,13 +925,13 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       )}
 
-      {/* â”€â”€ Active employee store products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ────────────────── Active employee store products ────────────────── */}
       {storeMode === 'employee' && activeStore && (
         <div className="store-sections animate-fade-in">
           {activeStore.products.length === 0 ? (
             <div className="card" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
               <ShoppingBag size={40} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
-              <h2 style={{ marginBottom: '0.5rem' }}>Sin productos aÃºn</h2>
+              <h2 style={{ marginBottom: '0.5rem' }}>Sin productos aún</h2>
               <p style={{ color: 'var(--text-muted)', margin: 0 }}>Esta tienda no tiene productos disponibles en este momento.</p>
             </div>
           ) : (
@@ -945,7 +945,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <section key={cat} className="category-section">
                 <div className="category-header">
                   <div>
-                    <div className="category-kicker">CategorÃ­a</div>
+                    <div className="category-kicker">Categoría</div>
                     <h2 className="category-title">{cat}</h2>
                   </div>
                   <div className="category-count">{prods.length} producto{prods.length === 1 ? '' : 's'}</div>
@@ -1007,7 +1007,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                             <button
                               className="btn btn-primary"
                               disabled={outOfStock || !isStoreCurrentlyOpen(activeStore)}
-                              style={{ background: outOfStock || !isStoreCurrentlyOpen(activeStore) ? undefined : activeStore?.accent_color ? "linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})" : 'linear-gradient(135deg,#059669,#10b981)', flex: 1 }}
+                              style={{ background: outOfStock || !isStoreCurrentlyOpen(activeStore) ? undefined : activeStore?.accent_color ? `linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})` : 'linear-gradient(135deg,#059669,#10b981)', flex: 1 }}
                               onClick={() => {
                                 const { reviews, ...prodData } = product;
                                 addToEmpCart({ ...prodData, cost_dop: product.cost_dop, status: product.status, store: { id: activeStore.id, slug: activeStore.slug, name: activeStore.name, owner_id: activeStore.owner_id } });
@@ -1054,7 +1054,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               </div>
               
               <div style={{ padding: '1rem', background: 'var(--bg-elevated)', borderRadius: 12, marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Â¿Te gusta este producto?</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>¿Te gusta este producto?</div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -1077,7 +1077,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               </div>
 
               <p className="description-copy" style={{ color: 'var(--text-secondary)' }}>
-                {selectedEmpItem.description || 'Sin descripciÃ³n disponible.'}
+                {selectedEmpItem.description || 'Sin descripción disponible.'}
               </p>
 
               <div className="store-modal-actions">
@@ -1085,7 +1085,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 <button
                   className="btn btn-primary"
                   disabled={selectedEmpItem.stock === 0 || !activeStore || !isStoreCurrentlyOpen(activeStore)}
-                  style={{ background: selectedEmpItem.stock === 0 || !activeStore || !isStoreCurrentlyOpen(activeStore) ? undefined : activeStore?.accent_color ? "linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})" : 'linear-gradient(135deg,#059669,#10b981)' }}
+                  style={{ background: selectedEmpItem.stock === 0 || !activeStore || !isStoreCurrentlyOpen(activeStore) ? undefined : activeStore?.accent_color ? `linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})` : 'linear-gradient(135deg,#059669,#10b981)' }}
                   onClick={() => {
                     if (activeStore) {
                       const { reviews, ...prodData } = selectedEmpItem;
@@ -1109,10 +1109,10 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           <div className="store-modal animate-fade-in" style={{ maxWidth: 540, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
             <div className="store-modal-copy" style={{ padding: '0.5rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: '50%', background: activeStore?.accent_color ? "linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})" : 'linear-gradient(135deg,#059669,#10b981)', marginBottom: '1rem' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: '50%', background: activeStore?.accent_color ? `linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})` : 'linear-gradient(135deg,#059669,#10b981)', marginBottom: '1rem' }}>
                   <CheckCircle2 size={28} color="white" />
                 </div>
-                <h2 style={{ margin: 0 }}>Â¡Tu solicitud de orden fue generada!</h2>
+                <h2 style={{ margin: 0 }}>¡Tu solicitud de orden fue generada!</h2>
                 <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '0.9rem' }}>
                   Contacta al vendedor para coordinar la entrega.
                 </p>
@@ -1157,7 +1157,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                       onClick={() => void copyEmail(info.seller.email)}
                     >
                       <Clipboard size={16} />
-                      {copiedEmail === info.seller.email ? 'Â¡Copiado!' : `Copiar email: ${info.seller.email}`}
+                      {copiedEmail === info.seller.email ? '¡Copiado!' : `Copiar email: ${info.seller.email}`}
                     </button>
                   </div>
                 </div>
@@ -1216,13 +1216,13 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Calificaciones</span>
                       <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fbbf24' }}>â˜… {reviewsMap[selectedItem.id].avg.toFixed(1)}</span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({reviewsMap[selectedItem.id].count} reseÃ±a{reviewsMap[selectedItem.id].count !== 1 ? 's' : ''})</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({reviewsMap[selectedItem.id].count} reseña{reviewsMap[selectedItem.id].count !== 1 ? 's' : ''})</span>
                     </div>
                   </div>
                   
                   {/* Rating Selector */}
                   <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Tu calificaciÃ³n:</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Tu calificación:</div>
                     <div className="fhub-rating-row" style={{ display: 'flex', gap: '0.5rem' }}>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button
@@ -1247,7 +1247,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
                           <span style={{ color: '#fbbf24' }}>{'â˜…'.repeat(review.rating)}{'â˜†'.repeat(5 - review.rating)}</span>
                           <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                            {review.user?.name || 'AnÃ³nimo'}
+                            {review.user?.name || 'Anónimo'}
                           </span>
                         </div>
                         {review.comment && <p style={{ margin: 0, color: 'var(--text-muted)' }}>{review.comment}</p>}
@@ -1286,6 +1286,63 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                   {selectedItem.stock === 0 ? 'Unavailable' : 'Add to Cart'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Schedule Modal ─────────────────────────────────── */}
+      {scheduleModalStore && (
+        <div className="modal-overlay" onClick={() => setScheduleModalStore(null)}>
+          <div className="store-modal animate-fade-in" style={{ maxWidth: 420, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
+            <div className="store-modal-copy" style={{ padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: scheduleModalStore.accent_color ?? '#7c6cff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Calendar size={18} color="white" />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{scheduleModalStore.name}</h2>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.78rem' }}>Horario de atención</p>
+                </div>
+              </div>
+              {(() => {
+                const todayIdx = getSDTime().getDay();
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                    {DAY_NAMES_ES.map((dayEs, idx) => {
+                      const dayEn = DAY_NAMES_EN[idx];
+                      const cfg = scheduleModalStore.operating_hours?.[dayEn];
+                      const dayOpen = !!(cfg && cfg.isOpen !== false && cfg.open && cfg.close);
+                      const isToday = todayIdx === idx;
+                      return (
+                        <div key={dayEn} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '0.55rem 0.75rem', borderRadius: 8,
+                          background: isToday ? 'rgba(124,108,255,0.12)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${isToday ? 'rgba(124,108,255,0.28)' : 'transparent'}`,
+                        }}>
+                          <span style={{ fontWeight: isToday ? 700 : 400, color: isToday ? '#a5b4fc' : 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                            {dayEs}{isToday ? ' · hoy' : ''}
+                          </span>
+                          {dayOpen && cfg ? (
+                            <span style={{ color: '#34d399', fontSize: '0.875rem', fontWeight: 600 }}>
+                              {formatSDTime(cfg.open)} – {formatSDTime(cfg.close)}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Cerrada</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <p style={{ margin: '1rem 0 0', color: 'var(--text-muted)', fontSize: '0.72rem', textAlign: 'center' }}>
+                Horarios en hora de República Dominicana (AST)
+              </p>
+            </div>
+            <div className="store-modal-actions">
+              <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setScheduleModalStore(null)}>Cerrar</button>
             </div>
           </div>
         </div>
@@ -1872,8 +1929,8 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
 
         .emp-store-card:hover {
           transform: translateY(-3px);
-          border-color: rgba(16,185,129,0.3);
-          box-shadow: 0 18px 45px rgba(16,185,129,0.15);
+          border-color: var(--accent, rgba(16,185,129,0.3));
+          box-shadow: 0 18px 45px rgba(0,0,0,0.25);
         }
 
         .emp-store-banner {
@@ -2015,6 +2072,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           position: absolute;
           top: 1rem;
           right: 1rem;
+          max-width: calc(100% - 110px);
           z-index: 20;
           display: flex;
           align-items: center;
@@ -2023,11 +2081,15 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           background: rgba(239, 68, 68, 0.9);
           backdrop-filter: blur(8px);
           color: white;
-          font-size: 0.75rem;
+          font-size: 0.72rem;
           font-weight: 700;
           border-radius: 999px;
           box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
           border: 1px solid rgba(255, 255, 255, 0.2);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          justify-content: center;
         }
       `}</style>
     </div>

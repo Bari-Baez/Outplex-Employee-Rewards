@@ -148,7 +148,7 @@ export function MyStoreClient({
           <div>
             <h1 className="my-store-title">My Store</h1>
             <p className="my-store-subtitle">
-              Manage your personal micro-store â€” list products in Dominican pesos, track inventory, and receive orders
+              Manage your personal micro-store — list products in Dominican pesos, track inventory, and receive orders
               directly from fellow employees.
             </p>
           </div>
@@ -170,7 +170,7 @@ export function MyStoreClient({
         <div>
           <h1 className="my-store-title">My Store</h1>
           <p className="my-store-subtitle">
-            Manage your personal micro-store â€” list products in Dominican pesos, track inventory, and receive orders
+            Manage your personal micro-store — list products in Dominican pesos, track inventory, and receive orders
             directly from fellow employees.
           </p>
         </div>
@@ -266,15 +266,50 @@ export function MyStoreClient({
               marginBottom: '2rem',
               textAlign: 'left'
             }}>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem' }}>Motivo de la suspensiÃ³n:</div>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem' }}>Motivo de la suspensión:</div>
               <div style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontStyle: 'italic', lineHeight: 1.5 }}>
-                &ldquo;{store.suspend_reason || 'No se proporcionÃ³ un motivo especÃ­fico.'}&rdquo;
+                &ldquo;{store.suspend_reason || 'No se proporcionó un motivo específico.'}&rdquo;
               </div>
             </div>
 
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
               De no estar en acuerdo contactarse con su superior para que someta un reporte.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Product Suspension Alert */}
+      {showSuspensionAlert && suspendedProduct && (
+        <div className="modal-backdrop" style={{ zIndex: 9998 }}>
+          <div className="modal-card animate-fade-in" style={{ maxWidth: '480px', textAlign: 'center', padding: '2rem 1.75rem' }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+              <AlertCircle size={30} style={{ color: '#f59e0b' }} />
+            </div>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fbbf24', marginBottom: '0.5rem' }}>Producto Suspendido</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+              Un moderador suspendió el producto{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>&ldquo;{suspendedProduct.name}&rdquo;</strong>.
+              No puedes agregar, publicar ni eliminar productos hasta que lo edites y vuelva a ser revisado.
+            </p>
+            {suspendedProduct.moderation_note && (
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: '1rem', marginBottom: '1.25rem', textAlign: 'left' }}>
+                <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.4rem' }}>Motivo:</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontStyle: 'italic', lineHeight: 1.5 }}>
+                  &ldquo;{suspendedProduct.moderation_note}&rdquo;
+                </div>
+              </div>
+            )}
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              Edita el producto en la pestaña <strong>Productos</strong> para enviarlo a revisión nuevamente.
+            </p>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              onClick={() => setShowSuspensionAlert(false)}
+            >
+              Entendido, ir a Productos
+            </button>
           </div>
         </div>
       )}
@@ -378,7 +413,7 @@ function RequestAccessForm({
             rows={5}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="At least 20 characters â€” include the type of products, delivery preferences, and any relevant info for the reviewer."
+            placeholder="At least 20 characters — include the type of products, delivery preferences, and any relevant info for the reviewer."
           />
           <span className="form-hint">{description.trim().length}/20 characters minimum</span>
         </label>
@@ -388,7 +423,7 @@ function RequestAccessForm({
         <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
         <span>
           I understand that my store will be reviewed by a moderator and must comply with Outplex policies. The platform is
-          only an intermediary and does not process any payments â€” all transactions occur directly between the buyer and me.
+          only an intermediary and does not process any payments — all transactions occur directly between the buyer and me.
         </span>
       </label>
 
@@ -412,7 +447,7 @@ function PendingRequestCard({ request }: { request: EmployeeStoreRequest }) {
       <div>
         <h2 className="section-title">Your request is under review</h2>
         <p className="text-muted">
-          Submitted on {new Date(request.created_at).toLocaleString()}. A moderator will approve or reject it shortly â€”
+          Submitted on {new Date(request.created_at).toLocaleString()}. A moderator will approve or reject it shortly —
           you&apos;ll receive a notification as soon as there&apos;s an update.
         </p>
         <div className="pending-preview">
@@ -502,12 +537,12 @@ function StoreEditor({
         <div className="stat-card">
           <div className="stat-label">Low stock</div>
           <div className="stat-value">{lowStockCount}</div>
-          <div className="stat-helper">Items with â‰¤ 3 units left</div>
+          <div className="stat-helper">Items with ≤ 3 units left</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Inventory value</div>
           <div className="stat-value">{formatDop(totalValue)}</div>
-          <div className="stat-helper">Price Ã— stock across catalog</div>
+          <div className="stat-helper">Price × stock across catalog</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Store slug</div>
@@ -705,7 +740,7 @@ function ProductsTab({
     <section className="card editor-panel">
       <div className="editor-panel-head">
         <div>
-          <h2 className="section-title">Products Â· {store.name}</h2>
+          <h2 className="section-title">Products · {store.name}</h2>
           <p className="text-muted">Add items, set prices in DOP, and keep your inventory current.</p>
         </div>
       </div>
@@ -725,7 +760,7 @@ function ProductsTab({
             <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Product name" />
           </label>
           <label className="form-field" style={{ flex: 1 }}>
-            <span>Costo de producciÃ³n (DOP) *</span>
+            <span>Costo de producción (DOP) *</span>
             <input
               className="input"
               type="number"
@@ -793,24 +828,24 @@ function ProductsTab({
                   <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '10px 10px 0 0', padding: '0.6rem 0.9rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '0.78rem' }}>
-                      <strong style={{ color: '#fbbf24', display: 'block', marginBottom: '0.15rem' }}>Suspendido por moderaciÃ³n</strong>
+                      <strong style={{ color: '#fbbf24', display: 'block', marginBottom: '0.15rem' }}>Suspendido por moderación</strong>
                       {product.moderation_note && <span style={{ color: '#fcd34d' }}>{product.moderation_note}</span>}
-                      <span style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.2rem' }}>Edita este producto y envÃ­alo a revisiÃ³n para reactivarlo. No puedes agregar ni eliminar productos mientras estÃ© suspendido.</span>
+                      <span style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.2rem' }}>Edita este producto y envíalo a revisión para reactivarlo. No puedes agregar ni eliminar productos mientras esté suspendido.</span>
                     </div>
                   </div>
                 )}
                 {!(product.status === 'suspended') && product.status === 'pending_review' && (
                   <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.28)', borderRadius: '10px 10px 0 0', padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Clock size={13} style={{ color: '#818cf8', flexShrink: 0 }} />
-                    <span style={{ fontSize: '0.76rem', color: '#a5b4fc', fontWeight: 600 }}>En revisiÃ³n por moderaciÃ³n</span>
+                    <span style={{ fontSize: '0.76rem', color: '#a5b4fc', fontWeight: 600 }}>En revisión por moderación</span>
                   </div>
                 )}
                 {!(product.status === 'suspended') && product.status === 'rejected' && (
                   <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '10px 10px 0 0', padding: '0.6rem 0.9rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <AlertCircle size={14} style={{ color: '#f87171', flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '0.78rem' }}>
-                      <strong style={{ color: '#fca5a5', display: 'block', marginBottom: '0.15rem' }}>Rechazado por moderaciÃ³n</strong>
-                      <span style={{ color: 'var(--text-muted)' }}>Edita este producto para enviarlo a revisiÃ³n nuevamente.</span>
+                      <strong style={{ color: '#fca5a5', display: 'block', marginBottom: '0.15rem' }}>Rechazado por moderación</strong>
+                      <span style={{ color: 'var(--text-muted)' }}>Edita este producto para enviarlo a revisión nuevamente.</span>
                     </div>
                   </div>
                 )}
@@ -883,7 +918,7 @@ function ProductsTab({
                       <span className={`product-stock ${product.stock === 0 ? 'product-stock-empty' : ''}`}>{product.stock} in stock</span>
                     </div>
                     <div className="metric-helper">
-                      Costo: {formatDop(product.cost_dop ?? 0)} Â· Ganancia: {formatDop(Math.max(0, product.price_dop - (product.cost_dop ?? 0)))}
+                      Costo: {formatDop(product.cost_dop ?? 0)} · Ganancia: {formatDop(Math.max(0, product.price_dop - (product.cost_dop ?? 0)))}
                     </div>
                     <div className="product-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(product)} disabled={isSaving || (product.status === 'suspended') || product.status === 'pending_review'}>
@@ -1005,11 +1040,11 @@ function OrdersTab({
 
     if (draft.mode === 'scheduled') {
       if (!pickupAtIso || !pickupDeadlineIso) {
-        onMessage('danger', 'Debes seleccionar fecha de retiro y fecha lÃ­mite.');
+        onMessage('danger', 'Debes seleccionar fecha de retiro y fecha límite.');
         return;
       }
       if (new Date(pickupDeadlineIso).getTime() <= new Date(pickupAtIso).getTime()) {
-        onMessage('danger', 'La fecha lÃ­mite debe ser despuÃ©s de la fecha de retiro.');
+        onMessage('danger', 'La fecha límite debe ser después de la fecha de retiro.');
         return;
       }
     }
@@ -1109,7 +1144,7 @@ function OrdersTab({
                             />
                           </div>
 
-                          <label className="meta-label">LÃ­mite de retiro</label>
+                          <label className="meta-label">Límite de retiro</label>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
                             <ModernDatePicker
                               date={getPickupDraft(order).pickupDeadline.split('T')[0]}
@@ -1346,7 +1381,7 @@ function ProfileTab({
         </div>
 
         <div className="form-field">
-          <span>Modo de OperaciÃ³n</span>
+          <span>Modo de Operación</span>
           <select
             className="input"
             disabled={draft.status === 'paused'}
@@ -1373,15 +1408,15 @@ function ProfileTab({
               }
             }}
           >
-            <option value="active" style={{ background: '#0f172a', color: '#4ade80' }}>â— Abierta 24/7 (Siempre Disponible)</option>
-            <option value="scheduled" style={{ background: '#0f172a', color: '#facc15' }}>â— Programada (Sigue tu Horario)</option>
-            <option value="manual_closed" style={{ background: '#0f172a', color: '#f87171' }}>â— Cerrada (Manual / Override)</option>
+            <option value="active" style={{ background: '#0f172a', color: '#4ade80' }}>● Abierta 24/7 (Siempre Disponible)</option>
+            <option value="scheduled" style={{ background: '#0f172a', color: '#facc15' }}>● Programada (Sigue tu Horario)</option>
+            <option value="manual_closed" style={{ background: '#0f172a', color: '#f87171' }}>● Cerrada (Manual / Override)</option>
           </select>
           <p className="field-helper" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }}>
             {draft.status === 'paused' ? 'Habilita la visibilidad para cambiar el modo.' : 
-             !draft.is_open ? 'La tienda mostrarÃ¡ un aviso de cerrada permanentemente.' :
-             draft.status === 'scheduled' ? 'Se abrirÃ¡ automÃ¡ticamente segÃºn las horas debajo.' :
-             'La tienda estarÃ¡ abierta todo el dÃ­a, todos los dÃ­as.'}
+             !draft.is_open ? 'La tienda mostrará un aviso de cerrada permanentemente.' :
+             draft.status === 'scheduled' ? 'Se abrirá automáticamente según las horas debajo.' :
+             'La tienda estará abierta todo el día, todos los días.'}
           </p>
         </div>
       </div>
@@ -1432,9 +1467,9 @@ function ProfileTab({
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.2rem' }}>
           <div>
-            <h3 className="section-title" style={{ fontSize: '1.1rem', marginBottom: '0.2rem' }}>Horario de OperaciÃ³n</h3>
+            <h3 className="section-title" style={{ fontSize: '1.1rem', marginBottom: '0.2rem' }}>Horario de Operación</h3>
             <p className="text-muted" style={{ fontSize: '0.85rem' }}>
-              Configura tus horas estÃ¡ndar. Si la tienda se marca como &ldquo;Cerrada&rdquo; arriba, este horario se ignorarÃ¡.
+              Configura tus horas estándar. Si la tienda se marca como &ldquo;Cerrada&rdquo; arriba, este horario se ignorará.
             </p>
           </div>
           <button
@@ -1589,12 +1624,12 @@ function DashboardTab({ products, orders }: { products: ExtendedEmployeeStorePro
           <div className="metric-helper">Dinero para ti</div>
         </div>
         <div className="dashboard-metric">
-          <div className="metric-label">ReinversiÃ³n (mes)</div>
+          <div className="metric-label">Reinversión (mes)</div>
           <div className="metric-value">{formatDop(reinvestment)}</div>
-          <div className="metric-helper">Presupuesto para producciÃ³n</div>
+          <div className="metric-helper">Presupuesto para producción</div>
         </div>
         <div className="dashboard-metric">
-          <div className="metric-label">Compradores Ãºnicos</div>
+          <div className="metric-label">Compradores únicos</div>
           <div className="metric-value">{uniqueBuyers}</div>
           <div className="metric-helper">Clientes que compraron este mes</div>
         </div>
@@ -1610,16 +1645,16 @@ function DashboardTab({ products, orders }: { products: ExtendedEmployeeStorePro
         </div>
       </div>
       <div className="card" style={{ marginTop: '0.5rem', padding: '1rem' }}>
-        <div className="section-title" style={{ fontSize: '1rem' }}>GrÃ¡fico rÃ¡pido de ventas (mes actual)</div>
+        <div className="section-title" style={{ fontSize: '1rem' }}>Gráfico rápido de ventas (mes actual)</div>
         {Object.keys(dailyBars).length === 0 ? (
-          <p className="text-muted" style={{ marginTop: '0.6rem' }}>AÃºn no hay ventas completadas este mes.</p>
+          <p className="text-muted" style={{ marginTop: '0.6rem' }}>Aún no hay ventas completadas este mes.</p>
         ) : (
           <div style={{ display: 'grid', gap: '0.45rem', marginTop: '0.8rem' }}>
             {Object.entries(dailyBars)
               .sort(([a], [b]) => Number(a) - Number(b))
               .map(([day, total]) => (
                 <div key={day} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 95px', gap: '0.6rem', alignItems: 'center' }}>
-                  <span className="text-muted">DÃ­a {day}</span>
+                  <span className="text-muted">Día {day}</span>
                   <div style={{ width: '100%', height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                     <div
                       style={{

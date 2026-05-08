@@ -50,6 +50,10 @@ export async function POST(req: Request) {
     if (actor.role === 'moderator_a1' && role === 'admin') {
       return NextResponse.json({ error: 'Moderator A1 cannot assign the Admin role.' }, { status: 403 });
     }
+    // No actor can change their own role (privilege escalation prevention)
+    if (userId === user.id && role !== actor.role) {
+      return NextResponse.json({ error: 'You cannot change your own role.' }, { status: 403 });
+    }
 
     const prevRole = target.role;
     const { data: prevData } = await service.from('users').select('department').eq('id', userId).single();

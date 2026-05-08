@@ -32,7 +32,11 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const folder = formData.get('folder') as string || 'uploads';
+
+    // Whitelist allowed folders to prevent path traversal
+    const ALLOWED_FOLDERS = new Set(['uploads', 'avatars', 'products', 'public', 'store', 'breaks']);
+    const rawFolder = formData.get('folder') as string | null;
+    const folder = rawFolder && ALLOWED_FOLDERS.has(rawFolder) ? rawFolder : 'uploads';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -43,12 +47,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'File too large (max 10MB)' }, { status: 400 });
     }
 
+    // Validate file extension — only allow safe image/document types
+    const ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'csv', 'xlsx', 'xls']);
+    const fileExt = file.name.replace(/^.*\./, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!fileExt || !ALLOWED_EXTENSIONS.has(fileExt)) {
+      return NextResponse.json({ error: 'File type not allowed' }, { status: 400 });
+    }
+
     // Prepare buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     // Create unique filename
-    const fileExt = file.name.split('.').pop()?.toLowerCase();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
     const filePath = `${folder}/${fileName}`;
 

@@ -37,20 +37,15 @@ export async function POST(req: NextRequest) {
 
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
-  const allowedTypes = [
-    'text/csv',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain',
-  ];
-  if (!allowedTypes.some((t) => file.type.includes(t.split('/')[1]) || file.name.match(/\.(csv|xlsx|xls)$/i))) {
+  const ALLOWED_EXTENSIONS = new Set(['csv', 'xlsx', 'xls']);
+  const fileExt = file.name.replace(/^.*\./, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!fileExt || !ALLOWED_EXTENSIONS.has(fileExt)) {
     return NextResponse.json({ error: 'Only CSV and Excel files are supported' }, { status: 400 });
   }
 
-  // 3. Read file content and compute hash for deduplication
+  // 3. Read file content and compute hash for deduplication (full file)
   const fileBuffer = await file.arrayBuffer();
-  // Decode a sample for hashing (or use the buffer directly if sha256 supports it)
-  const fileText = new TextDecoder().decode(fileBuffer.slice(0, 5000)); 
+  const fileText = new TextDecoder().decode(fileBuffer);
   const contentHash = await sha256(fileText + file.name + file.size);
 
   // 4. Duplicate check

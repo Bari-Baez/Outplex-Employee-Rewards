@@ -45,6 +45,11 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const { data: actor } = await supabase.from('users').select('role').eq('id', user.id).single();
+    if (!actor || !['admin', 'moderator_a1'].includes(actor.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { name, group } = await req.json() as { name: string; group?: string };
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
@@ -75,6 +80,11 @@ export async function DELETE(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: actor } = await supabase.from('users').select('role').eq('id', user.id).single();
+    if (!actor || !['admin', 'moderator_a1'].includes(actor.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { name } = await req.json() as { name: string };
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });

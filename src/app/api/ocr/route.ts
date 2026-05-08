@@ -58,10 +58,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'No image file provided' }, { status: 400 });
   }
 
-  const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-  const mediaType = allowedTypes.includes(imageFile.type)
-    ? (imageFile.type as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif')
-    : 'image/png';
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+  type AllowedMimeType = typeof allowedTypes[number];
+  if (!allowedTypes.includes(imageFile.type as AllowedMimeType)) {
+    return NextResponse.json({ error: 'Unsupported image type. Use PNG, JPEG, WebP, or GIF.' }, { status: 400 });
+  }
+  const mediaType = imageFile.type as AllowedMimeType;
 
   const buffer = await imageFile.arrayBuffer();
   const base64 = Buffer.from(buffer).toString('base64');

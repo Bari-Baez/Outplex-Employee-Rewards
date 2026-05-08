@@ -432,7 +432,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
             className="input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={tab === 'queue' ? 'Search by employee, store nameâ€¦' : tab === 'products' ? 'Search productsâ€¦' : 'Search active storesâ€¦'}
+            placeholder={tab === 'queue' ? 'Search by employee, store name…' : tab === 'products' ? 'Search products…' : 'Search active stores…'}
           />
         </label>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -469,8 +469,8 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     <div className="request-info">
                       <div className="request-user">
                         <strong>{req.user?.name ?? 'Unknown employee'}</strong>
-                        <span>{req.user?.employee_id ?? 'No ID'} Â· {req.user?.email ?? 'no email'}</span>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {req.user?.supervisor || 'â€”'}</div>
+                        <span>{req.user?.employee_id ?? 'No ID'} · {req.user?.email ?? 'no email'}</span>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {req.user?.supervisor || '—'}</div>
                       </div>
                       <div className="request-store">
                         <span className="request-store-name">&ldquo;{req.store_name}&rdquo;</span>
@@ -480,7 +480,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                       <div className="request-meta">
                         <span>Submitted {new Date(req.created_at).toLocaleString()}</span>
                         {req.reviewed_at && req.reviewer && (
-                          <span>Â· Reviewed by {req.reviewer.name} on {new Date(req.reviewed_at).toLocaleString()}</span>
+                          <span>· Reviewed by {req.reviewer.name} on {new Date(req.reviewed_at).toLocaleString()}</span>
                         )}
                       </div>
                       {req.review_notes && (
@@ -515,7 +515,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
       {tab === 'products' && (
         <section className="card queue-panel">
           {filteredProducts.length === 0 ? (
-            <div className="empty-state"><Package size={32} /><p>No products awaiting review.</p></div>
+            <div className="empty-state"><Package size={32} /><p>No hay productos publicados en ninguna tienda.</p></div>
           ) : (
             <div className="request-list">
               {filteredProducts.map((prod) => {
@@ -546,12 +546,12 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                               {statusLabel === 'pending_review' ? 'Pending review' : statusLabel === 'active' ? 'Active' : statusLabel === 'rejected' ? 'Rejected' : 'Suspended'}
                             </span>
                           </div>
-                          <span>{prod.store?.name || 'Unknown Store'} Â· RD$ {prod.price_dop.toLocaleString()}</span>
-                          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Superior: {prod.store?.owner?.supervisor || 'â€”'}</div>
+                          <span>{prod.store?.name || 'Unknown Store'} · RD$ {prod.price_dop.toLocaleString()}</span>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Superior: {prod.store?.owner?.supervisor || '—'}</div>
                         </div>
                         {prod.description && <p className="request-desc">{prod.description}</p>}
                         {prod.is_suspended && prod.suspend_reason && (
-                          <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: '0.25rem' }}>Motivo de suspensiÃ³n: {prod.suspend_reason}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: '0.25rem' }}>Motivo de suspensión: {prod.suspend_reason}</div>
                         )}
                         <div className="request-meta">
                           <span>Submitted {new Date(prod.created_at).toLocaleString()}</span>
@@ -663,7 +663,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                       <div>
                         <strong>{store.owner?.name}</strong>
                         <span>{store.owner?.email}</span>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {store.owner?.supervisor || 'â€”'}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>Superior: {store.owner?.supervisor || '—'}</div>
                       </div>
                     </div>
                     {!isReadOnly && (
@@ -774,7 +774,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                 rows={4}
                 value={dialogNotes}
                 onChange={(e) => setDialogNotes(e.target.value)}
-                placeholder={dialog.decision === 'approved' ? 'Anything the employee should knowâ€¦' : 'Why is this request being rejected?'}
+                placeholder={dialog.decision === 'approved' ? 'Anything the employee should know…' : 'Why is this request being rejected?'}
               />
             </label>
             <div className="modal-actions">
@@ -842,7 +842,7 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                 rows={3}
                 value={dialogNotes}
                 onChange={(e) => setDialogNotes(e.target.value)}
-                placeholder="Reason for suspending this storeâ€¦"
+                placeholder="Reason for suspending this store…"
               />
             </label>
             <div className="modal-actions">
