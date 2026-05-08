@@ -922,9 +922,37 @@ export function EmployeeCompensationCalculator({
         transfer.succeed('Imported');
       } else {
         transfer.setProgress(18);
-        transfer.setMessage('Running OCR...');
-        const rows = await parseImageMetricsFile(file);
-        handleMetricsRows(rows, file.name);
+        transfer.setMessage('Analyzing image with AI...');
+
+        // Try server-side Gemini Vision first (much more accurate for complex tables)
+        let serverRows: ImportedMetricsRow[] | null = null;
+        try {
+          const fd = new FormData();
+          fd.append('image', file);
+          const res = await fetch('/api/ocr/metrics', { method: 'POST', body: fd });
+          if (res.ok) {
+            const json = await res.json() as { rows?: Array<{ name: string; opx_id: string; attendance: string; total_bonus: string }> };
+            if (Array.isArray(json.rows) && json.rows.length > 0) {
+              serverRows = json.rows.map((r) => ({
+                employeeName: r.name.trim(),
+                attendancePercent: parseMetricNumber(r.attendance),
+                bonusVoicePerHour: parseMetricNumber(r.total_bonus),
+                sourceLabel: file.name,
+              })).filter((r) => r.employeeName.length > 1);
+            }
+          }
+        } catch {
+          // server unavailable — fall through to Tesseract
+        }
+
+        if (serverRows && serverRows.length > 0) {
+          handleMetricsRows(dedupeMetricRows(serverRows), file.name);
+        } else {
+          transfer.setProgress(35);
+          transfer.setMessage('Running OCR fallback...');
+          const rows = await parseImageMetricsFile(file);
+          handleMetricsRows(rows, file.name);
+        }
         transfer.succeed('Imported');
       }
     } catch (error) {

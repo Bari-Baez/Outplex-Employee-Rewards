@@ -205,6 +205,10 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
   const [deletedRaffles, setDeletedRaffles] = useState<{ raffle: { id: string; title: string; draw_date: string | null; status: string }; deletedAt: string }[]>([]);
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prizeImgInputRef = useRef<HTMLInputElement>(null);
+  const bundleImgInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPrizeImg, setUploadingPrizeImg] = useState(false);
+  const [uploadingBundleImgId, setUploadingBundleImgId] = useState<string | null>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
   const countdownMenuRef = useRef<HTMLDivElement>(null);
@@ -503,6 +507,20 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
 
   const updateBundleItem = (id: string, patch: Partial<BundleItem>) => {
     setSlotDraft((d) => ({ ...d, bundleItems: d.bundleItems.map((bi) => (bi.id === id ? { ...bi, ...patch } : bi)) }));
+  };
+
+  const uploadRaffleImage = async (file: File): Promise<string | null> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('folder', 'raffles');
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !json.url) return null;
+      return json.url;
+    } catch {
+      return null;
+    }
   };
 
   const removeBundleItem = (id: string) => {
@@ -1158,10 +1176,37 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                     </div>
                   ) : (
                     <div style={{ marginBottom: '0.75rem' }}>
-                      <label className="field-label">Image URL</label>
+                      <label className="field-label">Image</label>
+                      <input
+                        ref={prizeImgInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setUploadingPrizeImg(true);
+                          const url = await uploadRaffleImage(f);
+                          if (url) setSlotDraft((d) => ({ ...d, imageUrl: url }));
+                          setUploadingPrizeImg(false);
+                          e.target.value = '';
+                        }}
+                      />
                       <div className="manual-prize-image-row">
-                        <div className="manual-prize-preview">{slotDraft.imageUrl ? <img src={proxifyMediaUrl(slotDraft.imageUrl)} alt={slotDraft.title} /> : <ImagePlus size={20} />}</div>
-                        <input className="input" value={slotDraft.imageUrl} onChange={(e) => setSlotDraft((d) => ({ ...d, imageUrl: e.target.value }))} placeholder="https://... optional" />
+                        <button
+                          type="button"
+                          className="manual-prize-preview"
+                          style={{ cursor: 'pointer', border: '1.5px dashed var(--border)', background: 'none', padding: 0 }}
+                          onClick={() => prizeImgInputRef.current?.click()}
+                          title={uploadingPrizeImg ? 'Uploading…' : 'Click to upload from PC'}
+                        >
+                          {uploadingPrizeImg
+                            ? <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>…</span>
+                            : slotDraft.imageUrl
+                              ? <img src={proxifyMediaUrl(slotDraft.imageUrl)} alt={slotDraft.title} />
+                              : <ImagePlus size={20} />}
+                        </button>
+                        <input className="input" value={slotDraft.imageUrl} onChange={(e) => setSlotDraft((d) => ({ ...d, imageUrl: e.target.value }))} placeholder="https://... or click the icon to upload" />
                       </div>
                     </div>
                   )}
@@ -1187,14 +1232,34 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                       return (
                         <div key={bi.id} className="bundle-item-card">
                           <div className="bundle-item-row">
-                            <div className="bundle-item-thumb">
-                              {bi.imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={proxifyMediaUrl(bi.imageUrl)} alt={bi.name} />
-                              ) : (
-                                <Package size={16} />
-                              )}
-                            </div>
+                            <input
+                              ref={bundleImgInputRef}
+                              type="file"
+                              accept="image/*"
+                              hidden
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0];
+                                if (!f) return;
+                                setUploadingBundleImgId(bi.id);
+                                const url = await uploadRaffleImage(f);
+                                if (url) updateBundleItem(bi.id, { imageUrl: url });
+                                setUploadingBundleImgId(null);
+                                e.target.value = '';
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="bundle-item-thumb"
+                              style={{ cursor: 'pointer', border: '1.5px dashed var(--border)', background: 'none', padding: 0 }}
+                              onClick={() => bundleImgInputRef.current?.click()}
+                              title="Click to upload image"
+                            >
+                              {uploadingBundleImgId === bi.id
+                                ? <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>…</span>
+                                : bi.imageUrl
+                                  ? <img src={proxifyMediaUrl(bi.imageUrl)} alt={bi.name} />
+                                  : <Package size={16} />}
+                            </button>
                             <input className="input" value={bi.name} onChange={(e) => updateBundleItem(bi.id, { name: e.target.value })} placeholder="Item name" style={{ flex: 1 }} />
                             <div className="spin-count-stepper" style={{ minWidth: 100 }}>
                               <button type="button" className="spin-count-btn" onClick={() => updateBundleItem(bi.id, { quantity: Math.max(1, bi.quantity - 1) })}>−</button>
@@ -1220,7 +1285,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                               className="input"
                               value={bi.imageUrl ?? ''}
                               onChange={(e) => updateBundleItem(bi.id, { imageUrl: e.target.value || null })}
-                              placeholder="Image URL (optional)"
+                              placeholder="Image URL (or click icon above to upload)"
                               style={{ fontSize: '0.8rem' }}
                             />
                             <ModernSelect
