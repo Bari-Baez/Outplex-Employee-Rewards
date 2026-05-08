@@ -15,6 +15,7 @@ import { ApprovedAccessIntro } from '../../components/onboarding/ApprovedAccessI
 import type { FormDefinition } from '@/lib/forms/types';
 import { BackgroundShader } from '@/components/layout/BackgroundShader';
 import { DashboardThemeBridge } from '@/components/theme/DashboardThemeBridge';
+import { MobileNav } from '@/components/MobileNav';
 import { TOOL_KEYS } from '@/lib/tools-catalog';
 import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability } from '@/lib/tool-availability';
 
@@ -130,6 +131,8 @@ export default async function DashboardLayout({
         <TopNavShell user={profile} />
 
         <GlobalDrawersShell />
+
+        <MobileNav userRole={profile?.role ?? 'employee'} />
 
         {(needsOnboarding || hasActiveRequest) && (
           <OnboardingGuard
