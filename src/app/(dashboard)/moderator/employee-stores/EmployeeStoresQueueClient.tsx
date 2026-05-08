@@ -38,6 +38,10 @@ type DeleteProductDialog = { id: string } | null;
 type SuspendStoreDialog = { id: string; name: string } | null;
 type DeleteStoreDialog = { id: string; name: string } | null;
 
+function isPendingStoreRequest(status: string | undefined | null) {
+  return status !== 'approved' && status !== 'rejected';
+}
+
 function initialsFromName(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
 }
@@ -82,8 +86,9 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
   const currentRole = currentUser.role;
   const isB1 = currentRole === 'moderator_b1';
   const isReadOnly = !canEditTool(currentRole, 'employee-stores');
+  const canReviewStoreRequests = ['admin', 'moderator', 'moderator_a1'].includes(currentRole);
 
-  const pendingCount = requests.filter((r) => r.status === 'pending_review').length;
+  const pendingCount = requests.filter((r) => isPendingStoreRequest(r.status)).length;
   const approvedCount = requests.filter((r) => r.status === 'approved').length;
   const rejectedCount = requests.filter((r) => r.status === 'rejected').length;
 
@@ -489,19 +494,19 @@ export function EmployeeStoresQueueClient(props: EmployeeStoresQueueClientProps)
                     </div>
                   </div>
                   <div className="request-actions">
-                    {req.status === 'pending_review' ? (
+                    {isPendingStoreRequest(req.status) ? (
                       <>
-                        <button className="btn btn-success btn-sm" onClick={() => openDecision({ type: 'store', id: req.id }, 'approved')} disabled={isReadOnly}>
+                        <button className="btn btn-success btn-sm" onClick={() => openDecision({ type: 'store', id: req.id }, 'approved')} disabled={!canReviewStoreRequests}>
                           <CheckCircle2 size={14} /> Approve
                         </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => openDecision({ type: 'store', id: req.id }, 'rejected')} disabled={isReadOnly}>
+                        <button className="btn btn-danger btn-sm" onClick={() => openDecision({ type: 'store', id: req.id }, 'rejected')} disabled={!canReviewStoreRequests}>
                           <XCircle size={14} /> Reject
                         </button>
                       </>
                     ) : (
                       <div className={`status-badge status-badge-${req.status}`}>
-                        {req.status === 'approved' ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
-                        {req.status.toUpperCase()}
+                        {req.status === 'approved' ? <CheckCircle2 size={14} /> : req.status === 'rejected' ? <XCircle size={14} /> : <PauseCircle size={14} />}
+                        {req.status?.toUpperCase()}
                       </div>
                     )}
                   </div>
