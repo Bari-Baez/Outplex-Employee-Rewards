@@ -1709,8 +1709,12 @@ html[data-sidebar-expanded='false'] .topnav {
 }
 
 @media (max-width: 767px) {
-  /* Hide desktop sidebar on mobile */
+  /* Hide desktop sidebar and dock on mobile */
   .sidebar {
+    display: none !important;
+  }
+
+  .topnav-dock-shell {
     display: none !important;
   }
 
@@ -1727,7 +1731,7 @@ html[data-sidebar-expanded='false'] .topnav {
   }
 
   .page-content {
-    padding: var(--topnav-offset, 72px) 0.75rem calc(env(safe-area-inset-bottom) + 72px);
+    padding: 1rem 0.75rem calc(env(safe-area-inset-bottom) + 72px);
   }
 
   /* Show bottom nav */
