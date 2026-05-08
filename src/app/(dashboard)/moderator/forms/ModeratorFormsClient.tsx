@@ -195,6 +195,28 @@ function QuestionCard({
   const hasOpts = ['radio', 'checkbox', 'select'].includes(field.type);
   const canLock = ['short_text', 'email', 'number', 'date'].includes(field.type);
 
+  const [imgUploading, setImgUploading] = useState(false);
+  const [imgError, setImgError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = async (file: File) => {
+    setImgError(null);
+    setImgUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('folder', 'forms');
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json() as { url?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? 'Upload failed');
+      update({ imageUrl: json.url });
+    } catch (err) {
+      setImgError(err instanceof Error ? err.message : 'No se pudo subir la imagen.');
+    } finally {
+      setImgUploading(false);
+    }
+  };
+
   return (
     <div
       className={`gf-question-card ${isActive ? 'gf-question-active' : ''} ${isSection ? 'gf-section-card' : ''}`}
@@ -328,48 +350,83 @@ function QuestionCard({
               {/* Image field */}
               {field.type === 'image' && (
                 <div className="gf-q-body">
-                  <div className="gf-setting-label">URL de la Imagen</div>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  {/* Upload zone */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleImageUpload(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div
+                    className={`gf-image-dropzone${imgUploading ? ' gf-image-uploading' : ''}`}
+                    onClick={() => !imgUploading && fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files[0];
+                      if (f && f.type.startsWith('image/')) void handleImageUpload(f);
+                    }}
+                  >
+                    {field.imageUrl ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={proxifyMediaUrl(field.imageUrl)} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.4'; }} />
+                        <div className="gf-image-overlay">
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{imgUploading ? 'Subiendo…' : 'Cambiar imagen'}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="gf-image-empty">
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🖼</div>
+                        {imgUploading
+                          ? <span style={{ color: 'var(--brand-primary-light)', fontWeight: 600 }}>Subiendo imagen…</span>
+                          : <><span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Clic o arrastra una imagen aquí</span><span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>PNG, JPG, WEBP hasta 10 MB</span></>
+                        }
+                      </div>
+                    )}
+                  </div>
+                  {imgError && (
+                    <div style={{ fontSize: '0.8rem', color: '#f87171', marginTop: '0.5rem' }}>{imgError}</div>
+                  )}
+
+                  {/* OR paste URL */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>o pega una URL:</span>
                     <input
-                      className="input gf-placeholder-input"
-                      style={{ flex: 1 }}
+                      className="input"
+                      style={{ flex: 1, fontSize: '0.82rem' }}
                       placeholder="https://ejemplo.com/imagen.jpg"
                       value={field.imageUrl ?? ''}
                       onChange={(e) => update({ imageUrl: e.target.value })}
                     />
                     {field.imageUrl && (
-                      <div style={{ width: 80, height: 60, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)', flexShrink: 0 }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={proxifyMediaUrl(field.imageUrl)} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </div>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding: '0.25rem 0.5rem', flexShrink: 0 }}
+                        onClick={() => update({ imageUrl: '' })}
+                        type="button"
+                        title="Quitar imagen"
+                      >
+                        <X size={14} />
+                      </button>
                     )}
                   </div>
+
+                  {/* Caption */}
                   <div style={{ marginTop: '0.75rem' }}>
                     <label className="gf-setting-label">Texto bajo imagen (opcional):</label>
                     <input
                       className="input"
-                      placeholder="Ej: Foto de referencia"
-                      value={field.label}
-                      onChange={(e) => update({ label: e.target.value })}
+                      placeholder="Ej: Foto de referencia del producto"
+                      value={field.helpText ?? ''}
+                      onChange={(e) => update({ helpText: e.target.value })}
                     />
                   </div>
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <label className="gf-setting-label">URL de imagen:</label>
-                    <input
-                      className="input"
-                      placeholder="https://ejemplo.com/imagen.jpg"
-                      value={field.imageUrl ?? ''}
-                      onChange={(e) => update({ imageUrl: e.target.value })}
-                    />
-                  </div>
-                  {field.imageUrl && (
-                    <div style={{ marginTop: '1rem', padding: '1rem', background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(15,23,42,0.2))', borderRadius: 12, border: '1px solid rgba(99,102,241,0.2)' }}>
-                      <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Vista previa:</div>
-                      <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(99,102,241,0.15)', background: 'rgba(0,0,0,0.2)' }}>
-                        <img src={proxifyMediaUrl(field.imageUrl)} alt="preview" style={{ width: '100%', height: 'auto', maxHeight: '280px', objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.5'; }} />
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1554,6 +1611,14 @@ function GfStyles() {
       .gf-form-title-edit:focus { border-bottom-color: #6366f1; }
       .gf-form-desc-edit { background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 0.875rem; color: var(--text-secondary); outline: none; width: 100%; padding-bottom: 0.2rem; }
       .gf-form-desc-edit:focus { border-bottom-color: rgba(99,102,241,0.4); }
+
+      /* Image dropzone */
+      .gf-image-dropzone { position: relative; min-height: 160px; border-radius: 12px; border: 2px dashed rgba(99,102,241,0.35); background: rgba(99,102,241,0.05); cursor: pointer; overflow: hidden; transition: border-color 0.18s, background 0.18s; display: flex; align-items: center; justify-content: center; }
+      .gf-image-dropzone:hover { border-color: rgba(99,102,241,0.65); background: rgba(99,102,241,0.09); }
+      .gf-image-uploading { pointer-events: none; opacity: 0.7; }
+      .gf-image-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; padding: 2rem; text-align: center; }
+      .gf-image-overlay { position: absolute; inset: 0; background: rgba(5,8,20,0.55); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.18s; color: white; }
+      .gf-image-dropzone:hover .gf-image-overlay { opacity: 1; }
 
       /* Question cards */
       .gf-question-card { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-elevated); cursor: pointer; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
