@@ -5,6 +5,8 @@ import https from 'node:https';
 const SUPABASE_DNS_SERVERS = ['8.8.8.8', '8.8.4.4'];
 const resolver = new dns.promises.Resolver();
 resolver.setServers(SUPABASE_DNS_SERVERS);
+const httpKeepAliveAgent = new http.Agent({ keepAlive: true, maxSockets: 100 });
+const httpsKeepAliveAgent = new https.Agent({ keepAlive: true, maxSockets: 100 });
 
 function isSupabaseHostname(hostname: string) {
   return hostname.endsWith('.supabase.co');
@@ -102,6 +104,7 @@ export async function fetchWithSupabaseDns(input: RequestInfo | URL, init?: Requ
         method,
         headers: Object.fromEntries(headers.entries()),
         lookup: dnsLookup,
+        agent: targetUrl.protocol === 'http:' ? httpKeepAliveAgent : httpsKeepAliveAgent,
       },
       (nodeResponse) => {
         const chunks: Buffer[] = [];

@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import type { SupportTicket, UserRole } from '@/types/database';
 
 export const metadata: Metadata = { title: 'Support Center' };
+const SUPPORT_TICKET_SELECT = 'id,user_id,department,subject,message,status,created_at';
 
 type QueueTicket = SupportTicket & {
   user?: {
@@ -34,7 +35,7 @@ export default async function SupportPage() {
 
   const { data: myTickets } = await supabase
     .from('support_tickets')
-    .select('*')
+    .select(SUPPORT_TICKET_SELECT)
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
@@ -44,11 +45,14 @@ export default async function SupportPage() {
     const department = role === 'admin' ? 'it' : 'moderator';
     const { data } = await supabase
       .from('support_tickets')
-      .select('*, user:users(name, email, employee_id)')
+      .select(`${SUPPORT_TICKET_SELECT}, user:users(name, email, employee_id)`)
       .eq('department', department)
       .order('created_at', { ascending: false });
 
-    queueTickets = (data ?? []) as QueueTicket[];
+    queueTickets = (data ?? []).map((ticket) => ({
+      ...ticket,
+      user: Array.isArray(ticket.user) ? (ticket.user[0] ?? null) : (ticket.user ?? null),
+    })) as QueueTicket[];
   }
 
   return (

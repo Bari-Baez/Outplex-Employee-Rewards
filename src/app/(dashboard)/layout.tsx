@@ -16,8 +16,10 @@ import type { FormDefinition } from '@/lib/forms/types';
 import { BackgroundShader } from '@/components/layout/BackgroundShader';
 import { DashboardThemeBridge } from '@/components/theme/DashboardThemeBridge';
 import { MobileNav } from '@/components/MobileNav';
-import { TOOL_KEYS } from '@/lib/tools-catalog';
-import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability } from '@/lib/tool-availability';
+import { getCachedAvailabilitySnapshot, getCachedMandatoryPublishedForms } from '@/lib/read-models/dashboard';
+
+const DASHBOARD_PROFILE_SELECT =
+  'id,slack_id,name,email,avatar_url,role,employee_id,supervisor,supervisor_id,department,points,is_approved,role_revoked_at,created_at';
 
 export default async function DashboardLayout({
   children,
@@ -36,17 +38,16 @@ export default async function DashboardLayout({
   // Fetch user profile including role
   const { data: profile } = await supabase
     .from('users')
-    .select('*')
+    .select(DASHBOARD_PROFILE_SELECT)
     .eq('id', user.id)
     .single();
 
-  // Fetch mandatory forms
+  if (!profile) {
+    redirect('/login');
+  }
+
   const serviceClient = await createServiceClient();
-  const { data: mandatoryForms } = await serviceClient
-    .from('forms')
-    .select('*')
-    .eq('is_mandatory', true)
-    .eq('status', 'published');
+  const mandatoryForms = await getCachedMandatoryPublishedForms();
 
   // Fetch user responses for mandatory forms
   const { data: userResponses } = await serviceClient
@@ -60,16 +61,12 @@ export default async function DashboardLayout({
     (f) => !completedFormIds.has(f.id)
   );
 
-  const [toolAvailability, sectionAvailability, maintenanceBanner] = await Promise.all([
-    loadToolAvailability(serviceClient, TOOL_KEYS),
-    loadSectionAvailability(serviceClient),
-    loadMaintenanceBanner(serviceClient),
-  ]);
+  const { toolAvailability, sectionAvailability, maintenanceBanner } = await getCachedAvailabilitySnapshot();
 
   // Check for active role requests
   const { data: roleRequest } = await serviceClient
     .from('role_requests')
-    .select('*')
+    .select('id,status,notes,created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)

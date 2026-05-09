@@ -12,12 +12,19 @@ import {
 import { EmployeeDashboard } from '@/components/dashboard/EmployeeDashboard';
 import { WorkforceDashboard } from '@/components/dashboard/WorkforceDashboard';
 import { SupervisorDashboard } from '@/components/dashboard/SupervisorDashboard';
+import { getCachedDashboardRaffles } from '@/lib/read-models/dashboard';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
 };
 
 type SupervisorScopedRow = { user?: { supervisor_id?: string | null } | null };
+const DASHBOARD_PROFILE_SELECT =
+  'id,slack_id,name,email,avatar_url,role,employee_id,supervisor,supervisor_id,department,points,is_approved,role_revoked_at,created_at';
+const CLAIMED_SLOT_SELECT =
+  'id,spot_id,date,start_time,end_time,duration_hrs,shift_label,status,claimed_by,claimed_at,published_by,batch_id,created_at,lob,csv_status';
+const DAILY_SCHEDULE_SELECT =
+  'id,batch_id,employee_id,schedule_date,shift_start,shift_end,shift_length_hrs,first_break_start,first_break_end,lunch_start,lunch_end,second_break_start,second_break_end,third_break_start,third_break_end,is_ot_day,hour_type,lob,supervisor_name,supervisor_id,created_at,updated_at';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -29,9 +36,13 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('*')
+    .select(DASHBOARD_PROFILE_SELECT)
     .eq('id', user.id)
     .single();
+
+  if (!profile) {
+    redirect('/login');
+  }
 
   const currentMoment = getCurrentOTDateTime();
   const todayIso = currentMoment.date;
@@ -40,25 +51,20 @@ export default async function DashboardPage() {
   const startOfMonthIso = getOTMonthStart(todayIso);
   const currentMonthPrefix = `${todayIso.slice(0, 7)}-`;
 
-  const [claimedSlotsResult, rafflesResult, dailySchedulesResult] = await Promise.all([
+  const [claimedSlotsResult, raffles, dailySchedulesResult] = await Promise.all([
     supabase
       .from('ot_slots')
-      .select('*')
+      .select(CLAIMED_SLOT_SELECT)
       .eq('claimed_by', user.id)
       .eq('status', 'claimed')
       .gte('date', sixtyDaysAgoIso)
       .lte('date', ninetyDaysAheadIso)
       .order('date', { ascending: false })
       .order('start_time', { ascending: false }),
-    supabase
-      .from('raffles')
-      .select('*')
-      .in('status', ['upcoming', 'live'])
-      .order('draw_date', { ascending: true })
-      .limit(3),
+    getCachedDashboardRaffles(),
     supabase
       .from('daily_schedules')
-      .select('*')
+      .select(DAILY_SCHEDULE_SELECT)
       .eq('employee_id', user.id)
       .gte('schedule_date', sixtyDaysAgoIso)
       .lte('schedule_date', ninetyDaysAheadIso)
@@ -83,7 +89,6 @@ export default async function DashboardPage() {
   }
 
   const claimedSlots = claimedSlotsRaw;
-  const raffles = rafflesResult.data ?? [];
   const dailySchedulesRaw = dailySchedulesResult.data ?? [];
 
   // --- Moderator A1 / Admin Data ---
@@ -91,10 +96,10 @@ export default async function DashboardPage() {
   if (['admin', 'moderator_a1', 'moderator'].includes(profile.role)) {
     const service = await createServiceClient();
     const [empCount, otPending, storePending, activeStores, pointsSum] = await Promise.all([
-      service.from('users').select('*', { count: 'exact', head: true }),
-      service.from('ot_slots').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      service.from('employee_store_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      service.from('employee_stores').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+      service.from('users').select('id', { count: 'exact', head: true }),
+      service.from('ot_slots').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      service.from('employee_store_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      service.from('employee_stores').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       service.from('users').select('points'),
     ]);
 

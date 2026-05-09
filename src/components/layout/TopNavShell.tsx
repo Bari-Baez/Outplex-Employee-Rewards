@@ -30,7 +30,6 @@ import {
 import { ModernSelect } from '@/components/ui/Select';
 import { createClient } from '@/lib/supabase/client';
 import type {
-  Notification,
   SupportDepartment,
   SupportTicket,
   User,
@@ -41,6 +40,7 @@ import { useAppStore } from '@/lib/store';
 import type { UserRole } from '@/types/database';
 import { useAppAvailability } from '@/components/layout/AppAvailabilityProvider';
 import { resolveToolKeyFromPathname } from '@/lib/tools-catalog';
+import { useShellData } from '@/hooks/useShellData';
 
 interface SearchItem {
   label: string;
@@ -123,6 +123,98 @@ function getShellBadgeState({
   };
 }
 
+function buildLiveEvents(
+  shared: {
+    availableOtCount: number;
+    firstAvailableSlot: {
+      id: string;
+      date: string;
+      start_time: string;
+      end_time: string;
+      shift_label: string | null;
+    } | null;
+    liveRaffle: {
+      id: string;
+      title: string | null;
+      draw_date: string | null;
+      status: string;
+    } | null;
+    upcomingRaffle: {
+      id: string;
+      title: string | null;
+      draw_date: string | null;
+      status: string;
+    } | null;
+  } | null,
+  role: UserRole,
+) {
+  if (!shared) {
+    return [] as LiveEventItem[];
+  }
+
+  const nextLiveEvents: LiveEventItem[] = [];
+
+  if (shared.availableOtCount > 0) {
+    nextLiveEvents.push({
+      id: 'live-ot',
+      type: 'ot',
+      title: `${shared.availableOtCount} OT slot${shared.availableOtCount === 1 ? '' : 's'} available`,
+      summary: shared.firstAvailableSlot
+        ? `${new Date(`${shared.firstAvailableSlot.date}T${shared.firstAvailableSlot.start_time}`).toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          })} • ${shared.firstAvailableSlot.start_time} - ${shared.firstAvailableSlot.end_time}`
+        : 'Open OT is available right now.',
+      href: shared.firstAvailableSlot
+        ? `/ot-calendar?date=${shared.firstAvailableSlot.date}`
+        : '/ot-calendar',
+    });
+  }
+
+  if (shared.liveRaffle) {
+    nextLiveEvents.push({
+      id: shared.liveRaffle.id,
+      type: 'raffle',
+      title: shared.liveRaffle.title ?? 'Live raffle',
+      summary: shared.liveRaffle.draw_date
+        ? `Running now • ${new Date(shared.liveRaffle.draw_date).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}`
+        : 'The wheel is already running.',
+      href:
+        role === 'employee'
+          ? `/raffles?raffle=${shared.liveRaffle.id}`
+          : `/moderator/raffles?raffle=${shared.liveRaffle.id}`,
+    });
+  }
+
+  if (nextLiveEvents.length === 0 && shared.upcomingRaffle) {
+    nextLiveEvents.push({
+      id: shared.upcomingRaffle.id,
+      type: 'upcoming',
+      title: shared.upcomingRaffle.title ?? 'Upcoming raffle',
+      summary: shared.upcomingRaffle.draw_date
+        ? `Starts ${new Date(shared.upcomingRaffle.draw_date).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}`
+        : 'Scheduled event',
+      href:
+        role === 'employee'
+          ? `/raffles?raffle=${shared.upcomingRaffle.id}`
+          : `/moderator/raffles?raffle=${shared.upcomingRaffle.id}`,
+    });
+  }
+
+  return nextLiveEvents;
+}
+
 function playSoftNotificationSound() {
   if (typeof window === 'undefined') {
     return;
@@ -158,7 +250,6 @@ function playSoftNotificationSound() {
 export function TopNavShell({ user }: TopNavShellProps) {
   const [supabase] = useState(() => createClient());
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [pointsBalance, setPointsBalance] = useState<number>(user?.points ?? 0);
   const [liveMenuOpen, setLiveMenuOpen] = useState(false);
   const [notificationsBadgeDismissed, setNotificationsBadgeDismissed] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -166,28 +257,28 @@ export function TopNavShell({ user }: TopNavShellProps) {
   const [dockHoverVisible, setDockHoverVisible] = useState(false);
   const [ticketMessage, setTicketMessage] = useState('');
   const [ticketDept, setTicketDept] = useState<SupportDepartment | ''>('');
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [ticketError, setTicketError] = useState('');
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
-  const [liveEvents, setLiveEvents] = useState<LiveEventItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchSelectedIndex, setSearchSelectedIndex] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showFloatingAlert, setShowFloatingAlert] = useState(false);
+  const { data: shellData, error: shellDataError, mutate: mutateShellData } = useShellData(
+    Boolean(user?.id),
+  );
 
-
-  // Keep points balance synced with the user prop
-  useEffect(() => {
-    if (user?.points !== undefined) {
-      setPointsBalance(user.points);
-    }
-  }, [user?.points]);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const dockShellRef = useRef<HTMLElement | null>(null);
   const shellMenuRef = useRef<HTMLDivElement | null>(null);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const { isToolEnabled } = useAppAvailability();
+  const pointsBalance = shellData?.pointsBalance ?? user?.points ?? 0;
+  const tickets = shellData?.tickets ?? [];
+  const liveEvents = useMemo(
+    () => buildLiveEvents(shellData?.shared ?? null, user?.role ?? 'employee'),
+    [shellData?.shared, user?.role],
+  );
 
   useEffect(() => {
     const el = dockShellRef.current;
@@ -313,236 +404,60 @@ export function TopNavShell({ user }: TopNavShellProps) {
   }, [unreadNotificationCount]);
 
   useEffect(() => {
-    setPointsBalance(user?.points ?? 0);
-  }, [user?.points]);
-
-  useEffect(() => {
     if (!dropdownOpen || !user?.id) {
       return;
     }
-
-    let isDisposed = false;
-
-    const loadLatestPoints = async () => {
-      const { data } = await supabase
-        .from('users')
-        .select('points')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (!isDisposed && typeof data?.points === 'number') {
-        setPointsBalance(data.points);
-      }
-    };
-
-    void loadLatestPoints();
-    return () => {
-      isDisposed = true;
-    };
-  }, [dropdownOpen, user?.id, supabase]);
+    void mutateShellData();
+  }, [dropdownOpen, mutateShellData, user?.id]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !shellData) {
       return;
     }
+ 
+    const nextNotifications = shellData.notifications ?? [];
+    const nextNotificationIds = new Set(nextNotifications.map((notification) => notification.id));
+    const newNotifications = nextNotifications.filter(
+      (notification) => !seenNotificationIdsRef.current.has(notification.id),
+    );
 
-    let isDisposed = false;
-
-    const loadShellData = async () => {
-      try {
-        const [
-          notificationResult,
-          ticketResult,
-          otResult,
-          liveRaffleResult,
-          upcomingRaffleResult,
-        ] = await Promise.all([
-          (async () => {
-            const withSender = await supabase
-              .from('notifications')
-              .select('*, sender:users!notifications_sender_id_fkey(id, name, avatar_url, role)')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .limit(20);
-
-            if (!withSender.error) {
-              return withSender;
-            }
-
-            return supabase
-              .from('notifications')
-              .select('*')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .limit(20);
-          })(),
-          supabase
-            .from('support_tickets')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(10),
-          supabase
-            .from('ot_slots')
-            .select('id, date, start_time, end_time, shift_label', { count: 'exact' })
-            .eq('status', 'available'),
-          supabase
-            .from('raffles')
-            .select('id, title, draw_date')
-            .eq('status', 'live')
-            .order('draw_date', { ascending: true })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('raffles')
-            .select('id, title, draw_date')
-            .eq('status', 'upcoming')
-            .order('draw_date', { ascending: true })
-            .limit(1)
-            .maybeSingle(),
-        ]);
-
-        if (isDisposed) {
-          return;
-        }
-
-        const nextNotifications = (notificationResult.data ?? []) as Notification[];
-        const nextTickets = ((ticketResult.data ?? []) as SupportTicket[]).filter((ticket) => {
-          if (ticket.status !== 'resolved') {
-            return true;
-          }
-
-          return Date.now() - new Date(ticket.created_at).getTime() <= 5 * 24 * 60 * 60 * 1000;
-        });
-
-        const nextNotificationIds = new Set(nextNotifications.map((notification) => notification.id));
-        
-        // Find if there are truly "new" notifications we haven't seen in this session yet
-        const newNotifications = nextNotifications.filter(n => !seenNotificationIdsRef.current.has(n.id));
-        
-        if (newNotifications.length > 0 && seenNotificationIdsRef.current.size > 0) {
-          // Trigger floating top-center alert
-          if (notificationPopupsEnabled) {
-            setShowFloatingAlert(true);
-            window.setTimeout(() => setShowFloatingAlert(false), 5000);
-          }
-          
-          // Trigger ultra-soft audio chime
-          if (notificationSoundEnabled) {
-            playSoftNotificationSound();
-          }
-        }
-
-
-        const nextLiveEvents: LiveEventItem[] = [];
-
-        if ((otResult.count ?? 0) > 0) {
-          const firstAvailableSlot = otResult.data?.[0];
-          nextLiveEvents.push({
-            id: 'live-ot',
-            type: 'ot',
-            title: `${otResult.count ?? 0} OT slot${(otResult.count ?? 0) === 1 ? '' : 's'} available`,
-            summary: firstAvailableSlot
-              ? `${new Date(`${firstAvailableSlot.date}T${firstAvailableSlot.start_time}`).toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })} • ${firstAvailableSlot.start_time} - ${firstAvailableSlot.end_time}`
-              : 'Open OT is available right now.',
-            href: firstAvailableSlot ? `/ot-calendar?date=${firstAvailableSlot.date}` : '/ot-calendar',
-          });
-        }
-
-        if (liveRaffleResult.data) {
-          nextLiveEvents.push({
-            id: liveRaffleResult.data.id,
-            type: 'raffle',
-            title: liveRaffleResult.data.title ?? 'Live raffle',
-            summary: liveRaffleResult.data.draw_date
-              ? `Running now • ${new Date(liveRaffleResult.data.draw_date).toLocaleString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}`
-              : 'The wheel is already running.',
-            href: user.role === 'employee'
-              ? `/raffles?raffle=${liveRaffleResult.data.id}`
-              : `/moderator/raffles?raffle=${liveRaffleResult.data.id}`,
-          });
-        }
-
-        if (nextLiveEvents.length === 0 && upcomingRaffleResult.data) {
-          nextLiveEvents.push({
-            id: upcomingRaffleResult.data.id,
-            type: 'upcoming',
-            title: upcomingRaffleResult.data.title ?? 'Upcoming raffle',
-            summary: upcomingRaffleResult.data.draw_date
-              ? `Starts ${new Date(upcomingRaffleResult.data.draw_date).toLocaleString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}`
-              : 'Scheduled event',
-            href: user.role === 'employee'
-              ? `/raffles?raffle=${upcomingRaffleResult.data.id}`
-              : `/moderator/raffles?raffle=${upcomingRaffleResult.data.id}`,
-          });
-        }
-
-        seenNotificationIdsRef.current = nextNotificationIds;
-
-        setNotifications(nextNotifications);
-        setTickets(nextTickets);
-        setLiveEvents(nextLiveEvents);
-        setStoredLiveEvents(nextLiveEvents);
-        setAppShellBadge(
-          getShellBadgeState({
-            hasAvailableOt: (otResult.count ?? 0) > 0,
-            hasLiveRaffle: Boolean(liveRaffleResult.data),
-            nextUpcomingRaffle: upcomingRaffleResult.data,
-          }),
-        );
-      } catch (error) {
-        if (!isDisposed) {
-          console.warn('[topnav] shell data refresh failed', error);
-        }
+    if (newNotifications.length > 0 && seenNotificationIdsRef.current.size > 0) {
+      if (notificationPopupsEnabled) {
+        setShowFloatingAlert(true);
+        window.setTimeout(() => setShowFloatingAlert(false), 5000);
       }
-    };
 
-    void loadShellData();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void loadShellData();
+      if (notificationSoundEnabled) {
+        playSoftNotificationSound();
       }
-    }, 20000);
+    }
 
-    let syncTimeout: number | null = null;
-    const syncWithDebounce = () => {
-      if (syncTimeout) window.clearTimeout(syncTimeout);
-      syncTimeout = window.setTimeout(() => {
-        if (document.visibilityState === 'visible') {
-          void loadShellData();
-        }
-      }, 500);
-    };
+    seenNotificationIdsRef.current = nextNotificationIds;
+    setNotifications(nextNotifications);
+    setStoredLiveEvents(liveEvents);
+    setAppShellBadge(
+      getShellBadgeState({
+        hasAvailableOt: shellData.shared.availableOtCount > 0,
+        hasLiveRaffle: Boolean(shellData.shared.liveRaffle),
+        nextUpcomingRaffle: shellData.shared.upcomingRaffle,
+      }),
+    );
+  }, [
+    liveEvents,
+    notificationPopupsEnabled,
+    notificationSoundEnabled,
+    setAppShellBadge,
+    setNotifications,
+    setStoredLiveEvents,
+    shellData,
+    user,
+  ]);
 
-    const syncOnFocus = () => {
-      syncWithDebounce();
-    };
-
-    document.addEventListener('visibilitychange', syncWithDebounce);
-    window.addEventListener('focus', syncOnFocus);
-
-    return () => {
-      isDisposed = true;
-      window.clearInterval(interval);
-      if (syncTimeout) window.clearTimeout(syncTimeout);
-      document.removeEventListener('visibilitychange', syncWithDebounce);
-      window.removeEventListener('focus', syncOnFocus);
-    };
-  }, [setAppShellBadge, setNotifications, setStoredLiveEvents, supabase, user]);
+  useEffect(() => {
+    if (shellDataError) {
+      console.warn('[topnav] shell data refresh failed', shellDataError);
+    }
+  }, [shellDataError]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-sidebar-expanded', sidebarExpanded.toString());
@@ -623,7 +538,19 @@ export function TopNavShell({ user }: TopNavShellProps) {
         throw new Error(payload.error ?? 'Unable to create ticket.');
       }
 
-      setTickets((current) => [payload.data!, ...current].slice(0, 10));
+      await mutateShellData(
+        (current) =>
+          current
+            ? {
+                ...current,
+                tickets: [payload.data!, ...current.tickets].slice(0, 10),
+              }
+            : current,
+        {
+          populateCache: true,
+          revalidate: false,
+        },
+      );
       setTicketMessage('');
     } catch (err) {
       setTicketError(err instanceof Error ? err.message : 'Unable to create ticket.');
@@ -676,6 +603,8 @@ export function TopNavShell({ user }: TopNavShellProps) {
 
   const roleLabel: Record<string, string> = {
     employee: 'Employee',
+    moderator_a1: 'Moderator A1',
+    moderator_b1: 'Moderator B1',
     moderator: 'Moderator',
     admin: 'Admin (IT)',
   };

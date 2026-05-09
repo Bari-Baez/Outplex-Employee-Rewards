@@ -155,7 +155,10 @@ export function GlobalDrawersShell() {
 
     const refreshCartInventory = async () => {
       const itemIds = cart.map((cartItem) => cartItem.item.id);
-      const { data, error } = await supabase.from('store_items').select('*').in('id', itemIds);
+      const { data, error } = await supabase
+        .from('store_items')
+        .select('id,name,description,points_cost,image_url,stock,is_active,created_at')
+        .in('id', itemIds);
 
       if (cancelled || error) {
         return;

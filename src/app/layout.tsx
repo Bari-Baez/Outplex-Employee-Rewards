@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
+import { AppSWRProvider } from '@/components/providers/SWRProvider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -28,8 +29,10 @@ export default function RootLayout({
         />
       </head>
       <body suppressHydrationWarning>
-        {children}
-        <Toaster position="top-right" richColors />
+        <AppSWRProvider>
+          {children}
+          <Toaster position="top-right" richColors />
+        </AppSWRProvider>
       </body>
     </html>
   );

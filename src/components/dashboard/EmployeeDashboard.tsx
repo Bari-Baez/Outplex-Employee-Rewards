@@ -15,7 +15,7 @@ interface EmployeeDashboardProps {
   totalHours: number;
   recentHours: number;
   upcomingSlots: OTSlot[];
-  raffles: Raffle[];
+  raffles: Array<Pick<Raffle, 'id' | 'draw_date' | 'status'> & { title: string | null }>;
   claimedSlots: OTSlot[];
   currentMoment: { date: string; time: string };
   claimMetas?: Record<string, OTClaimKind>;

@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { formatDop } from '@/lib/utils';
 import { isLowStockItem, getLowStockUrgencyCopy, getStockLabel, formatPoints, getStoreThemePresentation } from '@/lib/store-helpers';
+import { useStoreClientData } from '@/hooks/useStoreClientData';
 
 type EmployeeReviewUser = Pick<User, 'id' | 'name' | 'avatar_url'>;
 type EmployeeProductReview = Pick<EmployeeStoreProductReview, 'id' | 'rating' | 'user_id'> & {
@@ -119,8 +120,9 @@ export function getStoreScheduleStatus(store: EmployeeStorePublic) {
   const currentDayIndex = sdNow.getDay();
   const currentDayEn = DAY_NAMES_EN[currentDayIndex];
   const currentMinutes = sdNow.getHours() * 60 + sdNow.getMinutes();
+  const operatingHours = store.operating_hours as OperatingHoursConfig;
   
-  const config = (store.operating_hours as any)[currentDayEn];
+  const config = operatingHours[currentDayEn];
   let isOpenToday = false;
   let todayOpenMin = 0;
   let todayCloseMin = 0;
@@ -151,7 +153,7 @@ export function getStoreScheduleStatus(store: EmployeeStorePublic) {
   for (let i = 1; i <= 7; i++) {
     const nextDayIndex = (currentDayIndex + i) % 7;
     const nextDayEn = DAY_NAMES_EN[nextDayIndex];
-    const nextConfig = (store.operating_hours as any)[nextDayEn];
+    const nextConfig = operatingHours[nextDayEn];
     if (nextConfig && nextConfig.isOpen !== false && nextConfig.open && nextConfig.close) {
       const dayEs = DAY_NAMES_ES[nextDayIndex];
       const prefix = i === 1 ? 'mañana' : dayEs.toLowerCase();
@@ -168,14 +170,13 @@ function isStoreCurrentlyOpen(store: EmployeeStorePublic) {
 
 export function StoreClient({ items, profile, theme, employeeStores, buyerContactPrefs }: StoreClientProps) {
   const { addToCart, cart, setCartOpen, addToEmpCart, empCart, setEmpCartOpen, setBuyerWhatsappOptIn } = useAppStore();
+  const { data: storeClientData, mutate: mutateStoreClientData } = useStoreClientData(items.length > 0);
 
   useEffect(() => {
     setBuyerWhatsappOptIn(buyerContactPrefs?.whatsapp_opt_in ?? null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [selectedItem, setSelectedItem] = useState<StoreItem | null>(null);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
-  const [reviewsMap, setReviewsMap] = useState<Record<string, { avg: number; count: number; reviews: StoreReview[] }>>({});
 
   // Employee store state
   const [storeMode, setStoreMode] = useState<'nyt' | 'employee'>('nyt');
@@ -227,61 +228,76 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
     }
     setEmpReviewsMap(newMap);
   }, [employeeStores]);
-  useEffect(() => {
-    const controller = new AbortController();
-    const { signal } = controller;
 
-    const loadFavorites = async () => {
-      try {
-        const res = await fetch('/api/store/favorites', { signal });
-        const data = (await res.json()) as { favoriteItemIds?: string[] };
-        setFavoriteIds(new Set(data.favoriteItemIds ?? []));
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        console.warn('[store] loadFavorites failed', err);
+  const favoriteIds = useMemo(
+    () => new Set(storeClientData?.favoriteItemIds ?? []),
+    [storeClientData?.favoriteItemIds],
+  );
+
+  const reviewsMap = useMemo<Record<string, { avg: number; count: number; reviews: StoreReview[] }>>(
+    () => {
+      const nextMap: Record<string, { avg: number; count: number; reviews: StoreReview[] }> = {};
+      for (const [itemId, value] of Object.entries(storeClientData?.summary ?? {})) {
+        nextMap[itemId] = {
+          avg: value.avg,
+          count: value.count,
+          reviews: [],
+        };
       }
-    };
-
-    const loadReviewsSummary = async () => {
-      try {
-        const res = await fetch('/api/store/reviews/summary', { signal });
-        const data = (await res.json()) as { summary?: Record<string, { avg: number; count: number }> };
-        if (data.summary) {
-          const nextMap: typeof reviewsMap = {};
-          Object.entries(data.summary).forEach(([itemId, val]) => {
-            nextMap[itemId] = { ...val, reviews: [] };
-          });
-          setReviewsMap(nextMap);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        console.warn('[store] failed to load reviews summary', err);
-      }
-    };
-
-    void loadFavorites();
-    void loadReviewsSummary();
-    return () => controller.abort();
-  }, [items]);
+      return nextMap;
+    },
+    [storeClientData?.summary],
+  );
 
   const toggleFavorite = useCallback(async (itemId: string) => {
     try {
-      const res = await fetch('/api/store/favorites/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId }),
-      });
-      const data = (await res.json()) as { isFavorite?: boolean };
-      setFavoriteIds((prev) => {
-        const next = new Set(prev);
-        if (data.isFavorite) next.add(itemId);
-        else next.delete(itemId);
-        return next;
-      });
+      const isFavoriteNow = favoriteIds.has(itemId);
+      await mutateStoreClientData(
+        async (current) => {
+          const res = await fetch('/api/store/favorites/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemId }),
+          });
+          const data = (await res.json()) as { isFavorite?: boolean; error?: string };
+          if (!res.ok) {
+            throw new Error(data.error || 'No se pudo actualizar favoritos');
+          }
+
+          const nextFavoriteItemIds = new Set(current?.favoriteItemIds ?? []);
+          if (data.isFavorite) {
+            nextFavoriteItemIds.add(itemId);
+          } else {
+            nextFavoriteItemIds.delete(itemId);
+          }
+
+          return {
+            favoriteItemIds: [...nextFavoriteItemIds],
+            summary: current?.summary ?? {},
+          };
+        },
+        {
+          optimisticData: (current) => {
+            const nextFavoriteItemIds = new Set(current?.favoriteItemIds ?? []);
+            if (isFavoriteNow) {
+              nextFavoriteItemIds.delete(itemId);
+            } else {
+              nextFavoriteItemIds.add(itemId);
+            }
+            return {
+              favoriteItemIds: [...nextFavoriteItemIds],
+              summary: current?.summary ?? {},
+            };
+          },
+          rollbackOnError: true,
+          populateCache: true,
+          revalidate: false,
+        },
+      );
     } catch {
       toast.error('No se pudo actualizar favoritos');
     }
-  }, []);
+  }, [favoriteIds, mutateStoreClientData]);
 
   const submitReview = useCallback(async (itemId: string, rating: number, comment?: string) => {
     setIsRating(true);
@@ -295,23 +311,13 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al calificar');
 
-      const summaryRes = await fetch('/api/store/reviews/summary');
-      const summaryData = (await summaryRes.json()) as { summary?: Record<string, { avg: number; count: number }> };
-      if (summaryData.summary) {
-        setReviewsMap(prev => {
-          const next = { ...prev };
-          Object.entries(summaryData.summary!).forEach(([id, val]) => {
-            next[id] = { ...val, reviews: prev[id]?.reviews ?? [] };
-          });
-          return next;
-        });
-      }
+      await mutateStoreClientData();
     } catch (err) {
       setRatingError(err instanceof Error ? err.message : 'Error al calificar');
     } finally {
       setIsRating(false);
     }
-  }, [profile.name]);
+  }, [mutateStoreClientData]);
 
   const submitEmpReview = useCallback(async (productId: string, rating: number) => {
     setIsRating(true);
