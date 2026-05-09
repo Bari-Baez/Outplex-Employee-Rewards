@@ -93,6 +93,12 @@ type DeleteDialogState = {
   slot: OTSlot;
   step: 1 | 2;
 } | null;
+type BulkDeleteDialogState = {
+  mode: 'group' | 'selection';
+  slotIds: string[];
+  label: string;
+  step: 1 | 2;
+} | null;
 type RecentlyAddedGroup = {
   key: string;
   publishedAt: string;
@@ -106,6 +112,8 @@ type ExportColumn = {
   width: number;
 };
 type ExportRow = Record<string, string>;
+
+const BULK_DELETE_SAVING_KEY = '__bulk_delete__';
 
 const EXPORT_COLUMN_KEYS = [
   'employee_name',
@@ -429,6 +437,7 @@ export function OTManagerClient({
   const [edits, setEdits] = useState<Record<string, EditState>>({});
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState<BulkDeleteDialogState>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [quickRange, setQuickRange] = useState<QuickRangeKey>('all');
@@ -458,6 +467,7 @@ export function OTManagerClient({
   const [exportStudioDateFrom, setExportStudioDateFrom] = useState('');
   const [exportStudioDateTo, setExportStudioDateTo] = useState('');
   const [exportStudioFetchLoading, setExportStudioFetchLoading] = useState(false);
+  const [selectedRecentSlotIds, setSelectedRecentSlotIds] = useState<Set<string>>(new Set());
 
   const currentRole = currentUser.role;
   const isB1 = currentRole === 'moderator_b1';
@@ -488,6 +498,20 @@ export function OTManagerClient({
     void fetch('/api/moderator/maintenance/cleanup-logs', { method: 'POST' })
       .catch(err => console.error('Maintenance error:', err));
   }, [currentMoment.date]);
+
+  useEffect(() => {
+    if (filter !== 'recently_added' && selectedRecentSlotIds.size > 0) {
+      setSelectedRecentSlotIds(new Set());
+    }
+  }, [filter, selectedRecentSlotIds]);
+
+  useEffect(() => {
+    setSelectedRecentSlotIds((current) => {
+      const validIds = new Set(slots.map((slot) => slot.id));
+      const next = new Set(Array.from(current).filter((slotId) => validIds.has(slotId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [slots]);
 
   const filteredSlots = useMemo(() => {
     const normalizedEmployeeQuery = employeeQuery.trim().toLowerCase();
@@ -1006,6 +1030,109 @@ export function OTManagerClient({
     setDeleteDialog({ slot, step: 1 });
   };
 
+  const toggleRecentSlotSelection = (slotId: string) => {
+    setSelectedRecentSlotIds((current) => {
+      const next = new Set(current);
+      if (next.has(slotId)) {
+        next.delete(slotId);
+      } else {
+        next.add(slotId);
+      }
+      return next;
+    });
+  };
+
+  const toggleRecentGroupSelection = (group: RecentlyAddedGroup) => {
+    const groupSlotIds = group.slots.map((slot) => slot.id);
+    const everySelected = groupSlotIds.every((slotId) => selectedRecentSlotIds.has(slotId));
+    setSelectedRecentSlotIds((current) => {
+      const next = new Set(current);
+      groupSlotIds.forEach((slotId) => {
+        if (everySelected) {
+          next.delete(slotId);
+        } else {
+          next.add(slotId);
+        }
+      });
+      return next;
+    });
+  };
+
+  const openBulkDeleteDialog = ({
+    mode,
+    slotIds,
+    label,
+  }: {
+    mode: 'group' | 'selection';
+    slotIds: string[];
+    label: string;
+  }) => {
+    if (slotIds.length === 0) {
+      return;
+    }
+    setBulkDeleteDialog({ mode, slotIds, label, step: 1 });
+  };
+
+  const executeBulkDelete = async (dialog: Exclude<BulkDeleteDialogState, null>) => {
+    const uniqueSlotIds = Array.from(new Set(dialog.slotIds));
+    if (uniqueSlotIds.length === 0) {
+      setBulkDeleteDialog(null);
+      return;
+    }
+
+    setSavingId(BULK_DELETE_SAVING_KEY);
+    const deletedIds: string[] = [];
+    const failedLabels: string[] = [];
+
+    try {
+      for (const slotId of uniqueSlotIds) {
+        const targetSlot = slots.find((slot) => slot.id === slotId);
+        try {
+          const response = await fetch(`/api/ot/slots/${slotId}`, { method: 'DELETE' });
+          const payload = (await response.json()) as { error?: string };
+          if (!response.ok) {
+            throw new Error(payload.error ?? 'Unable to remove OT slot.');
+          }
+          deletedIds.push(slotId);
+        } catch (error) {
+          const fallbackLabel = targetSlot ? formatSlotLabel(targetSlot) : slotId;
+          failedLabels.push(
+            error instanceof Error && error.message
+              ? `${fallbackLabel}: ${error.message}`
+              : fallbackLabel,
+          );
+        }
+      }
+
+      if (deletedIds.length > 0) {
+        const deletedIdsSet = new Set(deletedIds);
+        setSlots((current) => current.filter((slot) => !deletedIdsSet.has(slot.id)));
+        setSelectedRecentSlotIds((current) => {
+          const next = new Set(current);
+          deletedIds.forEach((slotId) => next.delete(slotId));
+          return next;
+        });
+      }
+
+      if (failedLabels.length === 0) {
+        setStatusTone('success');
+        setStatusMessage(
+          uniqueSlotIds.length === 1
+            ? 'OT slot removed successfully.'
+            : `${deletedIds.length} OT slots were removed successfully.`,
+        );
+      } else {
+        setStatusTone('danger');
+        setStatusMessage(
+          `Removed ${deletedIds.length} of ${uniqueSlotIds.length} slot(s). ${failedLabels[0]}`,
+        );
+      }
+    } finally {
+      setSavingId(null);
+      setBulkDeleteDialog(null);
+    }
+  };
+
   const handleCancel = async (slot: OTSlot) => {
     setCancelingSlotId(slot.id);
     try {
@@ -1114,6 +1241,7 @@ export function OTManagerClient({
     setDateTo('');
     setEmployeeQuery('');
     setManagerHighlightSlotId(null);
+    setSelectedRecentSlotIds(new Set());
   };
 
   const clearDashboardFilters = () => {
@@ -2179,21 +2307,81 @@ export function OTManagerClient({
 
           {filter === 'recently_added' ? (
             <div className="otm-recent-groups">
-              {recentlyAddedGroups.map((group) => (
+              {recentlyAddedGroups.map((group) => {
+                const blockLabel = formatPublishedBlockLabel(group.publishedAt);
+                const groupSlotIds = group.slots.map((slot) => slot.id);
+                const selectedGroupSlotIds = groupSlotIds.filter((slotId) => selectedRecentSlotIds.has(slotId));
+                const allSelected = groupSlotIds.length > 0 && selectedGroupSlotIds.length === groupSlotIds.length;
+
+                return (
                 <section key={group.key} className="otm-recent-group">
                   <div className="otm-recent-group-header">
-                    <div className="otm-recent-group-title">
-                      OT publicado el {formatPublishedBlockLabel(group.publishedAt)}
+                    <div>
+                      <div className="otm-recent-group-title">
+                        OT publicado el {blockLabel}
+                      </div>
+                      <div className="otm-recent-group-meta">
+                        {group.slots.length} slot{group.slots.length === 1 ? '' : 's'}
+                        {selectedGroupSlotIds.length > 0 ? ` · ${selectedGroupSlotIds.length} seleccionado${selectedGroupSlotIds.length === 1 ? '' : 's'}` : ''}
+                      </div>
                     </div>
-                    <div className="otm-recent-group-meta">
-                      {group.slots.length} slot{group.slots.length === 1 ? '' : 's'}
-                    </div>
+                    {!isReadOnly && (
+                      <div className="otm-recent-group-actions">
+                        <button
+                          type="button"
+                          className={`btn btn-ghost btn-sm ${allSelected ? 'otm-selection-btn-active' : ''}`}
+                          onClick={() => toggleRecentGroupSelection(group)}
+                        >
+                          {allSelected ? 'Quitar selección' : 'Seleccionar bloque'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={selectedGroupSlotIds.length === 0}
+                          onClick={() =>
+                            openBulkDeleteDialog({
+                              mode: 'selection',
+                              slotIds: selectedGroupSlotIds,
+                              label: `el bloque del ${blockLabel}`,
+                            })
+                          }
+                        >
+                          <Trash2 size={14} />
+                          Eliminar seleccionados
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm otm-danger-btn"
+                          onClick={() =>
+                            openBulkDeleteDialog({
+                              mode: 'group',
+                              slotIds: groupSlotIds,
+                              label: `el bloque del ${blockLabel}`,
+                            })
+                          }
+                        >
+                          <Trash2 size={14} />
+                          Eliminar bloque
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="otm-recent-slot-list">
                     {group.slots.map((slot) => {
                       const badge = getRecentlyAddedBadge(slot, currentMoment);
+                      const isSelected = selectedRecentSlotIds.has(slot.id);
                       return (
                         <div key={slot.id} className={`otm-recent-slot-card ${managerHighlightSlotId === slot.id ? 'otm-highlight-row' : ''}`}>
+                          {!isReadOnly && (
+                            <label className={`otm-recent-slot-checkbox ${isSelected ? 'otm-recent-slot-checkbox-active' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleRecentSlotSelection(slot.id)}
+                              />
+                              <span>Seleccionar</span>
+                            </label>
+                          )}
                           <div className="otm-recent-slot-main">
                             <div className="otm-recent-slot-topline">
                               <strong>{formatOTDate(slot.date)}</strong>
@@ -2224,7 +2412,7 @@ export function OTManagerClient({
                     })}
                   </div>
                 </section>
-              ))}
+              )})}
             </div>
           ) : (
           <div className="otm-table-shell">
@@ -2611,6 +2799,48 @@ export function OTManagerClient({
         </div>
       )}
 
+      {bulkDeleteDialog && (
+        <div className="modal-overlay" onClick={() => setBulkDeleteDialog(null)}>
+          <div className="modal otm-modal" onClick={(event) => event.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.85rem' }}>
+              <AlertCircle size={18} style={{ color: '#f87171' }} />
+              <h3 style={{ margin: 0 }}>
+                {bulkDeleteDialog.step === 1
+                  ? bulkDeleteDialog.mode === 'group'
+                    ? 'Eliminar este bloque de OT'
+                    : 'Eliminar los OT seleccionados'
+                  : 'Confirmación final'}
+              </h3>
+            </div>
+            <p className="text-muted" style={{ marginTop: 0, lineHeight: 1.7 }}>
+              {bulkDeleteDialog.step === 1
+                ? `Se eliminarán ${bulkDeleteDialog.slotIds.length} slot(s) de ${bulkDeleteDialog.label}. Los slots reclamados también se removerán y el empleado será notificado cuando corresponda.`
+                : `Esta acción quitará definitivamente ${bulkDeleteDialog.slotIds.length} slot(s) de ${bulkDeleteDialog.label}. No se puede deshacer desde este panel.`}
+            </p>
+            <div className="otm-modal-actions">
+              <button className="btn btn-ghost" onClick={() => setBulkDeleteDialog(null)}>
+                Cancel
+              </button>
+              <button
+                className={`btn ${bulkDeleteDialog.step === 1 ? 'btn-primary' : 'btn-ghost otm-danger-btn'}`}
+                onClick={() =>
+                  bulkDeleteDialog.step === 1
+                    ? setBulkDeleteDialog({ ...bulkDeleteDialog, step: 2 })
+                    : void executeBulkDelete(bulkDeleteDialog)
+                }
+                disabled={savingId === BULK_DELETE_SAVING_KEY}
+              >
+                {savingId === BULK_DELETE_SAVING_KEY
+                  ? 'Eliminando...'
+                  : bulkDeleteDialog.step === 1
+                    ? 'Continuar'
+                    : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .otm-header {
           display: flex;
@@ -2658,6 +2888,7 @@ export function OTManagerClient({
           align-items: center;
           justify-content: space-between;
           gap: 1rem;
+          flex-wrap: wrap;
           padding: 1rem 1.1rem;
           background: rgba(124,108,255,0.08);
           border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -2674,6 +2905,17 @@ export function OTManagerClient({
           letter-spacing: 0.08em;
           font-weight: 700;
         }
+        .otm-recent-group-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          flex-wrap: wrap;
+        }
+        .otm-selection-btn-active {
+          border-color: rgba(124,108,255,0.35);
+          color: #ddd6fe;
+          background: rgba(124,108,255,0.14);
+        }
         .otm-recent-slot-list {
           display: grid;
           gap: 0.8rem;
@@ -2689,10 +2931,27 @@ export function OTManagerClient({
           border: 1px solid rgba(255,255,255,0.06);
           background: rgba(255,255,255,0.03);
         }
+        .otm-recent-slot-checkbox {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.55rem;
+          font-size: 0.78rem;
+          color: var(--text-muted);
+          font-weight: 700;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .otm-recent-slot-checkbox input {
+          accent-color: #7c6cff;
+        }
+        .otm-recent-slot-checkbox-active {
+          color: #ddd6fe;
+        }
         .otm-recent-slot-main {
           display: grid;
           gap: 0.35rem;
           min-width: 0;
+          flex: 1;
         }
         .otm-recent-slot-topline,
         .otm-recent-slot-subline {
@@ -3257,6 +3516,19 @@ export function OTManagerClient({
           .otm-dashboard-grid { grid-template-columns: 1fr; }
           .otm-chart-panel { grid-template-columns: 1fr; }
           .otm-day-detail-columns { grid-template-columns: 1fr; }
+          .otm-recent-slot-card {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .otm-recent-slot-checkbox {
+            align-self: flex-start;
+          }
+          .otm-recent-slot-side {
+            width: 100%;
+            grid-template-columns: repeat(2, minmax(0, max-content));
+            justify-content: space-between;
+            align-items: center;
+          }
           .otm-export-modal { width: calc(100vw - 1rem); }
           .otm-export-toolbar,
           .otm-export-format-grid,
@@ -3269,6 +3541,20 @@ export function OTManagerClient({
           .otm-dashboard-highlights { grid-template-columns: 1fr; }
           .employee-summary-grid { grid-template-columns: 1fr; }
           .otm-heatmap-grid { grid-template-columns: minmax(160px, 1.1fr) repeat(14, minmax(46px, 1fr)); }
+          .otm-recent-group-header {
+            align-items: flex-start;
+          }
+          .otm-recent-group-actions {
+            width: 100%;
+          }
+          .otm-recent-group-actions .btn {
+            flex: 1 1 100%;
+            justify-content: center;
+          }
+          .otm-recent-slot-side {
+            grid-template-columns: 1fr;
+            justify-items: stretch;
+          }
           .otm-month-weekdays,
           .otm-month-grid,
           .otm-day-detail-summary {

@@ -15,7 +15,6 @@ interface EmployeeDashboardProps {
   totalHours: number;
   recentHours: number;
   upcomingSlots: OTSlot[];
-  recentSlots: OTSlot[];
   raffles: Raffle[];
   claimedSlots: OTSlot[];
   currentMoment: { date: string; time: string };
@@ -29,7 +28,6 @@ export function EmployeeDashboard({
   totalHours,
   recentHours,
   upcomingSlots,
-  recentSlots,
   raffles,
   claimedSlots,
   currentMoment,
@@ -162,21 +160,23 @@ export function EmployeeDashboard({
         </div>
       </div>
 
-      <EmployeeCompensationCalculator
-        userName={profile?.name ?? name}
-        currentDate={currentMoment.date}
-        currentTime={currentMoment.time}
-        claimMetas={claimMetas}
-        claimedSlots={claimedSlots.map((slot) => ({
-          id: slot.id,
-          date: slot.date,
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          duration_hrs: Number(slot.duration_hrs ?? 0),
-          shift_label: slot.shift_label,
-        }))}
-        dailySchedules={dailySchedules}
-      />
+      <div className="hidden md:block">
+        <EmployeeCompensationCalculator
+          userName={profile?.name ?? name}
+          currentDate={currentMoment.date}
+          currentTime={currentMoment.time}
+          claimMetas={claimMetas}
+          claimedSlots={claimedSlots.map((slot) => ({
+            id: slot.id,
+            date: slot.date,
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            duration_hrs: Number(slot.duration_hrs ?? 0),
+            shift_label: slot.shift_label,
+          }))}
+          dailySchedules={dailySchedules}
+        />
+      </div>
     </div>
   );
 }

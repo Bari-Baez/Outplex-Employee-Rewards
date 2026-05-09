@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Settings,
+  Calculator,
 } from 'lucide-react';
 import type { UserRole } from '@/types/database';
 
@@ -33,6 +34,10 @@ const EMPLOYEE_ITEMS = [
   { label: 'Announcements', href: '/announcements', icon: Megaphone },
   { label: 'My Store', href: '/my-store', icon: Store },
   { label: 'Account', href: '/settings', icon: Settings },
+];
+
+const EMPLOYEE_TOOL_ITEMS = [
+  { label: 'Calculator', href: '/calculator', icon: Calculator },
 ];
 
 const MOD_ITEMS = [
@@ -113,6 +118,22 @@ export function MobileMoreSheet({ userRole, open, onClose }: MobileMoreSheetProp
               ))}
             </div>
           </section>
+
+          {userRole === 'employee' && (
+            <section className="more-sheet-section">
+              <p className="more-sheet-section-label">Tools</p>
+              <div className="more-sheet-grid">
+                {EMPLOYEE_TOOL_ITEMS.map(({ label, href, icon: Icon }) => (
+                  <Link key={href} href={href} className="more-sheet-tile" onClick={onClose}>
+                    <span className="more-sheet-tile-icon">
+                      <Icon size={18} />
+                    </span>
+                    <span className="more-sheet-tile-label">{label}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Moderator / Admin section */}
           {isMod && visibleModItems.length > 0 && (

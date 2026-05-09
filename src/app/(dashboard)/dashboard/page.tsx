@@ -180,7 +180,6 @@ export default async function DashboardPage() {
         totalHours={totalHours}
         recentHours={recentHours}
         upcomingSlots={upcomingSlots}
-        recentSlots={recentSlots}
         raffles={raffles}
         claimedSlots={claimedSlots}
         currentMoment={currentMoment}

@@ -6,6 +6,7 @@ import { GoogleConnectCard } from './GoogleConnectCard';
 import { ThemeSettingsCard } from './ThemeSettingsCard';
 import { NotificationSettingsCard } from './NotificationSettingsCard';
 import { ContactITSupportButton } from './ContactITSupportButton';
+import { LogoutButton } from './LogoutButton';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -90,7 +91,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           Your username and employee ID are read-only here. If something looks wrong, contact IT or
           your superior so they can update it safely.
         </p>
-        <ContactITSupportButton />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '1rem' }}>
+          <ContactITSupportButton />
+          <LogoutButton />
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { Users, Package, CalendarDays, Zap, Clock, Store, LayoutList, Activity } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -15,11 +16,91 @@ interface WorkforceDashboardProps {
   userName: string;
 }
 
+type MobileMetricKey = 'employees' | 'ot' | 'store' | 'points';
+
 export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps) {
+  const mobileMetrics = useMemo(
+    () => [
+      {
+        key: 'employees' as const,
+        label: 'Team',
+        value: stats.totalEmployees.toString(),
+        helper: 'Registered users in the platform.',
+        icon: <Users size={16} />,
+        color: '#6d5dfc',
+      },
+      {
+        key: 'ot' as const,
+        label: 'Open OT',
+        value: stats.pendingOT.toString(),
+        helper: 'OT items waiting for review.',
+        icon: <Clock size={16} />,
+        color: '#10b981',
+      },
+      {
+        key: 'store' as const,
+        label: 'Store',
+        value: stats.pendingStoreRequests.toString(),
+        helper: `${stats.activeStores} active employee store(s).`,
+        icon: <Store size={16} />,
+        color: '#06b6d4',
+      },
+      {
+        key: 'points' as const,
+        label: 'Points',
+        value: stats.pointsDistributed.toLocaleString(),
+        helper: 'Total points distributed in the economy.',
+        icon: <Zap size={16} />,
+        color: '#fbbf24',
+      },
+    ],
+    [stats.activeStores, stats.pendingOT, stats.pendingStoreRequests, stats.pointsDistributed, stats.totalEmployees],
+  );
+  const [activeMobileMetric, setActiveMobileMetric] = useState<MobileMetricKey>('employees');
+
+  const activeMetric = mobileMetrics.find((metric) => metric.key === activeMobileMetric) ?? mobileMetrics[0];
+  const mobileActions = [
+    { href: '/moderator/ot-manager', title: 'OT Manager', desc: 'Approve and schedule OT.', icon: <CalendarDays size={18} /> },
+    { href: '/moderator/users', title: 'Employees', desc: 'Manage teams and profiles.', icon: <Users size={18} /> },
+    { href: '/moderator/store/orders', title: 'Store Ops', desc: 'Review orders and stock.', icon: <Package size={18} /> },
+    { href: '/moderator/employee-stores', title: 'Stores', desc: 'Moderate employee storefronts.', icon: <Store size={18} /> },
+  ];
+
   return (
-    <div className="flex flex-col gap-8 w-full max-w-[1600px] p-4 md:p-6">
-      {/* Page Header - Bento Card Full */}
-      <div className="glass-card bento-card--full flex justify-between items-center bg-gradient-to-r from-[rgba(109,93,252,0.1)] to-transparent border-l-4 border-l-[#6d5dfc]">
+    <div className="flex flex-col gap-5 md:gap-8 w-full max-w-[1600px] p-3 md:p-6">
+      <div className="md:hidden glass-card workforce-mobile-hero">
+        <div className="workforce-mobile-kicker">Dashboard</div>
+        <div className="workforce-mobile-headline">
+          <span className="workforce-mobile-icon"><Zap size={18} /></span>
+          <div>
+            <strong>Workforce</strong>
+            <p>Hello {userName.split(' ')[0]}, review the essentials and jump into the right tool.</p>
+          </div>
+        </div>
+        <div className="workforce-mobile-metrics">
+          {mobileMetrics.map((metric) => (
+            <button
+              key={metric.key}
+              type="button"
+              className={`workforce-mobile-metric ${activeMobileMetric === metric.key ? 'workforce-mobile-metric-active' : ''}`}
+              style={{ ['--metric-color' as string]: metric.color }}
+              onClick={() => setActiveMobileMetric(metric.key)}
+            >
+              <span className="workforce-mobile-metric-icon">{metric.icon}</span>
+              <span className="workforce-mobile-metric-label">{metric.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="workforce-mobile-detail" style={{ ['--metric-color' as string]: activeMetric.color }}>
+          <div className="workforce-mobile-detail-top">
+            <span className="workforce-mobile-detail-badge">{activeMetric.label}</span>
+            <span className="workforce-mobile-detail-value">{activeMetric.value}</span>
+          </div>
+          <p>{activeMetric.helper}</p>
+        </div>
+      </div>
+
+      <div className="hidden md:flex glass-card bento-card--full justify-between items-center bg-gradient-to-r from-[rgba(109,93,252,0.1)] to-transparent border-l-4 border-l-[#6d5dfc]">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
             <span className="p-2 bg-[#6d5dfc] rounded-xl shadow-[0_0_20px_rgba(109,93,252,0.4)]">
@@ -31,42 +112,62 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         </div>
       </div>
 
-      {/* Stats Bento Grid */}
-      <div className="bento-grid">
-        <StatCard 
-          label="Total Employees" 
-          value={stats.totalEmployees.toString()} 
-          icon={<Users size={16} />} 
-          sublabel="Registered Users" 
+      <div className="md:hidden workforce-mobile-actions">
+        {mobileActions.map((action) => (
+          <Link key={action.href} href={action.href} className="workforce-mobile-action">
+            <span className="workforce-mobile-action-icon">{action.icon}</span>
+            <div>
+              <strong>{action.title}</strong>
+              <p>{action.desc}</p>
+            </div>
+          </Link>
+        ))}
+        <div className="workforce-mobile-health">
+          <div className="workforce-mobile-health-row">
+            <span>Active stores</span>
+            <strong>{stats.activeStores}</strong>
+          </div>
+          <div className="workforce-mobile-health-row">
+            <span>Total decisions</span>
+            <strong>{stats.pendingStoreRequests + stats.pendingOT}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden md:grid bento-grid">
+        <StatCard
+          label="Total Employees"
+          value={stats.totalEmployees.toString()}
+          icon={<Users size={16} />}
+          sublabel="Registered Users"
           color="#6d5dfc"
           className="bento-card"
         />
-        <StatCard 
-          label="Pending OT" 
-          value={stats.pendingOT.toString()} 
-          icon={<Clock size={16} />} 
-          sublabel="Awaiting Review" 
+        <StatCard
+          label="Pending OT"
+          value={stats.pendingOT.toString()}
+          icon={<Clock size={16} />}
+          sublabel="Awaiting Review"
           color="#10b981"
           className="bento-card"
         />
-        <StatCard 
-          label="Store Requests" 
-          value={stats.pendingStoreRequests.toString()} 
-          icon={<Store size={16} />} 
-          sublabel="Pending Approval" 
+        <StatCard
+          label="Store Requests"
+          value={stats.pendingStoreRequests.toString()}
+          icon={<Store size={16} />}
+          sublabel="Pending Approval"
           color="#06b6d4"
           className="bento-card"
         />
-        <StatCard 
-          label="Points Flow" 
-          value={stats.pointsDistributed.toLocaleString()} 
-          icon={<Zap size={16} />} 
-          sublabel="Total Economy" 
+        <StatCard
+          label="Points Flow"
+          value={stats.pointsDistributed.toLocaleString()}
+          icon={<Zap size={16} />}
+          sublabel="Total Economy"
           color="#fbbf24"
           className="bento-card"
         />
 
-        {/* Quick Tools - Bento Wide */}
         <div className="bento-card--wide glass-card">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-[#6d5dfc]/20 rounded-lg text-[#6d5dfc]"><LayoutList size={20} /></div>
@@ -80,7 +181,6 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
           </div>
         </div>
 
-        {/* Operational Health - Bento Column */}
         <div className="bento-card glass-card flex flex-col">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-[#06b6d4]/20 rounded-lg text-[#06b6d4]"><Activity size={20} /></div>
@@ -99,7 +199,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
             </div>
             <div className="mt-auto p-4 bg-[#6d5dfc]/10 rounded-2xl text-center">
               <p className="text-[10px] font-black uppercase text-[#6d5dfc] tracking-widest">Operational Status</p>
-              <p className="text-sm text-white font-bold mt-1">Sytem Optimal</p>
+              <p className="text-sm text-white font-bold mt-1">System Optimal</p>
             </div>
           </div>
         </div>
@@ -121,57 +221,163 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         .bento-card--full { grid-column: span 4; }
         .bento-card--wide { grid-column: span 3; }
         .bento-card { grid-column: span 1; }
-        
-        .dashboard-header {
-          margin-bottom: 2rem;
+        .workforce-mobile-hero {
+          padding: 1rem;
+          gap: 0.9rem;
+          display: grid;
         }
-        .dashboard-title {
-          font-size: 2.25rem;
-          font-weight: 900;
-          letter-spacing: -0.04em;
-          margin: 0 0 0.5rem;
+        .workforce-mobile-kicker {
+          display: inline-flex;
+          width: fit-content;
+          padding: 0.28rem 0.6rem;
+          border-radius: 999px;
+          background: rgba(124,108,255,0.14);
+          color: #a78bfa;
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
         }
-        .dashboard-subtitle {
+        .workforce-mobile-headline {
+          display: flex;
+          gap: 0.85rem;
+          align-items: flex-start;
+        }
+        .workforce-mobile-headline strong {
+          display: block;
+          color: white;
+          font-size: 1.35rem;
+          line-height: 1.1;
+        }
+        .workforce-mobile-headline p {
+          margin: 0.3rem 0 0;
           color: var(--text-secondary);
-          font-size: 1rem;
+          font-size: 0.86rem;
+          line-height: 1.5;
         }
-        .stats-grid {
+        .workforce-mobile-icon,
+        .workforce-mobile-action-icon,
+        .workforce-mobile-metric-icon {
+          width: 2.5rem;
+          height: 2.5rem;
+          border-radius: 14px;
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 1.25rem;
-          margin-bottom: 2rem;
+          place-items: center;
+          background: rgba(124,108,255,0.16);
+          color: #8b7bff;
+          flex-shrink: 0;
         }
-        .dashboard-grid {
+        .workforce-mobile-metrics {
           display: grid;
-          grid-template-columns: 1.5fr 1fr;
-          gap: 1.5rem;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 0.65rem;
         }
-        .tools-grid {
+        .workforce-mobile-metric {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 1rem;
-          margin-top: 0.5rem;
+          place-items: center;
+          gap: 0.4rem;
+          padding: 0.7rem 0.35rem;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.03);
+          color: var(--text-secondary);
+          text-align: center;
         }
-        .metric-row {
+        .workforce-mobile-metric-active {
+          border-color: color-mix(in srgb, var(--metric-color) 45%, rgba(255,255,255,0.1));
+          background: color-mix(in srgb, var(--metric-color) 12%, rgba(255,255,255,0.02));
+          color: white;
+        }
+        .workforce-mobile-metric-active .workforce-mobile-metric-icon {
+          background: color-mix(in srgb, var(--metric-color) 16%, rgba(255,255,255,0.08));
+          color: var(--metric-color);
+        }
+        .workforce-mobile-metric-label {
+          font-size: 0.68rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          line-height: 1.2;
+        }
+        .workforce-mobile-detail {
+          display: grid;
+          gap: 0.45rem;
+          padding: 0.9rem 1rem;
+          border-radius: 18px;
+          border: 1px solid color-mix(in srgb, var(--metric-color) 30%, rgba(255,255,255,0.08));
+          background: color-mix(in srgb, var(--metric-color) 10%, rgba(255,255,255,0.02));
+        }
+        .workforce-mobile-detail-top {
           display: flex;
           justify-content: space-between;
-          padding: 1rem 0;
-          border-bottom: 1px solid var(--border-subtle);
+          gap: 0.75rem;
+          align-items: center;
         }
-        .metric-row:last-child {
-          border-bottom: none;
+        .workforce-mobile-detail-badge {
+          color: var(--metric-color);
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
         }
-        .metric-row span {
+        .workforce-mobile-detail-value {
+          color: white;
+          font-size: 1.35rem;
+          font-weight: 900;
+        }
+        .workforce-mobile-detail p {
+          margin: 0;
           color: var(--text-secondary);
-          font-size: 0.95rem;
+          font-size: 0.84rem;
+          line-height: 1.5;
         }
-        .metric-row strong {
-          font-size: 1.1rem;
-          font-weight: 700;
+        .workforce-mobile-actions {
+          display: grid;
+          gap: 0.85rem;
+        }
+        .workforce-mobile-action {
+          display: flex;
+          gap: 0.85rem;
+          align-items: center;
+          padding: 0.95rem 1rem;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.03);
+          text-decoration: none;
+        }
+        .workforce-mobile-action strong {
+          display: block;
+          color: white;
+          font-size: 0.96rem;
+        }
+        .workforce-mobile-action p {
+          margin: 0.25rem 0 0;
+          color: var(--text-secondary);
+          font-size: 0.78rem;
+          line-height: 1.45;
+        }
+        .workforce-mobile-health {
+          display: grid;
+          gap: 0.7rem;
+          padding: 1rem;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.03);
+        }
+        .workforce-mobile-health-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.75rem;
+          align-items: center;
+          color: var(--text-secondary);
+          font-size: 0.84rem;
+        }
+        .workforce-mobile-health-row strong {
+          color: white;
+          font-size: 1rem;
         }
         @media (max-width: 1024px) {
-          .stats-grid { grid-template-columns: repeat(2, 1fr); }
-          .dashboard-grid { grid-template-columns: 1fr; }
+          .bento-grid { grid-template-columns: 1fr; }
         }
       `}</style>
     </div>
@@ -182,7 +388,7 @@ function StatCard({ label, value, icon, sublabel, color, className }: { label: s
   return (
     <div className={`glass-card ${className || ''} flex flex-col gap-4 border-l-4 transition-all hover:bg-white/5`} style={{ borderLeftColor: color }}>
       <div className="flex items-center gap-2.5 text-[10px] uppercase tracking-[0.15em] font-black text-slate-500">
-        <span style={{ color: color }}>{icon}</span>
+        <span style={{ color }}>{icon}</span>
         {label}
       </div>
       <div className="text-4xl font-black text-white lining-nums">{value}</div>
