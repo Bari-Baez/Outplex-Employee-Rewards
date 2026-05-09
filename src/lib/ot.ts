@@ -1,4 +1,4 @@
-import type { CSVRow } from '@/types/database';
+import type { CSVRow, OTSlot } from '@/types/database';
 import {
   calcDuration,
   getShiftLabel,
@@ -171,6 +171,26 @@ export function isOTSlotCompleted(
   current = getCurrentOTDateTime(),
 ) {
   return !isOTSlotUpcoming(slot, current);
+}
+
+export function getOTSlotPublishedAt(
+  slot: Pick<OTSlot, 'created_at'> & { batch?: Pick<NonNullable<OTSlot['batch']>, 'published_at'> | null },
+) {
+  return slot.batch?.published_at ?? slot.created_at;
+}
+
+export function isOTSlotRecentlyAdded(
+  slot: Pick<OTSlot, 'created_at'> & { batch?: Pick<NonNullable<OTSlot['batch']>, 'published_at'> | null },
+  currentDate = new Date(),
+  windowDays = 5,
+) {
+  const publishedAt = getOTSlotPublishedAt(slot);
+  const publishedTime = new Date(publishedAt).getTime();
+  if (Number.isNaN(publishedTime)) {
+    return false;
+  }
+
+  return currentDate.getTime() - publishedTime <= windowDays * 24 * 60 * 60 * 1000;
 }
 
 export function normalizeOTRow(

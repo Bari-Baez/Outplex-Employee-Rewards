@@ -27,6 +27,7 @@ import { proxifyMediaUrl } from '@/lib/media-proxy';
 import { canEditTool } from '@/lib/permissions';
 import { SupervisorFilter } from '@/components/SupervisorFilter';
 import { PromptDialog } from '@/components/ui/PromptDialog';
+import { MobileDataFrame } from '@/components/ui/MobileDataFrame';
 import { ModernSelect } from '@/components/ui/Select';
 import { useTransferState } from '@/components/uploads/useTransferState';
 import { TransferProgress } from '@/components/uploads/TransferProgress';
@@ -890,8 +891,9 @@ export function UsersManagerClient({
             </div>
           </div>
 
-          <div className="users-table-shell">
-            <table className="data-table users-table">
+          <MobileDataFrame className="users-table-frame">
+            <div className="users-table-shell">
+              <table className="data-table users-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -1147,8 +1149,9 @@ export function UsersManagerClient({
                   </tr>
                 )}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </MobileDataFrame>
         </section>
       )}
 
@@ -1161,8 +1164,9 @@ export function UsersManagerClient({
             </div>
           </div>
 
-          <div className="users-table-shell">
-            <table className="data-table users-table">
+          <MobileDataFrame className="users-table-frame">
+            <div className="users-table-shell">
+              <table className="data-table users-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -1192,8 +1196,9 @@ export function UsersManagerClient({
                   </tr>
                 )}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </MobileDataFrame>
         </section>
       )}
 
@@ -1300,8 +1305,9 @@ export function UsersManagerClient({
                   </button>
                 </div>
               </div>
-              <div className="users-table-shell">
-                <table className="data-table users-table">
+              <MobileDataFrame className="users-table-frame">
+                <div className="users-table-shell">
+                  <table className="data-table users-table">
                   <thead>
                     <tr>
                       <th>Employee</th>
@@ -1354,13 +1360,15 @@ export function UsersManagerClient({
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+              </MobileDataFrame>
             </div>
           )}
 
-          <div className="users-table-shell">
-            <table className="data-table users-table">
+          <MobileDataFrame className="users-table-frame">
+            <div className="users-table-shell">
+              <table className="data-table users-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -1504,8 +1512,9 @@ export function UsersManagerClient({
                   </tr>
                 )}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </MobileDataFrame>
         </section>
       )}
 
@@ -1527,8 +1536,9 @@ export function UsersManagerClient({
             </label>
           </div>
 
-          <div className="users-table-shell">
-            <table className="data-table users-table">
+          <MobileDataFrame className="users-table-frame">
+            <div className="users-table-shell">
+              <table className="data-table users-table">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -1588,8 +1598,9 @@ export function UsersManagerClient({
                   </tr>
                 )}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </MobileDataFrame>
         </section>
       )}
 
@@ -1777,6 +1788,42 @@ export function UsersManagerClient({
         .confirm-modal { max-width: 440px; text-align: center; display: grid; gap: 1rem; padding: 2rem; }
         .confirm-modal-icon { width: 56px; height: 56px; border-radius: 16px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.25); color: #fbbf24; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
         .confirm-modal-icon-red { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.25); color: #f87171; }
+
+        @media (max-width: 767px) {
+          .users-panel {
+            padding: 1rem;
+            gap: 1.2rem;
+          }
+
+          .users-panel-head {
+            gap: 1rem;
+            margin-bottom: 0.2rem;
+          }
+
+          .users-section-title {
+            font-size: 1.18rem;
+          }
+
+          .users-toolbar,
+          .users-search {
+            width: 100%;
+            max-width: none;
+            min-width: 0;
+          }
+
+          .users-table-frame {
+            gap: 0.65rem;
+          }
+
+          .users-table-shell {
+            min-height: auto;
+            resize: none;
+          }
+
+          .users-table {
+            min-width: 920px;
+          }
+        }
         .confirm-modal h3 { font-size: 1.25rem; font-weight: 800; margin: 0; }
         .confirm-modal p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.65; margin: 0; }
         .confirm-modal-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }

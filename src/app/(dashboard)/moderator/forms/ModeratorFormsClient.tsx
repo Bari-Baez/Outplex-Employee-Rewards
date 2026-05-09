@@ -532,6 +532,8 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [isSaving, setIsSaving]           = useState(false);
   const [isPublishing, setIsPublishing]   = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileToolbarOffset, setMobileToolbarOffset] = useState({ x: 0, y: 0 });
 
   // Response data
   const [responses, setResponses]         = useState<FormResponse[]>([]);
@@ -554,6 +556,7 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
   // Notice
   const [notice, setNotice] = useState<{ msg: string; tone: 'success' | 'danger' } | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mobileToolbarDragRef = useRef<{ pointerId: number; startX: number; startY: number; baseX: number; baseY: number } | null>(null);
 
   const showNotice = (msg: string, tone: 'success' | 'danger' = 'success') => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
@@ -598,6 +601,74 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
       .finally(() => setLoadingResp(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [builderTab, draft?.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const syncViewport = () => {
+      setIsMobileViewport(window.innerWidth <= 760);
+    };
+
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    return () => {
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (view === 'builder') {
+      setMobileToolbarOffset({ x: 0, y: 0 });
+    }
+  }, [draft?.id, view]);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      mobileToolbarDragRef.current = null;
+      setMobileToolbarOffset({ x: 0, y: 0 });
+    }
+  }, [isMobileViewport]);
+
+  const startMobileToolbarDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isMobileViewport) return;
+
+    mobileToolbarDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseX: mobileToolbarOffset.x,
+      baseY: mobileToolbarOffset.y,
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const drag = mobileToolbarDragRef.current;
+      if (!drag || drag.pointerId !== moveEvent.pointerId) return;
+
+      const rawX = drag.baseX + (moveEvent.clientX - drag.startX);
+      const rawY = drag.baseY + (moveEvent.clientY - drag.startY);
+      const maxX = Math.max(0, window.innerWidth / 2 - 128);
+      const minY = -Math.max(0, window.innerHeight - 240);
+
+      setMobileToolbarOffset({
+        x: Math.min(maxX, Math.max(-maxX, rawX)),
+        y: Math.min(0, Math.max(minY, rawY)),
+      });
+    };
+
+    const stopDragging = (upEvent: PointerEvent) => {
+      if (mobileToolbarDragRef.current?.pointerId !== upEvent.pointerId) return;
+      mobileToolbarDragRef.current = null;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopDragging);
+    window.addEventListener('pointercancel', stopDragging);
+  }, [isMobileViewport, mobileToolbarOffset.x, mobileToolbarOffset.y]);
 
   // ─── Open builder ────────────────────────────────────────────────────────────
   const openBuilder = (form?: FormSummaryWithStats, templateFields?: FormField[]) => {
@@ -1043,7 +1114,7 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
     <div className="gf-builder-root">
       {/* Top bar */}
       <div className="gf-builder-dock-container">
-        <div className="gf-builder-dock">
+        <div className={`gf-builder-dock ${isMobileViewport ? 'gf-builder-dock-mobile' : ''}`}>
           <button type="button" className="gf-back-btn" onClick={() => { setView('list'); void loadForms(); }}>
             <ArrowLeft size={16} />
           </button>
@@ -1147,8 +1218,21 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
           </div>
 
           {/* Right floating toolbar */}
-          <div className="gf-toolbar">
-            <div className="gf-toolbar-card">
+          <div
+            className={`gf-toolbar ${isMobileViewport ? 'gf-toolbar-mobile' : ''}`}
+            style={isMobileViewport ? { transform: `translate(calc(-50% + ${mobileToolbarOffset.x}px), ${mobileToolbarOffset.y}px)` } : undefined}
+          >
+            <div className={`gf-toolbar-card ${isMobileViewport ? 'gf-toolbar-card-mobile' : ''}`}>
+              {isMobileViewport && (
+                <button
+                  type="button"
+                  className="gf-toolbar-drag"
+                  onPointerDown={startMobileToolbarDrag}
+                  aria-label="Mover barra de herramientas"
+                >
+                  <GripVertical size={16} />
+                </button>
+              )}
               {FIELD_TOOLBAR.map((ft) => (
                 <button
                   key={ft.type}
@@ -1717,9 +1801,151 @@ function GfStyles() {
       .gf-lock-info-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.22); color: var(--brand-primary-light); }
 
       @media (max-width: 760px) {
-        .gf-builder-tabs { order: 3; width: 100%; justify-content: center; }
-        .gf-toolbar { display: none; }
-        .gf-questions-layout { padding: 1rem 0.5rem; }
+        .gf-builder-root {
+          height: auto;
+          min-height: calc(100dvh - 132px);
+          overflow: visible;
+        }
+
+        .gf-builder-dock-container {
+          position: sticky;
+          top: calc(env(safe-area-inset-top) + 4.3rem);
+          padding: 0 0 0.75rem;
+        }
+
+        .gf-builder-dock-mobile {
+          width: calc(100vw - 1rem);
+          min-width: 0;
+          max-width: none;
+          gap: 0.65rem;
+          padding: 0.75rem;
+          border-radius: 20px;
+          flex-wrap: wrap;
+        }
+
+        .gf-builder-title-area {
+          order: 1;
+          min-width: 0;
+          flex: 1 1 0%;
+          padding: 0;
+        }
+
+        .gf-builder-title-input {
+          font-size: 0.9rem;
+        }
+
+        .gf-builder-actions {
+          order: 2;
+          margin-left: 0;
+          margin-right: 0;
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        .gf-save-btn,
+        .gf-publish-btn {
+          flex: 1 1 0%;
+          min-width: 0;
+        }
+
+        .gf-builder-tabs {
+          order: 3;
+          width: 100%;
+          justify-content: flex-start;
+          margin: 0;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+
+        .gf-builder-tabs::-webkit-scrollbar {
+          display: none;
+        }
+
+        .gf-builder-tab {
+          white-space: nowrap;
+        }
+
+        .gf-questions-layout,
+        .gf-responses-layout,
+        .gf-settings-layout {
+          padding: 0.25rem 0.5rem 6.5rem;
+        }
+
+        .gf-questions-layout {
+          display: block;
+          overflow: visible;
+        }
+
+        .gf-questions-center {
+          overflow: visible;
+          padding-bottom: 0;
+        }
+
+        .gf-q-header-row {
+          grid-template-columns: 1fr;
+        }
+
+        .gf-type-selector {
+          min-width: 0;
+        }
+
+        .gf-toolbar-mobile {
+          position: fixed;
+          left: 50%;
+          bottom: calc(env(safe-area-inset-bottom) + 4.8rem);
+          top: auto;
+          z-index: 280;
+          width: auto;
+        }
+
+        .gf-toolbar-card-mobile {
+          flex-direction: row;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.55rem;
+          border-radius: 18px;
+          max-width: calc(100vw - 1rem);
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+
+        .gf-toolbar-card-mobile::-webkit-scrollbar {
+          display: none;
+        }
+
+        .gf-toolbar-drag {
+          width: 34px;
+          height: 48px;
+          border-radius: 12px;
+          border: 1px dashed rgba(99,102,241,0.28);
+          background: rgba(255,255,255,0.03);
+          color: var(--text-secondary);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          touch-action: none;
+        }
+
+        .gf-toolbar-card-mobile .gf-toolbar-btn {
+          width: 48px;
+          min-width: 48px;
+          height: 48px;
+        }
+
+        .gf-toolbar-card-mobile .gf-toolbar-tooltip {
+          display: none;
+        }
+
+        .gf-title-card-body,
+        .gf-q-expanded,
+        .gf-summary-list,
+        .gf-question-tab,
+        .gf-individual-tab,
+        .gf-settings-card {
+          padding-left: 1rem;
+          padding-right: 1rem;
+        }
       }
     `}</style>
   );

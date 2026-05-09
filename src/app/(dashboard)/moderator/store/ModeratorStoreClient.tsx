@@ -45,6 +45,7 @@ import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis
 import { SupervisorFilter } from '@/components/SupervisorFilter';
 import { toast } from 'sonner';
 import { ModernSelect } from '@/components/ui/Select';
+import { MobileDataFrame } from '@/components/ui/MobileDataFrame';
 import { ModernDatePicker } from '@/components/ui/DatePicker';
 import { ModernTimePicker } from '@/components/ui/TimePicker';
 import { useAppAvailability } from '@/components/layout/AppAvailabilityProvider';
@@ -1801,60 +1802,63 @@ export function ModeratorStoreClient({
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '1rem' }} className="analytics-charts-grid">
-              <div className="card" style={{ display: 'grid', gap: '1rem' }}>
-                <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Top 5 Products</h2>
-                {topProducts.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)' }}>No order data yet.</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={topProducts} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                      <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-                      <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 10 }} />
-                      <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                        {topProducts.map((_, index) => (
-                          <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-
-              <div className="card" style={{ display: 'grid', gap: '1rem' }}>
-                <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Orders by Status</h2>
-                {statusCounts.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)' }}>No order data yet.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <PieChart>
-                        <Pie data={statusCounts} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
-                          {statusCounts.map((entry, index) => (
-                            <Cell key={index} fill={entry.color} />
-                          ))}
-                        </Pie>
+            <MobileDataFrame searchable={false} className="analytics-mobile-frame">
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '1rem' }} className="analytics-charts-grid">
+                <div className="card" style={{ display: 'grid', gap: '1rem' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Top 5 Products</h2>
+                  {topProducts.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)' }}>No order data yet.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={topProducts} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} allowDecimals={false} />
                         <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 10 }} />
-                      </PieChart>
+                        <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                          {topProducts.map((_, index) => (
+                            <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
-                      {statusCounts.map((s) => (
-                        <span key={s.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
-                          {s.name} ({s.value})
-                        </span>
-                      ))}
+                  )}
+                </div>
+
+                <div className="card" style={{ display: 'grid', gap: '1rem' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Orders by Status</h2>
+                  {statusCounts.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)' }}>No order data yet.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie data={statusCounts} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3}>
+                            {statusCounts.map((entry, index) => (
+                              <Cell key={index} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 10 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
+                        {statusCounts.map((s) => (
+                          <span key={s.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
+                            {s.name} ({s.value})
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            </MobileDataFrame>
 
             {Object.keys(reviewsSummary).length > 0 && (
               <div className="card" style={{ display: 'grid', gap: '1rem' }}>
                 <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Top-Rated Products</h2>
-                <div style={{ overflowX: 'auto' }}>
+                <MobileDataFrame className="analytics-mobile-frame">
+                  <div style={{ overflowX: 'auto' }}>
                   <table className="data-table" style={{ minWidth: 400 }}>
                     <thead>
                       <tr>
@@ -1883,7 +1887,8 @@ export function ModeratorStoreClient({
                         })}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </MobileDataFrame>
               </div>
             )}
 
@@ -1892,7 +1897,8 @@ export function ModeratorStoreClient({
               {recentOrders.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)' }}>No orders yet.</p>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <MobileDataFrame className="analytics-mobile-frame">
+                  <div style={{ overflowX: 'auto' }}>
                   <table className="data-table" style={{ minWidth: 600 }}>
                     <thead>
                       <tr>
@@ -1918,7 +1924,8 @@ export function ModeratorStoreClient({
                       })}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </MobileDataFrame>
               )}
             </div>
           </div>

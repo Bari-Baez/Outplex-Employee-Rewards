@@ -18,6 +18,14 @@ export interface EmpCartItem {
   quantity: number;
 }
 
+export interface AppShellLiveEvent {
+  id: string;
+  type: 'raffle' | 'ot' | 'upcoming';
+  title: string;
+  summary: string;
+  href: string;
+}
+
 const CART_TTL_MS = 2 * 60 * 60 * 1000;
 
 interface AppState {
@@ -34,6 +42,7 @@ interface AppState {
   notifications: NotificationWithSender[];
   unreadNotificationCount: number;
   appShellBadge: AppShellBadge;
+  liveEvents: AppShellLiveEvent[];
   notificationPopupsEnabled: boolean;
   notificationSoundEnabled: boolean;
 
@@ -51,6 +60,7 @@ interface AppState {
   removeNotification: (notificationId: string) => void;
   clearNotifications: () => void;
   setAppShellBadge: (badge: AppShellBadge) => void;
+  setLiveEvents: (events: AppShellLiveEvent[]) => void;
   setNotificationPopupsEnabled: (enabled: boolean) => void;
   setNotificationSoundEnabled: (enabled: boolean) => void;
 
@@ -107,6 +117,7 @@ export const useAppStore = create<AppState>()(
         label: 'LIVE',
         description: 'No live events right now.',
       },
+      liveEvents: [],
       notificationPopupsEnabled: true,
       notificationSoundEnabled: true,
 
@@ -156,6 +167,7 @@ export const useAppStore = create<AppState>()(
           unreadNotificationCount: 0,
         }),
       setAppShellBadge: (badge) => set({ appShellBadge: badge }),
+      setLiveEvents: (liveEvents) => set({ liveEvents }),
       setNotificationPopupsEnabled: (enabled) => set({ notificationPopupsEnabled: enabled }),
       setNotificationSoundEnabled: (enabled) => set({ notificationSoundEnabled: enabled }),
 

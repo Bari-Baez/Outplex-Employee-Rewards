@@ -275,6 +275,7 @@ export function TopNavShell({ user }: TopNavShellProps) {
     notificationsOpen,
     unreadNotificationCount,
     setAppShellBadge,
+    setLiveEvents: setStoredLiveEvents,
     setMessagesOpen,
     setNotifications,
     setNotificationsOpen,
@@ -495,6 +496,7 @@ export function TopNavShell({ user }: TopNavShellProps) {
         setNotifications(nextNotifications);
         setTickets(nextTickets);
         setLiveEvents(nextLiveEvents);
+        setStoredLiveEvents(nextLiveEvents);
         setAppShellBadge(
           getShellBadgeState({
             hasAvailableOt: (otResult.count ?? 0) > 0,
@@ -540,7 +542,7 @@ export function TopNavShell({ user }: TopNavShellProps) {
       document.removeEventListener('visibilitychange', syncWithDebounce);
       window.removeEventListener('focus', syncOnFocus);
     };
-  }, [setAppShellBadge, setNotifications, supabase, user]);
+  }, [setAppShellBadge, setNotifications, setStoredLiveEvents, supabase, user]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-sidebar-expanded', sidebarExpanded.toString());

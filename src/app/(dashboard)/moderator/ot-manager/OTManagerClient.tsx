@@ -46,11 +46,15 @@ import { ModernTimePicker } from '@/components/ui/TimePicker';
 import type { OTSlot, UserRole, User } from '@/types/database';
 import { canEditTool } from '@/lib/permissions';
 import {
+  getOTSlotPublishedAt,
   OT_LOB_OPTIONS,
   canonicalizeOTLob,
   getCurrentOTDateTime,
   getOTFortnightRange,
   getOTColumnLabel,
+  isOTSlotCompleted,
+  isOTSlotRecentlyAdded,
+  isOTSlotUpcoming,
   shiftOTDate,
 } from '@/lib/ot';
 import { formatOTDate, formatTime } from '@/lib/utils';
@@ -69,7 +73,7 @@ type ManagerUser = {
 
 type TabKey = 'dashboard' | 'manager';
 
-type FilterKey = 'all' | 'claimed' | 'available';
+type FilterKey = 'all' | 'claimed' | 'available' | 'upcoming' | 'recently_added';
 type QuickRangeKey = 'all' | 'last_7_days' | 'last_14_days' | 'custom';
 type DashboardQuickRangeKey = 'last_14_days' | 'last_30_days' | 'custom';
 type ExportAlignment = 'left' | 'center' | 'right';
@@ -89,6 +93,11 @@ type DeleteDialogState = {
   slot: OTSlot;
   step: 1 | 2;
 } | null;
+type RecentlyAddedGroup = {
+  key: string;
+  publishedAt: string;
+  slots: OTSlot[];
+};
 type ExportColumn = {
   key: string;
   label: string;
@@ -376,6 +385,28 @@ function formatSlotLabel(slot: Pick<OTSlot, 'date' | 'start_time' | 'end_time'>)
   return `${formatOTDate(slot.date)} - ${formatTime(slot.start_time)} to ${formatTime(slot.end_time)}`;
 }
 
+function formatPublishedBlockLabel(publishedAt: string) {
+  return new Date(publishedAt).toLocaleString('es-DO', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function getRecentlyAddedBadge(slot: OTSlot, current = getCurrentOTDateTime()) {
+  if (isOTSlotCompleted(slot, current)) {
+    return { label: 'Passed', className: 'badge-passed' };
+  }
+
+  if (slot.status === 'claimed') {
+    return { label: 'Claimed', className: 'badge-claimed' };
+  }
+
+  return { label: 'Open', className: 'badge-available' };
+}
+
 export function OTManagerClient({
   currentUser,
   initialSlots,
@@ -460,9 +491,23 @@ export function OTManagerClient({
 
   const filteredSlots = useMemo(() => {
     const normalizedEmployeeQuery = employeeQuery.trim().toLowerCase();
+    const liveMoment = getCurrentOTDateTime();
+    const now = new Date();
 
     return slots.filter((slot) => {
-      if (filter !== 'all' && slot.status !== filter) {
+      if (filter === 'claimed' && slot.status !== 'claimed') {
+        return false;
+      }
+
+      if (filter === 'available' && slot.status !== 'available') {
+        return false;
+      }
+
+      if (filter === 'upcoming' && !isOTSlotUpcoming(slot, liveMoment)) {
+        return false;
+      }
+
+      if (filter === 'recently_added' && !isOTSlotRecentlyAdded(slot, now, 5)) {
         return false;
       }
 
@@ -501,6 +546,39 @@ export function OTManagerClient({
       );
     });
   }, [dateFrom, dateTo, employeeQuery, filter, slots, usersById, supervisorFilter, currentUser.id, isB1]);
+
+  const recentlyAddedGroups = useMemo<RecentlyAddedGroup[]>(() => {
+    if (filter !== 'recently_added') {
+      return [];
+    }
+
+    const groups = new Map<string, RecentlyAddedGroup>();
+
+    filteredSlots.forEach((slot) => {
+      const publishedAt = getOTSlotPublishedAt(slot);
+      const existing = groups.get(publishedAt);
+      if (existing) {
+        existing.slots.push(slot);
+        return;
+      }
+
+      groups.set(publishedAt, {
+        key: publishedAt,
+        publishedAt,
+        slots: [slot],
+      });
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        slots: [...group.slots].sort((left, right) => {
+          const dateCompare = left.date.localeCompare(right.date);
+          return dateCompare !== 0 ? dateCompare : left.start_time.localeCompare(right.start_time);
+        }),
+      }))
+      .sort((left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime());
+  }, [filter, filteredSlots]);
 
   const normalizedDashboardDateFrom = dashboardDateFrom || shiftOTDate(currentMoment.date, -13);
   const normalizedDashboardDateTo = dashboardDateTo || currentMoment.date;
@@ -2026,6 +2104,8 @@ export function OTManagerClient({
                 options={[
                   { label: 'Claimed', value: 'claimed' },
                   { label: 'Available', value: 'available' },
+                  { label: 'Upcoming', value: 'upcoming' },
+                  { label: 'Recently added', value: 'recently_added' },
                   { label: 'All', value: 'all' }
                 ]}
               />
@@ -2097,6 +2177,56 @@ export function OTManagerClient({
             </button>
           </div>
 
+          {filter === 'recently_added' ? (
+            <div className="otm-recent-groups">
+              {recentlyAddedGroups.map((group) => (
+                <section key={group.key} className="otm-recent-group">
+                  <div className="otm-recent-group-header">
+                    <div className="otm-recent-group-title">
+                      OT publicado el {formatPublishedBlockLabel(group.publishedAt)}
+                    </div>
+                    <div className="otm-recent-group-meta">
+                      {group.slots.length} slot{group.slots.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <div className="otm-recent-slot-list">
+                    {group.slots.map((slot) => {
+                      const badge = getRecentlyAddedBadge(slot, currentMoment);
+                      return (
+                        <div key={slot.id} className={`otm-recent-slot-card ${managerHighlightSlotId === slot.id ? 'otm-highlight-row' : ''}`}>
+                          <div className="otm-recent-slot-main">
+                            <div className="otm-recent-slot-topline">
+                              <strong>{formatOTDate(slot.date)}</strong>
+                              <span>{formatTime(slot.start_time)} - {formatTime(slot.end_time)}</span>
+                            </div>
+                            <div className="otm-recent-slot-subline">
+                              <span>{canonicalizeOTLob(slot.lob)}</span>
+                              <span>Spot {slot.spot_id ?? 'No ID'}</span>
+                              <span>{slot.shift_label ?? 'OT Shift'}</span>
+                            </div>
+                            <div className="otm-recent-slot-subline">
+                              <span>{slot.claimedByUser?.name ?? 'Unassigned'}</span>
+                              <span>{usersById.get(slot.claimed_by ?? '')?.supervisor || 'No supervisor'}</span>
+                            </div>
+                          </div>
+                          <div className="otm-recent-slot-side">
+                            <span className={`badge ${badge.className}`}>{badge.label}</span>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => focusSlotInManager(slot, slot.claimedByUser?.employee_id ?? slot.claimed_by)}
+                            >
+                              Ver en manager
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
           <div className="otm-table-shell">
             <table className="data-table">
               <thead>
@@ -2245,6 +2375,7 @@ export function OTManagerClient({
               </tbody>
             </table>
           </div>
+          )}
 
           {filteredSlots.length === 0 && <div className="text-muted" style={{ marginTop: '1rem' }}>No OT slots match the current filter.</div>}
           <div className="text-muted" style={{ marginTop: '1rem', fontSize: '0.8125rem' }}>
@@ -2511,6 +2642,84 @@ export function OTManagerClient({
           overflow: auto;
           min-height: 420px;
           border-radius: 16px;
+        }
+        .otm-recent-groups {
+          display: grid;
+          gap: 1rem;
+        }
+        .otm-recent-group {
+          border: 1px solid var(--border-subtle);
+          border-radius: 18px;
+          background: rgba(255,255,255,0.02);
+          overflow: hidden;
+        }
+        .otm-recent-group-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 1rem 1.1rem;
+          background: rgba(124,108,255,0.08);
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .otm-recent-group-title {
+          font-size: 0.92rem;
+          font-weight: 800;
+          color: var(--text-primary);
+        }
+        .otm-recent-group-meta {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          font-weight: 700;
+        }
+        .otm-recent-slot-list {
+          display: grid;
+          gap: 0.8rem;
+          padding: 1rem;
+        }
+        .otm-recent-slot-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 0.95rem 1rem;
+          border-radius: 16px;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.03);
+        }
+        .otm-recent-slot-main {
+          display: grid;
+          gap: 0.35rem;
+          min-width: 0;
+        }
+        .otm-recent-slot-topline,
+        .otm-recent-slot-subline {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.55rem;
+          align-items: center;
+        }
+        .otm-recent-slot-topline strong {
+          font-size: 0.95rem;
+          color: var(--text-primary);
+        }
+        .otm-recent-slot-topline span,
+        .otm-recent-slot-subline span {
+          font-size: 0.82rem;
+          color: var(--text-secondary);
+        }
+        .otm-recent-slot-side {
+          display: grid;
+          gap: 0.55rem;
+          justify-items: end;
+          flex-shrink: 0;
+        }
+        .badge-passed {
+          background: rgba(148, 163, 184, 0.12);
+          border: 1px solid rgba(148, 163, 184, 0.22);
+          color: #cbd5e1;
         }
         .otm-stats {
           display: grid;

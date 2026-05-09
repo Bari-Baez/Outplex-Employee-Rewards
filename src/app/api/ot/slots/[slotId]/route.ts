@@ -3,9 +3,9 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { doOTTimeRangesOverlap } from '@/lib/ot';
 import { getOTClaimMetaKey, type OTClaimKind } from '@/lib/ot-claim-meta';
 import { calcDuration, formatOTDate, formatTime, getShiftLabel, parseSpanishTime } from '@/lib/utils';
-import { isModeratorRole } from '@/lib/auth/roles';
+import { canEditTool } from '@/lib/permissions';
 
-async function requireModeratorOrAdmin() {
+async function requireOTManagerEditor() {
   const supabase = await createClient();
   const serviceClient = await createServiceClient();
 
@@ -25,7 +25,7 @@ async function requireModeratorOrAdmin() {
     .eq('id', user.id)
     .single();
 
-  if (!profile || !isModeratorRole(profile.role)) {
+  if (!profile || !canEditTool(profile.role, 'ot-manager')) {
     return {
       error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     };
@@ -56,7 +56,7 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ slotId: string }> },
 ) {
-  const auth = await requireModeratorOrAdmin();
+  const auth = await requireOTManagerEditor();
   if ('error' in auth) {
     return auth.error;
   }
@@ -245,7 +245,7 @@ export async function DELETE(
   _request: NextRequest,
   context: { params: Promise<{ slotId: string }> },
 ) {
-  const auth = await requireModeratorOrAdmin();
+  const auth = await requireOTManagerEditor();
   if ('error' in auth) {
     return auth.error;
   }

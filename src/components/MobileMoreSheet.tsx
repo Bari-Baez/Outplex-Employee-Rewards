@@ -16,6 +16,7 @@ import {
   FormInput,
   LayoutDashboard,
   ShoppingCart,
+  Settings,
 } from 'lucide-react';
 import type { UserRole } from '@/types/database';
 
@@ -31,6 +32,7 @@ const EMPLOYEE_ITEMS = [
   { label: 'Forms', href: '/forms', icon: ClipboardList },
   { label: 'Announcements', href: '/announcements', icon: Megaphone },
   { label: 'My Store', href: '/my-store', icon: Store },
+  { label: 'Account', href: '/settings', icon: Settings },
 ];
 
 const MOD_ITEMS = [
@@ -104,7 +106,7 @@ export function MobileMoreSheet({ userRole, open, onClose }: MobileMoreSheetProp
               {EMPLOYEE_ITEMS.map(({ label, href, icon: Icon }) => (
                 <Link key={href} href={href} className="more-sheet-tile" onClick={onClose}>
                   <span className="more-sheet-tile-icon">
-                    <Icon size={20} />
+                    <Icon size={18} />
                   </span>
                   <span className="more-sheet-tile-label">{label}</span>
                 </Link>
@@ -120,7 +122,7 @@ export function MobileMoreSheet({ userRole, open, onClose }: MobileMoreSheetProp
                 {visibleModItems.map(({ label, href, icon: Icon }) => (
                   <Link key={href} href={href} className="more-sheet-tile more-sheet-tile--mod" onClick={onClose}>
                     <span className="more-sheet-tile-icon">
-                      <Icon size={20} />
+                      <Icon size={18} />
                     </span>
                     <span className="more-sheet-tile-label">{label}</span>
                   </Link>

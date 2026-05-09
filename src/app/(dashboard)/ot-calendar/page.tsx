@@ -2,10 +2,10 @@
 
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Clock, CalendarDays, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, CalendarDays, AlertCircle, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getOTClaimKindLabel, parseOTClaimMeta, type OTClaimKind } from '@/lib/ot-claim-meta';
-import type { OTSlot } from '@/types/database';
+import type { OTSlot, UserRole } from '@/types/database';
 import {
   formatOTDate,
   formatRelativeTime,
@@ -56,9 +56,12 @@ function OTCalendarPageContent() {
   const [selectedDaySlots, setSelectedDaySlots] = useState<OTSlot[]>([]);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [clockTick, setClockTick] = useState(() => Date.now());
   const [slotModal, setSlotModal] = useState<{ type: 'claim' | 'unclaim'; slot: OTSlot } | null>(null);
   const [noticeModal, setNoticeModal] = useState<{ title: string; body: string } | null>(null);
+  const [quickDeleteSlot, setQuickDeleteSlot] = useState<OTSlot | null>(null);
+  const [deletingSlotId, setDeletingSlotId] = useState<string | null>(null);
   const [claimKind, setClaimKind] = useState<OTClaimKind>('scheduled_extension');
   const [claimMetas, setClaimMetas] = useState<Record<string, OTClaimKind>>({});
   const isDraggingRangeRef = useRef(false);
@@ -71,9 +74,23 @@ function OTCalendarPageContent() {
   useEffect(() => {
     void (async () => {
       const result = await supabase.auth.getUser();
-      setUserId(result.data.user?.id ?? null);
+      const authUserId = result.data.user?.id ?? null;
+      setUserId(authUserId);
+
+      if (!authUserId) {
+        setUserRole(null);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', authUserId)
+        .maybeSingle();
+
+      setUserRole((profile?.role as UserRole | undefined) ?? null);
     })();
-  }, [supabase.auth]);
+  }, [supabase]);
 
   const fetchMonthSlots = useCallback(async () => {
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
@@ -406,6 +423,32 @@ function OTCalendarPageContent() {
     setSlotModal({ type: 'unclaim', slot });
   };
 
+  const canQuickDeleteSlot = useCallback(
+    (slot: OTSlot) => slot.status === 'available' && (userRole === 'admin' || userRole === 'moderator_a1'),
+    [userRole],
+  );
+
+  const performQuickDelete = async (slot: OTSlot) => {
+    setDeletingSlotId(slot.id);
+    try {
+      const response = await fetch(`/api/ot/slots/${slot.id}`, { method: 'DELETE' });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Unable to remove OT slot.');
+      }
+
+      setSlots((current) => current.filter((existing) => existing.id !== slot.id));
+      setQuickDeleteSlot(null);
+    } catch (error) {
+      setNoticeModal({
+        title: 'Unable to remove OT slot',
+        body: error instanceof Error ? error.message : 'Unexpected error while removing the OT slot.',
+      });
+    } finally {
+      setDeletingSlotId(null);
+    }
+  };
+
   const canUnclaimSlot = (slot: OTSlot) => {
     if (slot.claimed_by !== userId || !slot.claimed_at) {
       return false;
@@ -554,6 +597,7 @@ function OTCalendarPageContent() {
                     const isAvailable = slot.status === 'available';
                     const isMine = slot.claimed_by === userId;
                     const isClaiming = claimingId === slot.id;
+                    const canQuickDelete = canQuickDeleteSlot(slot);
 
                     return (
                       <div
@@ -561,6 +605,17 @@ function OTCalendarPageContent() {
                         className={`slot-card ${isAvailable ? 'available' : 'claimed'} animate-fade-in delay-${index * 100}`}
                         id={`slot-card-${slot.id}`}
                       >
+                        {canQuickDelete && (
+                          <button
+                            type="button"
+                            className="slot-quick-delete"
+                            onClick={() => setQuickDeleteSlot(slot)}
+                            aria-label={`Remove OT slot ${formatOTDate(slot.date)} ${formatTime(slot.start_time)} to ${formatTime(slot.end_time)}`}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+
                         <div className="slot-badge-row">
                           <span className={`badge ${isAvailable ? 'badge-available' : 'badge-claimed'}`}>
                             {isAvailable ? 'Available' : 'Claimed'}
@@ -772,6 +827,32 @@ function OTCalendarPageContent() {
             <div className="ot-slot-modal-actions">
               <button className="btn btn-primary" onClick={() => setNoticeModal(null)}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quickDeleteSlot && (
+        <div className="modal-overlay" onClick={() => setQuickDeleteSlot(null)}>
+          <div className="modal ot-slot-modal" onClick={(event) => event.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.85rem' }}>
+              <AlertCircle size={18} style={{ color: '#f87171' }} />
+              <h3 style={{ margin: 0 }}>Eliminar OT abierto</h3>
+            </div>
+            <p className="text-muted" style={{ marginTop: 0, lineHeight: 1.7 }}>
+              Este slot abierto se eliminará directamente del calendario: {formatOTDate(quickDeleteSlot.date)} - {formatTime(quickDeleteSlot.start_time)} to {formatTime(quickDeleteSlot.end_time)}.
+            </p>
+            <div className="ot-slot-modal-actions">
+              <button className="btn btn-ghost" onClick={() => setQuickDeleteSlot(null)}>
+                Cancelar
+              </button>
+              <button
+                className="btn btn-ghost ot-danger-btn"
+                onClick={() => void performQuickDelete(quickDeleteSlot)}
+                disabled={deletingSlotId === quickDeleteSlot.id}
+              >
+                {deletingSlotId === quickDeleteSlot.id ? 'Eliminando...' : 'Eliminar slot'}
               </button>
             </div>
           </div>
@@ -1020,6 +1101,29 @@ function OTCalendarPageContent() {
           align-items: center;
           gap: 0.375rem;
           margin-bottom: 0.75rem;
+        }
+
+        .slot-quick-delete {
+          position: absolute;
+          top: 0.85rem;
+          right: 0.85rem;
+          width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          border: 1px solid rgba(248, 113, 113, 0.22);
+          background: linear-gradient(160deg, rgba(63, 18, 18, 0.9), rgba(127, 29, 29, 0.92));
+          color: #fecaca;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+          transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .slot-quick-delete:hover {
+          transform: translateY(-1px) scale(1.04);
+          border-color: rgba(248, 113, 113, 0.42);
+          background: linear-gradient(160deg, rgba(127, 29, 29, 0.96), rgba(185, 28, 28, 0.96));
         }
 
         .slot-time {

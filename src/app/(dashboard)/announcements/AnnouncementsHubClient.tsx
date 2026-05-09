@@ -916,6 +916,112 @@ export function AnnouncementsHubClient({
           font-weight: 800;
           font-size: 0.75rem;
         }
+
+        @media (max-width: 767px) {
+          .announcements-shell {
+            gap: 0.9rem;
+          }
+
+          .announcements-hero {
+            padding: 1rem;
+            gap: 0.9rem;
+            border-radius: 22px;
+          }
+
+          .announcements-title {
+            font-size: 1.65rem;
+          }
+
+          .announcements-subtitle {
+            margin-top: 0.55rem;
+            font-size: 0.9rem;
+            line-height: 1.5;
+          }
+
+          .announcements-tab-row {
+            justify-content: flex-start;
+            gap: 0.55rem;
+          }
+
+          .announcements-tab-chip {
+            padding: 0.5rem 0.78rem;
+            font-size: 0.8rem;
+          }
+
+          .announcements-search {
+            min-width: 0;
+          }
+
+          .featured-announcement {
+            grid-template-columns: 1fr;
+            gap: 0;
+            border-radius: 22px;
+          }
+
+          .featured-announcement-copy {
+            order: 2;
+            padding: 1rem 1rem 1.15rem;
+            gap: 0.7rem;
+          }
+
+          .featured-announcement-copy h2 {
+            font-size: 1.2rem;
+          }
+
+          .featured-announcement-copy p {
+            font-size: 0.88rem;
+            line-height: 1.55;
+          }
+
+          .featured-announcement-cover,
+          .announcement-card-cover {
+            border-radius: 22px 22px 0 0;
+            min-height: 0;
+          }
+
+          .featured-announcement-cover img,
+          .announcement-card-cover img {
+            height: 188px;
+          }
+
+          .featured-announcement-meta,
+          .announcement-card-footer {
+            display: grid;
+            gap: 0.35rem;
+          }
+
+          .announcements-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .announcement-card {
+            border-radius: 22px;
+            overflow: hidden;
+          }
+
+          .announcement-card-body {
+            padding: 0.95rem 1rem 1.05rem;
+          }
+
+          .announcement-card-headline h3 {
+            font-size: 1rem;
+          }
+
+          .announcement-card-body p,
+          .notification-message {
+            font-size: 0.88rem;
+            line-height: 1.55;
+          }
+
+          .notifications-head {
+            gap: 0.7rem;
+          }
+
+          .notification-row {
+            grid-template-columns: 1fr;
+            padding: 0.9rem;
+          }
+        }
       `}</style>
     </div>
   );

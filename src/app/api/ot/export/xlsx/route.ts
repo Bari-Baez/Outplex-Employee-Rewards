@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { isModeratorRole } from '@/lib/auth/roles';
 import { generateOTExcel, type OTExcelUser, type OTExcelMeta } from '@/lib/ot-excel';
+import { getCurrentOTDateTime, isOTSlotRecentlyAdded, isOTSlotUpcoming } from '@/lib/ot';
 import type { OTSlot } from '@/types/database';
 
 export const maxDuration = 30;
@@ -65,10 +66,17 @@ export async function GET(req: NextRequest) {
   let slots = (slotsRes.data ?? []) as OTSlot[];
 
   // Status filter
+  const currentMoment = getCurrentOTDateTime();
+  const now = new Date();
+
   if (status === 'claimed') {
     slots = slots.filter(s => s.status === 'claimed');
   } else if (status === 'available') {
     slots = slots.filter(s => s.status === 'available');
+  } else if (status === 'upcoming') {
+    slots = slots.filter(s => isOTSlotUpcoming(s, currentMoment));
+  } else if (status === 'recently_added') {
+    slots = slots.filter(s => isOTSlotRecentlyAdded(s, now, 5));
   }
   // 'all' → no additional filter
 
@@ -103,6 +111,8 @@ export async function GET(req: NextRequest) {
     all:       'All Slots',
     claimed:   'Claimed Slots',
     available: 'Pending Slots',
+    upcoming: 'Upcoming Slots',
+    recently_added: 'Recently Added Slots',
   };
   const filterParts: string[] = [labelMap[status] ?? 'All Slots'];
   if (supervisorFilter === 'my-team') filterParts.push('My Team');
