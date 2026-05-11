@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 type SectionTone = 'default' | 'danger' | 'warning' | 'success';
@@ -7,6 +8,7 @@ type SectionTone = 'default' | 'danger' | 'warning' | 'success';
 export interface SectionJumpNavItem {
   id: string;
   label: string;
+  icon?: ReactNode;
   badge?: number | string | null;
   tone?: SectionTone;
   disabled?: boolean;
@@ -57,6 +59,11 @@ export function SectionJumpNav({
               item.disabled ? 'cursor-not-allowed opacity-45' : 'hover:-translate-y-0.5 hover:border-violet-400/30 hover:text-white',
             )}
           >
+            {item.icon ? (
+              <span className="flex h-4 w-4 items-center justify-center text-current/90">
+                {item.icon}
+              </span>
+            ) : null}
             <span className="whitespace-nowrap">{item.label}</span>
             {item.badge !== undefined && item.badge !== null && item.badge !== '' ? (
               <span

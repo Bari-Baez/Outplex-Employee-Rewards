@@ -22,6 +22,8 @@ import {
 import { TransferProgress } from '@/components/uploads/TransferProgress';
 import { useTransferState } from '@/components/uploads/useTransferState';
 import { ModernSelect } from '@/components/ui/Select';
+import { SectionJumpNav } from '@/components/ui/SectionJumpNav';
+import { StickyActionBar } from '@/components/ui/StickyActionBar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PromptDialog } from '@/components/ui/PromptDialog';
 import { toast } from 'sonner';
@@ -42,6 +44,7 @@ import {
 } from '@/lib/ot';
 import { detectOTDateFormat, normalizeCSVHeaders, parseFlexibleTime, parseOTDate, type OTDateFormat, type OTMeridiem } from '@/lib/utils';
 import { readFileAsTextWithProgress } from '@/lib/file-transfer';
+import { scrollToSectionWithHighlight } from '@/lib/scroll-focus';
 
 const SESSION_KEY = 'outplex_staging_session';
 
@@ -101,6 +104,22 @@ const BULK_FILL_PRESETS = [
   { label: 'NYT CHAT', column: 'lob', value: 'NYT CHAT' },
   { label: 'NYT EMAIL', column: 'lob', value: 'NYT EMAIL' },
 ] as const;
+
+function serializeStagingSnapshot({
+  rows,
+  columns,
+  batchName,
+  activeBatchId,
+  dateFormat,
+}: Pick<StagingSession, 'rows' | 'columns' | 'batchName' | 'activeBatchId' | 'dateFormat'>) {
+  return JSON.stringify({
+    rows,
+    columns,
+    batchName: batchName.trim(),
+    activeBatchId,
+    dateFormat,
+  });
+}
 
 // Converts an image to high-contrast grayscale at 2× resolution before Tesseract.
 // Excel screenshots with colored header rows and alternating row colors confuse Tesseract;
@@ -187,9 +206,33 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   const isFirstRenderRef = useRef(true);
   const [dragKind, setDragKind] = useState<'csv' | 'image' | null>(null);
   const transfer = useTransferState({ resetAfterMs: 1500 });
+  const [activeJumpSection, setActiveJumpSection] = useState('staging-import');
+  const [savedSnapshotSignature, setSavedSnapshotSignature] = useState('');
 
   const hasMissingIDs = rows.some((row) => !String(row.spot_id ?? '').trim());
   const selectedRowCount = selectedRows.size;
+  const stagingSnapshotSignature = useMemo(
+    () =>
+      serializeStagingSnapshot({
+        rows,
+        columns,
+        batchName,
+        activeBatchId,
+        dateFormat,
+      }),
+    [activeBatchId, batchName, columns, dateFormat, rows],
+  );
+  const hasUnsavedChanges = rows.length > 0 && stagingSnapshotSignature !== savedSnapshotSignature;
+  const stagingJumpItems = useMemo(
+    () => [
+      { id: 'staging-import', label: 'Importar', icon: <FileSpreadsheet size={14} /> },
+      { id: 'staging-drafts', label: 'Drafts', icon: <Save size={14} /> },
+      { id: 'staging-batch', label: 'Lote', icon: <RefreshCw size={14} />, disabled: rows.length === 0 },
+      { id: 'staging-tools', label: 'Herramientas', icon: <Wand2 size={14} />, disabled: rows.length === 0 },
+      { id: 'staging-sheet', label: 'Tabla', icon: <Table2 size={14} />, disabled: rows.length === 0, badge: rows.length > 0 ? rows.length : null },
+    ],
+    [rows.length],
+  );
 
   // On mount: check localStorage for an unsaved staging session
   useEffect(() => {
@@ -291,13 +334,26 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
   const loadRows = (nextRows: CSVRow[], nextBatchName?: string, nextBatchId?: string | null, imageCols?: string[], rawDates?: string[]) => {
     const normalized = sanitizeOTRows(nextRows, dateFormat);
     const nextColumns = getOTColumns(normalized);
+    const resolvedColumns = nextColumns.length > 0 ? nextColumns : [...CORE_OT_COLUMNS];
+    const resolvedBatchName = nextBatchName ?? '';
+    const resolvedBatchId = nextBatchId ?? null;
     setRows(normalized);
-    setColumns(nextColumns.length > 0 ? nextColumns : [...CORE_OT_COLUMNS]);
-    setBatchName(nextBatchName ?? '');
-    setActiveBatchId(nextBatchId ?? null);
+    setColumns(resolvedColumns);
+    setBatchName(resolvedBatchName);
+    setActiveBatchId(resolvedBatchId);
     setSelectedRows(new Set());
     setStatusMessage(null);
     setOcrImageColumns(imageCols ? new Set(imageCols) : new Set());
+    setSavedSnapshotSignature(
+      serializeStagingSnapshot({
+        rows: normalized,
+        columns: resolvedColumns,
+        batchName: resolvedBatchName,
+        activeBatchId: resolvedBatchId,
+        dateFormat,
+      }),
+    );
+    setActiveJumpSection('staging-sheet');
     if (rawDates !== undefined) rawImportedDatesRef.current = rawDates;
     validateRows(normalized);
   };
@@ -856,6 +912,15 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
       if (status === 'draft') {
         setActiveBatchId(payload.batch.id);
         setDrafts((current) => [payload.batch!, ...current.filter((draft) => draft.id !== payload.batch!.id)].slice(0, 6));
+        setSavedSnapshotSignature(
+          serializeStagingSnapshot({
+            rows,
+            columns,
+            batchName,
+            activeBatchId: payload.batch.id,
+            dateFormat,
+          }),
+        );
       } else {
         setRows([]);
         setColumns([...CORE_OT_COLUMNS]);
@@ -864,6 +929,8 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         setSelectedRows(new Set());
         setDrafts((current) => current.filter((draft) => draft.id !== payload.batch!.id));
         localStorage.removeItem(SESSION_KEY);
+        setSavedSnapshotSignature('');
+        setActiveJumpSection('staging-import');
       }
 
       setStatusTone('success');
@@ -900,6 +967,8 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
     setBatchName(resumeSession.batchName);
     setActiveBatchId(resumeSession.activeBatchId);
     setDateFormat(resumeSession.dateFormat);
+    setSavedSnapshotSignature('__unsaved__');
+    setActiveJumpSection('staging-sheet');
     setResumeSession(null);
     validateRows(resumeSession.rows);
   };
@@ -945,6 +1014,8 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
       setColumns([...CORE_OT_COLUMNS]);
       setBatchName('');
       setActiveBatchId(null);
+      setSavedSnapshotSignature('');
+      setActiveJumpSection('staging-import');
     }
   };
 
@@ -952,6 +1023,10 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
 
   const draftSummary = useMemo(() => drafts.map((draft) => ({ ...draft, rowCount: Array.isArray(draft.csv_data) ? draft.csv_data.length : 0 })), [drafts]);
   const hasError = (rowIndex: number, field: string) => errors.some((error) => error.row === rowIndex && error.field === field);
+  const jumpToStagingSection = (id: string) => {
+    setActiveJumpSection(id);
+    scrollToSectionWithHighlight(id);
+  };
 
   return (
     <div>
@@ -997,8 +1072,56 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         </div>
       )}
 
+      <StickyActionBar
+        navigation={(
+          <SectionJumpNav
+            items={stagingJumpItems}
+            activeId={activeJumpSection}
+            onSelect={jumpToStagingSection}
+            className="staging-sticky-jump-nav"
+          />
+        )}
+        summary={(
+          <div className="staging-sticky-summary">
+            <strong>{batchName.trim() || (rows.length > 0 ? 'OT batch in progress' : 'Start a new OT batch')}</strong>
+            <span>
+              {hasUnsavedChanges
+                ? 'Unsaved changes'
+                : rows.length > 0
+                  ? `${rows.length} rows ready`
+                  : 'Import a file or start a blank sheet'}
+            </span>
+          </div>
+        )}
+        actions={(
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={addRow} disabled={publishing}>
+              <Table2 size={15} /> Manual Sheet
+            </button>
+            <button className="btn btn-modern btn-sm" onClick={() => void handlePersist('draft')} disabled={publishing || rows.length === 0}>
+              <Save size={15} /> Save Draft
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => void handlePersist('published')} disabled={publishing || rows.length === 0}>
+              {publishing ? 'Working...' : <><Send size={15} /> Publish Live</>}
+            </button>
+          </>
+        )}
+        mobileActions={(
+          <>
+            <button className="btn btn-modern btn-sm" onClick={() => void handlePersist('draft')} disabled={publishing || rows.length === 0}>
+              Save
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => void handlePersist('published')} disabled={publishing || rows.length === 0}>
+              {publishing ? '...' : 'Publish'}
+            </button>
+          </>
+        )}
+        topOffset="0.75rem"
+        bottomOffset="calc(env(safe-area-inset-bottom) + 5.6rem)"
+      />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(320px, 0.9fr)', gap: '1rem', marginBottom: '1rem' }} className="staging-grid">
-        <section className="card" style={{ padding: '1rem 1.1rem' }}>
+        <section id="staging-import" className="card staging-focus-target" style={{ padding: '1rem 1.1rem' }}>
           <div style={{ marginBottom: '1rem' }}>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 700 }}>Import Options</h2>
             <p className="text-muted" style={{ margin: 0, fontSize: '0.8125rem' }}>Use CSV/TXT, paste copied rows, or try photo OCR beta.</p>
@@ -1088,7 +1211,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
           </div>
         </section>
 
-        <section className="card" style={{ padding: '1rem 1.1rem' }}>
+        <section id="staging-drafts" className="card staging-focus-target" style={{ padding: '1rem 1.1rem' }}>
           <div style={{ marginBottom: '1rem' }}>
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 700 }}>Drafts</h2>
             <p className="text-muted" style={{ margin: 0, fontSize: '0.8125rem' }}>Load unfinished OT batches and continue editing.</p>
@@ -1111,7 +1234,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
 
       {rows.length > 0 && (
         <>
-          <div className="card" style={{ padding: '1rem 1.1rem', marginBottom: '1rem' }}>
+          <div id="staging-batch" className="card staging-focus-target" style={{ padding: '1rem 1.1rem', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 240 }}>
                 <label className="meta-label">Batch Name</label>
@@ -1129,7 +1252,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
               <button className="btn btn-ghost" onClick={() => setRows((current) => current.map((row) => String(row.spot_id ?? '').trim() ? row : { ...row, spot_id: `${Math.floor(10000 + Math.random() * 90000)}` }))} disabled={!hasMissingIDs}><Wand2 size={15} /> Generate Spot IDs</button>
               <button className="btn btn-ghost" onClick={() => { setRows([]); setColumns([...CORE_OT_COLUMNS]); setBatchName(''); setActiveBatchId(null); setSelectedRows(new Set()); setErrors([]); setStatusMessage(null); setOcrSummary(null); }}><RefreshCw size={15} /> Clear sheet</button>
             </div>
-            <div className="staging-tool-grid">
+            <div id="staging-tools" className="staging-tool-grid staging-focus-target">
               {/* ── Batch Edit ─────────────────────────────────────────── */}
               <section className="staging-tool-card">
                 <div className="staging-tool-head">
@@ -1344,7 +1467,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
 
           {errors.length > 0 && <div className="warning-banner"><AlertCircle size={18} /><span>There are validation issues in the sheet. Review highlighted cells before publishing.</span></div>}
 
-          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+          <div id="staging-sheet" className="card staging-focus-target" style={{ padding: 0, overflow: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -1610,6 +1733,12 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         .staging-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
         .staging-title { font-size: 1.875rem; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 0.25rem; }
         .staging-subtitle { color: var(--text-secondary); font-size: 0.9375rem; margin: 0; }
+        .staging-sticky-summary { display: grid; gap: 0.2rem; }
+        .staging-sticky-summary strong { color: var(--text-primary); font-size: 0.9rem; }
+        .staging-sticky-summary span { color: var(--text-secondary); font-size: 0.76rem; }
+        .staging-sticky-jump-nav { padding: 0.38rem 0.45rem; border-radius: 18px; background: rgba(255,255,255,0.03); }
+        .staging-sticky-jump-nav button { padding: 0.48rem 0.75rem; font-size: 0.72rem; }
+        .staging-focus-target { scroll-margin-top: 11rem; }
         .success-banner, .warning-banner { display: flex; align-items: center; gap: 0.75rem; border-radius: 12px; padding: 0.9rem 1rem; margin-bottom: 1rem; }
         .success-banner { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); }
         .warning-banner { background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); color: #fbbf24; }
@@ -1699,7 +1828,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
         .staging-danger-btn { color: #fca5a5; border-color: rgba(239, 68, 68, 0.25); }
         .staging-danger-btn:hover { background: rgba(239, 68, 68, 0.08); color: #fecaca; }
         @media (max-width: 1080px) { .staging-grid { grid-template-columns: 1fr !important; } .staging-header { flex-direction: column; } .staging-tool-grid { grid-template-columns: 1fr; } .ocr-review-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 720px) { .staging-tool-fields, .staging-inline-time-fields { grid-template-columns: 1fr; } .staging-formula-input-wrap { align-items: stretch; flex-direction: column; } }
+        @media (max-width: 720px) { .staging-focus-target { scroll-margin-top: 5rem; } .staging-tool-fields, .staging-inline-time-fields { grid-template-columns: 1fr; } .staging-formula-input-wrap { align-items: stretch; flex-direction: column; } }
       `}</style>
 
       {pendingPublish && (

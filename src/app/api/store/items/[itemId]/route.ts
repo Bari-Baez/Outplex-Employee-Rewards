@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidateCompanyStoreViews } from '@/lib/store-cache';
 import { getStoreItemMetaKey, parseStoreItemMeta } from '@/lib/store-helpers';
 import { notifyModeratorsOfLowStock, shouldNotifyLowStock } from '@/lib/store-notifications';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
@@ -172,6 +173,8 @@ export async function PATCH(req: Request, context: { params: Promise<{ itemId: s
     });
   }
 
+  revalidateCompanyStoreViews();
+
   return NextResponse.json({
     item: {
       ...item,
@@ -228,6 +231,8 @@ export async function DELETE(_: Request, context: { params: Promise<{ itemId: st
     },
     { onConflict: 'key' },
   );
+
+  revalidateCompanyStoreViews();
 
   return NextResponse.json({ success: true, softDeleted: true });
 }

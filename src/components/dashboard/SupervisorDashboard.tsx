@@ -25,6 +25,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         label: 'Team',
         value: stats.teamSize.toString(),
         helper: 'Assigned members under your supervision.',
+        href: '/moderator/users',
         icon: <Users size={16} />,
         color: 'var(--brand-primary)',
       },
@@ -33,6 +34,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         label: 'OT Hours',
         value: stats.teamOTHours.toFixed(1),
         helper: 'Claimed OT hours this month.',
+        href: '/moderator/ot-manager',
         icon: <Clock size={16} />,
         color: '#10b981',
       },
@@ -41,6 +43,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         label: 'Requests',
         value: stats.teamPendingStoreRequests.toString(),
         helper: 'Pending store actions for your team.',
+        href: '/moderator/employee-stores',
         icon: <Store size={16} />,
         color: '#06b6d4',
       },
@@ -49,6 +52,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         label: 'Points',
         value: stats.teamTotalPoints.toLocaleString(),
         helper: 'Combined points balance across your team.',
+        href: '/moderator/users',
         icon: <Zap size={16} />,
         color: '#fbbf24',
       },
@@ -73,7 +77,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
 
   return (
     <div className="flex flex-col gap-5 md:gap-8 w-full max-w-[1600px] p-3 md:p-6 animate-fade-in">
-      <div className="lg:hidden supervisor-mobile-shell">
+      <div className="dashboard-mobile-only supervisor-mobile-shell">
         <div className="card supervisor-mobile-hero">
           <span className="supervisor-mobile-kicker">Supervisor</span>
           <h1 className="supervisor-mobile-title">Team dashboard</h1>
@@ -92,13 +96,13 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
               </button>
             ))}
           </div>
-          <div className="supervisor-mobile-detail" style={{ ['--metric-color' as string]: activeMetric.color }}>
+          <Link href={activeMetric.href} className="supervisor-mobile-detail supervisor-mobile-detail-link" style={{ ['--metric-color' as string]: activeMetric.color }}>
             <div className="supervisor-mobile-detail-row">
               <span className="supervisor-mobile-detail-label">{activeMetric.label}</span>
               <strong>{activeMetric.value}</strong>
             </div>
             <p>{activeMetric.helper}</p>
-          </div>
+          </Link>
         </div>
 
         <div className="supervisor-mobile-shortcuts">
@@ -115,7 +119,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         </div>
       </div>
 
-      <div className="hidden lg:block dashboard-header">
+      <div className="dashboard-desktop-only-block dashboard-header">
         <div>
           <h1 className="dashboard-title">
             Supervisor <span className="gradient-text">Dashboard</span>
@@ -126,7 +130,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         </div>
       </div>
 
-      <div className="hidden lg:grid stats-grid">
+      <div className="dashboard-desktop-only-grid stats-grid">
         {desktopStats.map((card) => (
           <StatCard
             key={card.label}
@@ -140,7 +144,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         ))}
       </div>
 
-      <div className="hidden lg:grid dashboard-grid">
+      <div className="dashboard-desktop-only-grid dashboard-grid">
         <section className="card">
           <div className="card-header">
             <h2 className="card-title">
@@ -198,6 +202,10 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
       <style>{`
         .dashboard-header {
           margin-bottom: 2rem;
+        }
+        .dashboard-desktop-only-block,
+        .dashboard-desktop-only-grid {
+          display: none !important;
         }
         .dashboard-title {
           font-size: 2.25rem;
@@ -310,6 +318,9 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
           border: 1px solid color-mix(in srgb, var(--metric-color) 30%, rgba(255,255,255,0.08));
           background: color-mix(in srgb, var(--metric-color) 10%, rgba(255,255,255,0.02));
         }
+        .supervisor-mobile-detail-link {
+          text-decoration: none;
+        }
         .supervisor-mobile-detail-row {
           display: flex;
           justify-content: space-between;
@@ -375,6 +386,17 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         }
         .supervisor-stat-link {
           text-decoration: none;
+        }
+        @media (min-width: 1024px) {
+          .dashboard-mobile-only {
+            display: none !important;
+          }
+          .dashboard-desktop-only-block {
+            display: block !important;
+          }
+          .dashboard-desktop-only-grid {
+            display: grid !important;
+          }
         }
         @media (max-width: 1279px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr); }

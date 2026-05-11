@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getStoreItemMetaKey } from '@/lib/store-helpers';
+import { revalidateCompanyStoreViews } from '@/lib/store-cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import type { StoreItemMeta } from '@/types/database';
 import { isModeratorRole } from '@/lib/auth/roles';
@@ -100,6 +101,8 @@ export async function POST(req: Request) {
       { onConflict: 'key' },
     );
   }
+
+  revalidateCompanyStoreViews();
 
   return NextResponse.json({
     item: {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
+import { revalidateEmployeeStoreViews } from '@/lib/store-cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 function toMessage(err: unknown): string {
@@ -107,8 +107,7 @@ export async function POST(req: Request) {
       }
     }
 
-    revalidatePath('/store');
-    revalidatePath('/my-store');
+    revalidateEmployeeStoreViews();
 
     return NextResponse.json({ product: data });
   } catch (err) {

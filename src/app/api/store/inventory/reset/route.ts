@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getStoreItemMetaKey } from '@/lib/store-helpers';
+import { revalidateCompanyStoreViews } from '@/lib/store-cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { isModeratorRole } from '@/lib/auth/roles';
 import { enforceSectionAvailability } from '@/lib/availability/section-guard';
@@ -72,6 +73,8 @@ export async function POST() {
       .from('app_settings')
       .upsert(metaRows, { onConflict: 'key' });
   }
+
+  revalidateCompanyStoreViews();
 
   return NextResponse.json({ success: true, erasedCount: items?.length ?? 0 });
 }

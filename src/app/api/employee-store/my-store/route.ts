@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
+import { revalidateEmployeeStoreViews } from '@/lib/store-cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { requireEmployeeRole } from '@/lib/auth-helpers';
 
@@ -85,8 +85,7 @@ export async function PATCH(req: Request) {
       .single();
     if (error) throw error;
 
-    revalidatePath('/store');
-    revalidatePath('/my-store');
+    revalidateEmployeeStoreViews();
 
     return NextResponse.json({ store: data });
   } catch (err) {

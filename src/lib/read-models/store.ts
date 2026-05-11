@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache';
 import type { AppSettingValue, EmployeeStore, EmployeeStoreProduct, EmployeeStoreProductReview, StoreItem, StoreThemeConfig, User } from '@/types/database';
 import { STORE_THEME_KEY, getStoreItemMetaKey, normalizeStoreThemeConfig } from '@/lib/store-helpers';
+import { STORE_CACHE_TAGS } from '@/lib/store-cache';
 import { createServiceClient } from '@/lib/supabase/server';
 
 const STORE_REVALIDATE_SECONDS = 60;
@@ -76,7 +77,7 @@ export const getCachedStoreCatalog = unstable_cache(
     };
   },
   ['store-catalog:v1'],
-  { revalidate: STORE_REVALIDATE_SECONDS },
+  { revalidate: STORE_REVALIDATE_SECONDS, tags: [STORE_CACHE_TAGS.catalog] },
 );
 
 export const getCachedStoreReviewSummary = unstable_cache(
@@ -106,7 +107,7 @@ export const getCachedStoreReviewSummary = unstable_cache(
     return summaryMap;
   },
   ['store-review-summary:v1'],
-  { revalidate: STORE_REVALIDATE_SECONDS },
+  { revalidate: STORE_REVALIDATE_SECONDS, tags: [STORE_CACHE_TAGS.reviewSummary] },
 );
 
 export const getCachedPublicEmployeeStores = unstable_cache(
@@ -204,5 +205,5 @@ export const getCachedPublicEmployeeStores = unstable_cache(
     }));
   },
   ['public-employee-stores:v1'],
-  { revalidate: STORE_REVALIDATE_SECONDS },
+  { revalidate: STORE_REVALIDATE_SECONDS, tags: [STORE_CACHE_TAGS.publicEmployeeStores] },
 );

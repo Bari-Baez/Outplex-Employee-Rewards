@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { revalidateCompanyStoreViews } from '@/lib/store-cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export async function GET(req: NextRequest) {
@@ -41,8 +42,7 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    revalidatePath('/store');
-    revalidatePath('/moderator/store/analytics');
+    revalidateCompanyStoreViews();
     return NextResponse.json({ review });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Error' }, { status: 500 });

@@ -26,6 +26,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         label: 'Team',
         value: stats.totalEmployees.toString(),
         helper: 'Registered users in the platform.',
+        href: '/moderator/users',
         icon: <Users size={16} />,
         color: '#6d5dfc',
       },
@@ -34,6 +35,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         label: 'Open OT',
         value: stats.pendingOT.toString(),
         helper: 'OT items waiting for review.',
+        href: '/moderator/ot-manager',
         icon: <Clock size={16} />,
         color: '#10b981',
       },
@@ -42,6 +44,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         label: 'Store',
         value: stats.pendingStoreRequests.toString(),
         helper: `${stats.activeStores} active employee store(s).`,
+        href: '/moderator/employee-stores',
         icon: <Store size={16} />,
         color: '#06b6d4',
       },
@@ -50,6 +53,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         label: 'Points',
         value: stats.pointsDistributed.toLocaleString(),
         helper: 'Total points distributed in the economy.',
+        href: '/moderator/users',
         icon: <Zap size={16} />,
         color: '#fbbf24',
       },
@@ -67,14 +71,14 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
   ];
   const desktopStats = [
     { href: '/moderator/users', label: 'Total Employees', value: stats.totalEmployees.toString(), icon: <Users size={16} />, sublabel: 'Registered Users', color: '#6d5dfc' },
-    { href: '/staging', label: 'Pending OT', value: stats.pendingOT.toString(), icon: <Clock size={16} />, sublabel: 'Awaiting Review', color: '#10b981' },
+    { href: '/moderator/ot-manager', label: 'Pending OT', value: stats.pendingOT.toString(), icon: <Clock size={16} />, sublabel: 'Awaiting Review', color: '#10b981' },
     { href: '/moderator/employee-stores', label: 'Store Requests', value: stats.pendingStoreRequests.toString(), icon: <Store size={16} />, sublabel: 'Pending Approval', color: '#06b6d4' },
     { href: '/moderator/users', label: 'Points Flow', value: stats.pointsDistributed.toLocaleString(), icon: <Zap size={16} />, sublabel: 'Total Economy', color: '#fbbf24' },
   ];
 
   return (
     <div className="flex flex-col gap-5 md:gap-8 w-full max-w-[1600px] p-3 md:p-6">
-      <div className="lg:hidden glass-card workforce-mobile-hero">
+      <div className="dashboard-mobile-only glass-card workforce-mobile-hero">
         <div className="workforce-mobile-kicker">Dashboard</div>
         <div className="workforce-mobile-headline">
           <span className="workforce-mobile-icon"><Zap size={18} /></span>
@@ -97,16 +101,16 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
             </button>
           ))}
         </div>
-        <div className="workforce-mobile-detail" style={{ ['--metric-color' as string]: activeMetric.color }}>
+        <Link href={activeMetric.href} className="workforce-mobile-detail workforce-mobile-detail-link" style={{ ['--metric-color' as string]: activeMetric.color }}>
           <div className="workforce-mobile-detail-top">
             <span className="workforce-mobile-detail-badge">{activeMetric.label}</span>
             <span className="workforce-mobile-detail-value">{activeMetric.value}</span>
           </div>
           <p>{activeMetric.helper}</p>
-        </div>
+        </Link>
       </div>
 
-      <div className="hidden lg:flex glass-card bento-card--full justify-between items-center bg-gradient-to-r from-[rgba(109,93,252,0.1)] to-transparent border-l-4 border-l-[#6d5dfc]">
+      <div className="dashboard-desktop-only-flex glass-card bento-card--full justify-between items-center bg-gradient-to-r from-[rgba(109,93,252,0.1)] to-transparent border-l-4 border-l-[#6d5dfc]">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
             <span className="p-2 bg-[#6d5dfc] rounded-xl shadow-[0_0_20px_rgba(109,93,252,0.4)]">
@@ -118,7 +122,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         </div>
       </div>
 
-      <div className="lg:hidden workforce-mobile-actions">
+      <div className="dashboard-mobile-only workforce-mobile-actions">
         {mobileActions.map((action) => (
           <Link key={action.href} href={action.href} className="workforce-mobile-action">
             <span className="workforce-mobile-action-icon">{action.icon}</span>
@@ -140,7 +144,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         </div>
       </div>
 
-      <div className="hidden lg:grid bento-grid">
+      <div className="dashboard-desktop-only-grid bento-grid">
         {desktopStats.map((card) => (
           <StatCard
             key={card.label}
@@ -175,6 +179,10 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
           border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 24px;
           padding: 1.5rem;
+        }
+        .dashboard-desktop-only-flex,
+        .dashboard-desktop-only-grid {
+          display: none !important;
         }
         .bento-grid {
           display: grid;
@@ -270,6 +278,9 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
           border: 1px solid color-mix(in srgb, var(--metric-color) 30%, rgba(255,255,255,0.08));
           background: color-mix(in srgb, var(--metric-color) 10%, rgba(255,255,255,0.02));
         }
+        .workforce-mobile-detail-link {
+          text-decoration: none;
+        }
         .workforce-mobile-detail-top {
           display: flex;
           justify-content: space-between;
@@ -341,6 +352,17 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         }
         .stat-card-link {
           text-decoration: none;
+        }
+        @media (min-width: 1024px) {
+          .dashboard-mobile-only {
+            display: none !important;
+          }
+          .dashboard-desktop-only-flex {
+            display: flex !important;
+          }
+          .dashboard-desktop-only-grid {
+            display: grid !important;
+          }
         }
         @media (max-width: 1279px) {
           .bento-grid { grid-template-columns: 1fr; }

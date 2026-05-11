@@ -27,6 +27,8 @@ import {
 import { ModernSelect } from '@/components/ui/Select';
 import { ModernDatePicker } from '@/components/ui/DatePicker';
 import { ModernTimePicker } from '@/components/ui/TimePicker';
+import { SectionJumpNav } from '@/components/ui/SectionJumpNav';
+import { StickyActionBar } from '@/components/ui/StickyActionBar';
 import { CanvasRoulette } from '@/components/raffles/CanvasRoulette';
 import { parseRaffleCsvFile } from '@/lib/raffles/csv';
 import { useTransferState } from '@/components/uploads/useTransferState';
@@ -62,6 +64,7 @@ import {
 } from '@/lib/raffles/runtime';
 import type { ApiResponse, Raffle, StoreItem } from '@/types/database';
 import { proxifyMediaUrl } from '@/lib/media-proxy';
+import { scrollToSectionWithHighlight } from '@/lib/scroll-focus';
 
 function fmtDate(value: string | null) {
   return value
@@ -104,6 +107,10 @@ function fmtTimeBanner(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function serializeRaffleFormState(formState: RaffleFormState) {
+  return JSON.stringify(formState);
 }
 
 interface SlotEditorDraft {
@@ -213,6 +220,8 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
   const timeInputRef = useRef<HTMLInputElement>(null);
   const countdownMenuRef = useRef<HTMLDivElement>(null);
   const syncRef = useRef(false);
+  const [activeComposerSection, setActiveComposerSection] = useState('raffle-title-section');
+  const [lastSavedSignature, setLastSavedSignature] = useState(() => serializeRaffleFormState(createEmptyRaffleFormState()));
 
   const loadRaffles = useCallback(async () => {
     const next = await fetchRaffleFeed();
@@ -294,6 +303,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
     const timer = window.setTimeout(() => {
       const { collection, savedDraft } = upsertRaffleDraft(activeDraftId, formState);
       setSavedDrafts(collection.drafts);
+      setLastSavedSignature(serializeRaffleFormState(formState));
       if (savedDraft && savedDraft.id !== activeDraftId) {
         setActiveDraftId(savedDraft.id);
       }
@@ -589,6 +599,17 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
 
   const canSaveDraft = draftReady && isMeaningfulRaffleForm(formState);
   const latestDraftSavedAt = savedDrafts[0]?.updatedAt ?? null;
+  const hasRaffleUnsavedChanges = draftReady && serializeRaffleFormState(formState) !== lastSavedSignature;
+  const raffleJumpItems = useMemo(
+    () => [
+      { id: 'raffle-title-section', label: 'Meta', icon: <Trophy size={14} /> },
+      { id: 'raffle-prizes-section', label: 'Premios', icon: <Gift size={14} />, badge: formState.prizePlans.length > 0 ? formState.prizePlans.length : null },
+      { id: 'raffle-schedule-section', label: 'Horario', icon: <CalendarDays size={14} />, disabled: formState.mode !== 'scheduled' },
+      { id: 'raffle-participants-section', label: 'Participantes', icon: <Package size={14} />, badge: formState.participants.length > 0 ? formState.participants.length : null },
+      { id: 'raffle-publish-section', label: 'Publicar', icon: <Sparkles size={14} /> },
+    ],
+    [formState.mode, formState.participants.length, formState.prizePlans.length],
+  );
 
   const saveDraftNow = () => {
     if (!canSaveDraft) {
@@ -597,9 +618,15 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
 
     const { collection, savedDraft } = upsertRaffleDraft(activeDraftId, formState);
     setSavedDrafts(collection.drafts);
+    setLastSavedSignature(serializeRaffleFormState(formState));
     if (savedDraft && savedDraft.id !== activeDraftId) {
       setActiveDraftId(savedDraft.id);
     }
+  };
+
+  const jumpToRaffleSection = (id: string) => {
+    setActiveComposerSection(id);
+    scrollToSectionWithHighlight(id);
   };
 
   const openDraftManager = () => {
@@ -692,6 +719,8 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
     setPreviewMode('draft');
     setActiveDraftId(draft.id);
     setFormState(draft.data);
+    setLastSavedSignature(serializeRaffleFormState(draft.data));
+    setActiveComposerSection('raffle-title-section');
     setDraftPromptOpen(false);
     setDraftReady(true);
   };
@@ -710,10 +739,13 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
   };
 
   const startFresh = () => {
+    const emptyDraft = createEmptyRaffleFormState();
     setPreviewMode('draft');
     setSelectedRaffleId(null);
     setActiveDraftId(null);
-    setFormState(createEmptyRaffleFormState());
+    setFormState(emptyDraft);
+    setLastSavedSignature(serializeRaffleFormState(emptyDraft));
+    setActiveComposerSection('raffle-title-section');
     setDraftPromptOpen(false);
     setDraftReady(true);
   };
@@ -818,7 +850,10 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
       }
 
       setActiveDraftId(null);
-      setFormState(createEmptyRaffleFormState());
+      const emptyForm = createEmptyRaffleFormState();
+      setFormState(emptyForm);
+      setLastSavedSignature(serializeRaffleFormState(emptyForm));
+      setActiveComposerSection('raffle-title-section');
       setBulkNames('');
       setCsvStatus('');
       void syncRaffles();
@@ -974,7 +1009,60 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
             </div>
           </div>
 
-          <div className="card" ref={titleRef}>
+          <StickyActionBar
+            className="raffle-sticky-bar"
+            navigation={(
+              <SectionJumpNav
+                items={raffleJumpItems}
+                activeId={activeComposerSection}
+                onSelect={jumpToRaffleSection}
+                className="raffle-sticky-jump-nav"
+              />
+            )}
+            summary={(
+              <div className="raffle-sticky-summary">
+                <strong>{formState.title.trim() || 'Draft raffle'}</strong>
+                <span>
+                  {hasRaffleUnsavedChanges
+                    ? 'Unsaved changes'
+                    : latestDraftSavedAt
+                      ? `Draft saved ${fmtDate(latestDraftSavedAt)}`
+                      : 'Draft autosaves while you edit'}
+                </span>
+              </div>
+            )}
+            actions={(
+              <>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={openDraftManager} disabled={savedDrafts.length === 0}>
+                  <Save size={15} />
+                  {`Drafts (${savedDrafts.length})`}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={saveDraftNow} disabled={!canSaveDraft || isSubmitting}>
+                  <Save size={15} />
+                  {activeDraftId ? 'Update Draft' : 'Save Draft'}
+                </button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void launchRaffle()} disabled={isSubmitting}>
+                  <Gift size={15} />
+                  {isSubmitting ? 'Saving...' : formState.mode === 'scheduled' ? 'Schedule Raffle' : 'Launch Raffle'}
+                </button>
+              </>
+            )}
+            mobileActions={(
+              <>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={openDraftManager} disabled={savedDrafts.length === 0}>
+                  Drafts
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={saveDraftNow} disabled={!canSaveDraft || isSubmitting}>
+                  {activeDraftId ? 'Update' : 'Save'}
+                </button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void launchRaffle()} disabled={isSubmitting}>
+                  {isSubmitting ? '...' : formState.mode === 'scheduled' ? 'Schedule' : 'Launch'}
+                </button>
+              </>
+            )}
+          />
+
+          <div id="raffle-title-section" className="card raffle-focus-target" ref={titleRef}>
             <div className="raffle-header-row">
               <p className="raffle-label">Raffle Title</p>
             </div>
@@ -1039,7 +1127,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
           </div>
 
           {/* ── Prize designer ── */}
-          <div className="prize-designer">
+          <div id="raffle-prizes-section" className="prize-designer raffle-focus-target">
             <div className="prize-designer-header">
               <div>
                 <p className="section-title" ref={prizesRef}>Prize slots</p>
@@ -1333,91 +1421,94 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
             </div>
           )}
 
-          {formState.mode === 'scheduled' && (
-            <div className="scheduler-banner-grid">
-              <div>
-                <label className="field-label">Launch day</label>
-                <ModernDatePicker
-                  date={formState.scheduledDate}
-                  onDateChange={v => updateForm('scheduledDate', v)}
+          <div id="raffle-schedule-section" className="raffle-focus-target">
+            {formState.mode === 'scheduled' && (
+              <div className="scheduler-banner-grid">
+                <div>
+                  <label className="field-label">Launch day</label>
+                  <ModernDatePicker
+                    date={formState.scheduledDate}
+                    onDateChange={v => updateForm('scheduledDate', v)}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Launch hour</label>
+                  <ModernTimePicker
+                    time={formState.scheduledTime}
+                    onTimeChange={v => updateForm('scheduledTime', v)}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="countdown-control-row">
+              <div className="w-full">
+                <label className="field-label">Countdown</label>
+                <ModernSelect
+                  value={formState.countdownOption}
+                  onValueChange={v => updateForm('countdownOption', v as RaffleCountdownOption)}
+                  options={countdownOptions.map(opt => ({
+                    label: opt.label,
+                    value: opt.value
+                  }))}
                 />
               </div>
-              <div>
-                <label className="field-label">Launch hour</label>
-                <ModernTimePicker
-                  time={formState.scheduledTime}
-                  onTimeChange={v => updateForm('scheduledTime', v)}
-                />
+            </div>
+            <div className="countdown-control-row">
+              <button
+                type="button"
+                className={`winner-removal-toggle ${formState.removeWinnerAfterSpin ? 'winner-removal-toggle-active' : 'winner-removal-toggle-off'}`}
+                onClick={() => updateForm('removeWinnerAfterSpin', !formState.removeWinnerAfterSpin)}
+              >
+                <span className="winner-removal-knob">{formState.removeWinnerAfterSpin ? <Check size={14} /> : <Trash2 size={14} />}</span>
+                <span>
+                  {formState.removeWinnerAfterSpin ? 'Winners removed after each spin' : 'Winners stay in the wheel'}
+                </span>
+              </button>
+            </div>
+
+            {formState.countdownOption !== 'disabled' && (
+              <div className="raffle-hint">{getCountdownPreviewMessage(formState)}</div>
+            )}
+          </div>
+
+          <div id="raffle-participants-section" className="raffle-focus-target">
+            <div className="raffle-grid" style={{ marginTop: '1rem' }}>
+              <button
+                type="button"
+                className="upload-card"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={transfer.state.phase === 'working'}
+              >
+                <FileSpreadsheet size={20} />
+                <span>{transfer.state.phase === 'working' ? 'Importing...' : 'Import CSV'}</span>
+              </button>
+              <button type="button" className="upload-card" onClick={addParticipant}>
+                <Plus size={20} />
+                <span>Add row manually</span>
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              style={{ display: 'none' }}
+              onChange={handleFileUpload}
+            />
+
+            {csvStatus && (
+              <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: 'var(--brand-primary-light)' }}>
+                {csvStatus}
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="countdown-control-row">
-            <div className="w-full">
-              <label className="field-label">Countdown</label>
-              <ModernSelect
-                value={formState.countdownOption}
-                onValueChange={v => updateForm('countdownOption', v as RaffleCountdownOption)}
-                options={countdownOptions.map(opt => ({
-                  label: opt.label,
-                  value: opt.value
-                }))}
-              />
-            </div>
-          </div>
-          <div className="countdown-control-row">
-            <button
-              type="button"
-              className={`winner-removal-toggle ${formState.removeWinnerAfterSpin ? 'winner-removal-toggle-active' : 'winner-removal-toggle-off'}`}
-              onClick={() => updateForm('removeWinnerAfterSpin', !formState.removeWinnerAfterSpin)}
-            >
-              <span className="winner-removal-knob">{formState.removeWinnerAfterSpin ? <Check size={14} /> : <Trash2 size={14} />}</span>
-              <span>
-                {formState.removeWinnerAfterSpin ? 'Winners removed after each spin' : 'Winners stay in the wheel'}
-              </span>
-            </button>
-          </div>
+            {transfer.state.phase !== 'idle' && (
+              <div style={{ marginTop: '0.85rem' }}>
+                <TransferProgress state={transfer.state} compact />
+              </div>
+            )}
 
-          {formState.countdownOption !== 'disabled' && (
-            <div className="raffle-hint">{getCountdownPreviewMessage(formState)}</div>
-          )}
-
-          <div className="raffle-grid" style={{ marginTop: '1rem' }}>
-            <button
-              type="button"
-              className="upload-card"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={transfer.state.phase === 'working'}
-            >
-              <FileSpreadsheet size={20} />
-              <span>{transfer.state.phase === 'working' ? 'Importing...' : 'Import CSV'}</span>
-            </button>
-            <button type="button" className="upload-card" onClick={addParticipant}>
-              <Plus size={20} />
-              <span>Add row manually</span>
-            </button>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            style={{ display: 'none' }}
-            onChange={handleFileUpload}
-          />
-
-          {csvStatus && (
-            <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: 'var(--brand-primary-light)' }}>
-              {csvStatus}
-            </div>
-          )}
-
-          {transfer.state.phase !== 'idle' && (
-            <div style={{ marginTop: '0.85rem' }}>
-              <TransferProgress state={transfer.state} compact />
-            </div>
-          )}
-
-          <div style={{ marginTop: '1rem' }} ref={participantsRef}>
+            <div style={{ marginTop: '1rem' }} ref={participantsRef}>
             <label className="field-label">Paste names manually</label>
             <div className="bulk-row">
               <textarea
@@ -1435,39 +1526,40 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                 Add list
               </button>
             </div>
-          </div>
+            </div>
 
-          <div className="participants-box">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th className="field-label" style={{ textAlign: 'left', padding: '0.8rem 1rem' }}>Name</th>
-                  <th style={{ width: 68 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {formState.participants.map((participant) => (
-                  <tr key={participant.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      <input value={participant.name} onChange={(event) => updateParticipant(participant.id, event.target.value)} placeholder="Employee name" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
-                    </td>
-                    <td style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>
-                      <button type="button" className="btn btn-ghost" style={{ padding: '0.35rem', color: 'var(--status-claimed)' }} onClick={() => removeParticipant(participant.id)}>
-                        <Trash2 size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {formState.participants.length === 0 && (
+            <div className="participants-box">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
                   <tr>
-                    <td colSpan={2} style={{ padding: '1.6rem', textAlign: 'center', color: 'var(--text-muted)' }}>No participants loaded yet.</td>
+                    <th className="field-label" style={{ textAlign: 'left', padding: '0.8rem 1rem' }}>Name</th>
+                    <th style={{ width: 68 }} />
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {formState.participants.map((participant) => (
+                    <tr key={participant.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '0.65rem 1rem' }}>
+                        <input value={participant.name} onChange={(event) => updateParticipant(participant.id, event.target.value)} placeholder="Employee name" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>
+                        <button type="button" className="btn btn-ghost" style={{ padding: '0.35rem', color: 'var(--status-claimed)' }} onClick={() => removeParticipant(participant.id)}>
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {formState.participants.length === 0 && (
+                    <tr>
+                      <td colSpan={2} style={{ padding: '1.6rem', textAlign: 'center', color: 'var(--text-muted)' }}>No participants loaded yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="launch-row" style={{ marginTop: '1rem' }}>
+          <div id="raffle-publish-section" className="launch-row raffle-focus-target" style={{ marginTop: '1rem' }}>
             <div className="launch-actions">
               <div>
                 <div className="text-muted" style={{ fontSize: '0.8125rem' }}>
@@ -1642,6 +1734,8 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                                 setPreviewMode('draft');
                                 setActiveDraftId(draft.id);
                                 setFormState(draft.data);
+                                setLastSavedSignature(serializeRaffleFormState(draft.data));
+                                setActiveComposerSection('raffle-title-section');
                                 setDraftReady(true);
                               }}
                               style={{ borderColor: previewMode === 'draft' && activeDraftId === draft.id ? 'rgba(6,182,212,0.45)' : 'rgba(6,182,212,0.16)', paddingRight: '3.2rem' }}
@@ -1667,6 +1761,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
                                 setSavedDrafts(next);
                                 if (activeDraftId === draft.id) {
                                   setActiveDraftId(null);
+                                  setLastSavedSignature(serializeRaffleFormState(createEmptyRaffleFormState()));
                                   setPreviewMode('raffle');
                                 }
                               }}
@@ -1968,6 +2063,13 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
         .raffle-side-column { position: sticky; top: 1.5rem; }
         .raffle-stage-card { display: grid; gap: 1rem; min-height: min(88vh, 1120px); }
         .raffle-composer-card { overflow: visible; }
+        .raffle-sticky-bar { margin-bottom: 1rem; }
+        .raffle-sticky-summary { display: grid; gap: 0.2rem; }
+        .raffle-sticky-summary strong { color: white; font-size: 0.94rem; }
+        .raffle-sticky-summary span { color: var(--text-secondary); font-size: 0.78rem; }
+        .raffle-sticky-jump-nav { padding: 0.38rem 0.45rem; border-radius: 18px; background: rgba(255,255,255,0.03); }
+        .raffle-sticky-jump-nav button { padding: 0.48rem 0.75rem; font-size: 0.72rem; }
+        .raffle-focus-target { scroll-margin-top: 11rem; }
         .saved-drafts-card, .feed-header-row, .feed-actions, .launch-row, .stage-title-row { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; }
         .composer-mode-row { display: flex; justify-content: space-between; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
         .launch-actions, .launch-action-buttons { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
@@ -2074,7 +2176,7 @@ export function ModeratorRafflesClient({ storeItems }: ModeratorRafflesClientPro
         .raffle-delete-btn { position: absolute; top: 0.6rem; right: 0.6rem; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(239,68,68,0.22); background: rgba(239,68,68,0.08); color: #f87171; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
         .raffle-delete-btn:hover { background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.38); }
         @media (max-width: 1200px) { .raffle-layout { grid-template-columns: 1fr; } .raffle-side-column { position: static; } .raffle-stage-card, .feed-scroll-area { min-height: 0; max-height: none; } }
-        @media (max-width: 720px) { .raffle-grid, .bulk-row, .winner-form-grid, .stage-stats-grid, .scheduler-banner-grid, .countdown-control-row, .manual-prize-image-row { grid-template-columns: 1fr; } .launch-action-buttons { width: 100%; } .launch-action-buttons > button { flex: 1 1 100%; justify-content: center; } .prize-designer-header, .composer-mode-row { align-items: stretch; } }
+        @media (max-width: 720px) { .raffle-grid, .bulk-row, .winner-form-grid, .stage-stats-grid, .scheduler-banner-grid, .countdown-control-row, .manual-prize-image-row { grid-template-columns: 1fr; } .launch-action-buttons { width: 100%; } .launch-action-buttons > button { flex: 1 1 100%; justify-content: center; } .prize-designer-header, .composer-mode-row { align-items: stretch; } .raffle-focus-target { scroll-margin-top: 5rem; } }
       `}</style>
     </div>
   );

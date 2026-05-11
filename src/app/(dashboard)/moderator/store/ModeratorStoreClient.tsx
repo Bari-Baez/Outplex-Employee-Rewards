@@ -48,6 +48,8 @@ import { ModernSelect } from '@/components/ui/Select';
 import { MobileDataFrame } from '@/components/ui/MobileDataFrame';
 import { ModernDatePicker } from '@/components/ui/DatePicker';
 import { ModernTimePicker } from '@/components/ui/TimePicker';
+import { SplitWorkspace } from '@/components/ui/SplitWorkspace';
+import { StickyActionBar } from '@/components/ui/StickyActionBar';
 import { useAppAvailability } from '@/components/layout/AppAvailabilityProvider';
 import { readFileAsDataUrlWithProgress } from '@/lib/file-transfer';
 
@@ -316,6 +318,11 @@ export function ModeratorStoreClient({
 
   const lowStockItems = useMemo(
     () => items.filter((item) => isLowStockItem(item)),
+    [items],
+  );
+
+  const inventoryItems = useMemo(
+    () => items.filter((item) => !item.meta?.isDeleted),
     [items],
   );
 
@@ -591,6 +598,7 @@ export function ModeratorStoreClient({
   };
 
   const handleToggleActive = async (itemId: string, isActive: boolean) => {
+    setInventoryBusy(true);
     try {
       const response = await fetch(`/api/store/items/${itemId}`, {
         method: 'PATCH',
@@ -602,6 +610,8 @@ export function ModeratorStoreClient({
       updateItem(itemId, data.item);
     } catch (error) {
       openNotice('Unable to update visibility', error instanceof Error ? error.message : 'Unable to update item visibility.', 'danger');
+    } finally {
+      setInventoryBusy(false);
     }
   };
 
@@ -1511,27 +1521,81 @@ export function ModeratorStoreClient({
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 380px) minmax(0, 1fr)', gap: '1rem' }} className="inventory-columns">
-            <div className="card" style={{ display: 'grid', gap: '1rem' }}>
-              <h3 style={{ margin: 0 }}>New Item Builder</h3>
-              <div><label className="meta-label">Product name</label><input className="input" value={newItem.name} onChange={(event) => setNewItem({ ...newItem, name: event.target.value })} /></div>
-              <div><label className="meta-label">Description</label><textarea className="input" rows={4} value={newItem.description} onChange={(event) => setNewItem({ ...newItem, description: event.target.value })} /></div>
-              <div><label className="meta-label">Category</label><input className="input" list="store-categories" value={newItem.category} onChange={(event) => setNewItem({ ...newItem, category: event.target.value })} placeholder="Example: Drinks, Home, Digital" /></div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
-                <div><label className="meta-label">Points cost</label><input type="number" min="0" className="input" value={newItem.points_cost} onChange={(event) => setNewItem({ ...newItem, points_cost: Number(event.target.value) })} /></div>
-                <div><label className="meta-label">Stock (-1 = unlimited)</label><input type="number" className="input" value={newItem.stock} onChange={(event) => setNewItem({ ...newItem, stock: Number(event.target.value) })} /></div>
+          <SplitWorkspace
+            className="inventory-workspace"
+            primaryLabel="Nuevo producto"
+            secondaryLabel={`Inventario (${inventoryItems.length})`}
+            desktopColumns="minmax(320px, 420px) minmax(0, 1fr)"
+            panelMaxHeight="calc(100vh - 14rem)"
+            primaryPanelClassName="inventory-builder-panel"
+            secondaryPanelClassName="inventory-list-panel"
+            primary={(
+              <div className="inventory-builder-shell">
+                <div className="inventory-panel-heading">
+                  <div>
+                    <h3 style={{ margin: 0 }}>New Item Builder</h3>
+                    <p className="inventory-panel-copy">Build one item at a time without losing the list on the side.</p>
+                  </div>
+                </div>
+
+                <StickyActionBar
+                  topOffset="0"
+                  className="inventory-action-bar"
+                  summary={(
+                    <div className="inventory-draft-summary">
+                      <strong>{newItem.name.trim() || 'Draft item'}</strong>
+                      <span>
+                        {formatPoints(newItem.points_cost)} · {newItem.stock < 0 ? 'Unlimited stock' : `${newItem.stock} in stock`}
+                      </span>
+                    </div>
+                  )}
+                  actions={(
+                    <>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setNewItem(emptyItemForm())} disabled={inventoryBusy || isReadOnly}>
+                        Clear
+                      </button>
+                      <button className="btn btn-primary btn-sm" onClick={() => void handleCreateItem()} disabled={inventoryBusy || isReadOnly}>
+                        Add item
+                      </button>
+                    </>
+                  )}
+                  mobileActions={(
+                    <button className="btn btn-primary btn-sm" onClick={() => void handleCreateItem()} disabled={inventoryBusy || isReadOnly}>
+                      Add item
+                    </button>
+                  )}
+                />
+
+                <div className="inventory-builder-form">
+                  <div><label className="meta-label">Product name</label><input className="input" value={newItem.name} onChange={(event) => setNewItem({ ...newItem, name: event.target.value })} /></div>
+                  <div><label className="meta-label">Description</label><textarea className="input" rows={4} value={newItem.description} onChange={(event) => setNewItem({ ...newItem, description: event.target.value })} /></div>
+                  <div><label className="meta-label">Category</label><input className="input" list="store-categories" value={newItem.category} onChange={(event) => setNewItem({ ...newItem, category: event.target.value })} placeholder="Example: Drinks, Home, Digital" /></div>
+                  <div className="inventory-builder-inline">
+                    <div><label className="meta-label">Points cost</label><input type="number" min="0" className="input" value={newItem.points_cost} onChange={(event) => setNewItem({ ...newItem, points_cost: Number(event.target.value) })} /></div>
+                    <div><label className="meta-label">Stock (-1 = unlimited)</label><input type="number" className="input" value={newItem.stock} onChange={(event) => setNewItem({ ...newItem, stock: Number(event.target.value) })} /></div>
+                  </div>
+                  <div><label className="meta-label">Image URL</label><input className="input" value={newItem.image_url} onChange={(event) => setNewItem({ ...newItem, image_url: event.target.value })} placeholder="https://... or upload from device" /></div>
+                  <label className="file-input-row"><Upload size={16} /><input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importImageFile(file, (value) => setNewItem((current) => ({ ...current, image_url: value }))); event.currentTarget.value = ''; }} /></label>
+                  <div className="inventory-builder-preview preview-box">{newItem.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={proxifyMediaUrl(newItem.image_url)} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : <div className="preview-empty">Preview</div>}</div>
+                </div>
               </div>
-              <div><label className="meta-label">Image URL</label><input className="input" value={newItem.image_url} onChange={(event) => setNewItem({ ...newItem, image_url: event.target.value })} placeholder="https://... or upload from device" /></div>
-              <label className="file-input-row"><Upload size={16} /><input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importImageFile(file, (value) => setNewItem((current) => ({ ...current, image_url: value }))); event.currentTarget.value = ''; }} /></label>
-              <div className="preview-box">{newItem.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={proxifyMediaUrl(newItem.image_url)} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : <div className="preview-empty">Preview</div>}</div>
-              <button className="btn btn-primary" onClick={() => void handleCreateItem()} disabled={inventoryBusy || isReadOnly}>Add Item to Store</button>
-            </div>
-            <div className="card" style={{ display: 'grid', gap: '1rem' }}>
-              <h3 style={{ margin: 0 }}>Current items</h3>
-              {items.filter(item => !item.meta?.isDeleted).map((item) => {
+            )}
+            secondary={(
+              <div className="inventory-list-shell">
+                <div className="inventory-panel-heading">
+                  <div>
+                    <h3 style={{ margin: 0 }}>Current items</h3>
+                    <p className="inventory-panel-copy">{inventoryItems.length} item{inventoryItems.length === 1 ? '' : 's'} currently available for moderation.</p>
+                  </div>
+                </div>
+
+                <div className="inventory-list-scroll">
+                  {inventoryItems.length === 0 ? (
+                    <div className="preset-empty">No items have been created yet. Start with the builder on the left.</div>
+                  ) : inventoryItems.map((item) => {
                 const isEditing = editingItemId === item.id && editingItem;
                 const summary = reviewSummary[item.id];
                 return (
@@ -1607,8 +1671,10 @@ export function ModeratorStoreClient({
                   </div>
                 );
               })}
-            </div>
-          </div>
+                </div>
+              </div>
+            )}
+          />
           <datalist id="store-categories">{categories.map((category) => <option key={category} value={category} />)}</datalist>
         </div>
       )}
@@ -2141,6 +2207,39 @@ export function ModeratorStoreClient({
         .file-input-row input { width: 100%; border: none; background: transparent; color: inherit; font: inherit; }
         .preview-box { border: 1px dashed var(--border-default); border-radius: 18px; background: var(--bg-base); overflow: hidden; min-height: 180px; }
         .preview-empty { width: 100%; height: 100%; min-height: 180px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+        .inventory-workspace { align-items: start; }
+        .inventory-builder-panel,
+        .inventory-list-panel { padding: 1.25rem; }
+        .inventory-builder-panel {
+          position: sticky;
+          top: 0.75rem;
+          align-self: start;
+          overflow: visible !important;
+          max-height: calc(100vh - 7.75rem) !important;
+        }
+        .inventory-list-panel {
+          align-self: start;
+          overflow: visible !important;
+        }
+        .inventory-builder-shell,
+        .inventory-list-shell,
+        .inventory-list-scroll,
+        .inventory-builder-form { display: grid; gap: 1rem; align-content: start; }
+        .inventory-builder-shell {
+          min-height: 0;
+          max-height: calc(100vh - 10.5rem);
+          overflow-y: auto;
+          padding-right: 0.2rem;
+        }
+        .inventory-panel-heading { display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+        .inventory-panel-copy { margin: 0.35rem 0 0; color: var(--text-muted); font-size: 0.82rem; line-height: 1.45; }
+        .inventory-list-scroll { max-height: calc(100vh - 12rem); overflow-y: auto; padding-right: 0.2rem; }
+        .inventory-draft-summary { display: grid; gap: 0.2rem; }
+        .inventory-draft-summary strong { color: white; font-size: 0.94rem; }
+        .inventory-draft-summary span { color: var(--text-secondary); font-size: 0.78rem; }
+        .inventory-action-bar { margin-bottom: 0.25rem; }
+        .inventory-builder-inline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+        .inventory-builder-preview { min-height: 220px; }
         .inventory-item-shell { border: 1px solid var(--border-subtle); border-radius: 16px; padding: 1rem; display: grid; gap: 1rem; background: var(--bg-card); }
         .inventory-item-hidden { opacity: 0.6; filter: grayscale(0.85); }
         .inventory-visibility-stack { display: grid; justify-items: end; gap: 0.55rem; }
@@ -2177,7 +2276,9 @@ export function ModeratorStoreClient({
         .bulk-item-stock { font-size: 0.78rem; color: var(--brand-primary-light); font-weight: 700; white-space: nowrap; }
         .analytics-charts-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
         @media (max-width: 900px) { .analytics-charts-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 1279px) { .inventory-builder-panel { position: static; max-height: none !important; overflow: visible !important; } .inventory-builder-shell { max-height: none; overflow: visible; padding-right: 0; } }
         @media (max-width: 980px) { .inventory-columns { grid-template-columns: 1fr !important; } }
+        @media (max-width: 720px) { .inventory-builder-inline { grid-template-columns: 1fr; } }
         @media (max-width: 720px) { .line-item-row, .low-stock-item-card { flex-direction: column; align-items: flex-start; } .line-item-stock { text-align: left; } }
       `}</style>
     </div>

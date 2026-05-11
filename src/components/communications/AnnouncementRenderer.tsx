@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AnnouncementBlock, CompanyAnnouncement } from '@/types/database';
 import { ChevronLeft, ChevronRight, Download, FileText, GalleryHorizontal, Search, X, ZoomIn } from 'lucide-react';
 import { proxifyMediaUrl } from '@/lib/media-proxy';
@@ -48,13 +48,85 @@ function PdfPageSlider({
 }) {
   const [index, setIndex] = useState(0);
   const [zoomedSrc, setZoomedSrc] = useState<string | null>(null);
+  const [generatedPreviewImages, setGeneratedPreviewImages] = useState<string[]>([]);
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    previewImages.length > 0 ? 'ready' : 'idle',
+  );
 
-  const activeImage = previewImages[index];
-  const total = previewImages.length;
+  const resolvedFileUrl = useMemo(() => proxifyMediaUrl(fileUrl), [fileUrl]);
+  const effectivePreviewImages = generatedPreviewImages.length > 0 ? generatedPreviewImages : previewImages;
+  const activeImage = effectivePreviewImages[index];
+  const total = effectivePreviewImages.length;
   const pageLabel = `${fileName || 'PDF'} · Page ${index + 1} of ${total}`;
 
   const goLeft = () => setIndex((i) => (i === 0 ? total - 1 : i - 1));
   const goRight = () => setIndex((i) => (i === total - 1 ? 0 : i + 1));
+
+  useEffect(() => {
+    if (previewImages.length > 0) {
+      setGeneratedPreviewImages([]);
+      setPreviewStatus('ready');
+      return;
+    }
+
+    let cancelled = false;
+
+    const buildFallbackPreview = async () => {
+      setPreviewStatus('loading');
+      try {
+        const response = await fetch(resolvedFileUrl, { cache: 'force-cache' });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch PDF (${response.status})`);
+        }
+
+        const pdfjs = await import('pdfjs-dist');
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+
+        const pdf = await pdfjs.getDocument({
+          data: await response.arrayBuffer(),
+        }).promise;
+
+        const images: string[] = [];
+        for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex += 1) {
+          const page = await pdf.getPage(pageIndex);
+          const viewport = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (!context) {
+            throw new Error('Unable to render preview.');
+          }
+
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          await page.render({ canvas, canvasContext: context, viewport }).promise;
+          images.push(canvas.toDataURL('image/jpeg', 0.9));
+        }
+
+        if (!cancelled) {
+          setGeneratedPreviewImages(images);
+          setPreviewStatus(images.length > 0 ? 'ready' : 'error');
+        }
+      } catch {
+        if (!cancelled) {
+          setGeneratedPreviewImages([]);
+          setPreviewStatus('error');
+        }
+      }
+    };
+
+    void buildFallbackPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewImages.length, resolvedFileUrl]);
+
+  useEffect(() => {
+    if (index < total || total === 0) return;
+    setIndex(0);
+  }, [index, total]);
 
   return (
     <section className="announcement-pdf-block">
@@ -65,7 +137,7 @@ function PdfPageSlider({
         </div>
         <a
           className="btn btn-ghost btn-sm pdf-download-btn"
-          href={fileUrl}
+          href={resolvedFileUrl}
           download={fileName || 'document.pdf'}
           aria-label={`Download ${fileName || 'PDF'}`}
         >
@@ -77,13 +149,17 @@ function PdfPageSlider({
       {total === 0 ? (
         <div className="announcement-media-placeholder">
           <FileText size={22} />
-          <span>PDF uploaded — preview images are still processing. Re-upload to generate them.</span>
+          <span>
+            {previewStatus === 'loading'
+              ? 'Generating the PDF preview now. The document is still available to open or download.'
+              : 'The preview could not be generated, but the PDF is still available to open or download.'}
+          </span>
         </div>
       ) : (
         <>
           <div className="pdf-slider-frame">
             <img
-              src={activeImage}
+              src={proxifyMediaUrl(activeImage)}
               alt={pageLabel}
               className="pdf-slider-image"
             />
@@ -92,7 +168,7 @@ function PdfPageSlider({
             <button
               type="button"
               className="pdf-slider-zoom-btn"
-              onClick={() => setZoomedSrc(activeImage)}
+              onClick={() => setZoomedSrc(proxifyMediaUrl(activeImage))}
               aria-label={`Zoom page ${index + 1}`}
             >
               <ZoomIn size={16} />
@@ -125,7 +201,7 @@ function PdfPageSlider({
             <span className="pdf-slider-label">{pageLabel}</span>
             {total > 1 ? (
               <div className="announcement-slider-dots">
-                {previewImages.map((_, dotIndex) => (
+                {effectivePreviewImages.map((_, dotIndex) => (
                   <button
                     key={dotIndex}
                     type="button"

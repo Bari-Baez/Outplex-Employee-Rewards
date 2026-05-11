@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { NextResponse } from 'next/server';
+import { revalidateEmployeeStoreViews } from '@/lib/store-cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 type ProductStoreOwnerRow = { owner_id?: string | null };
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    revalidatePath('/store');
+    revalidateEmployeeStoreViews();
     revalidatePath('/orders');
 
     return NextResponse.json({ review: data });

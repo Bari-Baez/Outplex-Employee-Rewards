@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Clipboard, Clock3, Heart, Info, MessageSquare, Phone, ShoppingBag, Sparkles, Star, Store, Zap, Calendar } from 'lucide-react';
 import type { User, EmployeeStoreProduct, EmployeeStoreProductReview, StoreItem, StoreThemeConfig, StoreReview } from '@/types/database';
 import { useAppStore } from '@/lib/store';
@@ -168,9 +169,16 @@ function isStoreCurrentlyOpen(store: EmployeeStorePublic) {
   return getStoreScheduleStatus(store).isOpen;
 }
 
+function StoreModalPortal({ children }: { children: ReactNode }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(children, document.body);
+}
+
 export function StoreClient({ items, profile, theme, employeeStores, buyerContactPrefs }: StoreClientProps) {
-  const { addToCart, cart, setCartOpen, addToEmpCart, empCart, setEmpCartOpen, setBuyerWhatsappOptIn } = useAppStore();
-  const { data: storeClientData, mutate: mutateStoreClientData } = useStoreClientData(items.length > 0);
+  const { addToCart, cart, setCartOpen, addToEmpCart, empCart, setEmpCartOpen, setBuyerWhatsappOptIn, syncCartItems } = useAppStore();
+  const { data: storeClientData, mutate: mutateStoreClientData } = useStoreClientData(
+    items.some((item) => item.is_active && !item.meta?.isDeleted),
+  );
 
   useEffect(() => {
     setBuyerWhatsappOptIn(buyerContactPrefs?.whatsapp_opt_in ?? null);
@@ -189,7 +197,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
   const [isRating, setIsRating] = useState(false);
   const [ratingError, setRatingError] = useState<string | null>(null);
   
-    const [selectedEmpItem, setSelectedEmpItem] = useState<EmployeeStoreProductPublic | null>(null);
+  const [selectedEmpItem, setSelectedEmpItem] = useState<EmployeeStoreProductPublic | null>(null);
   const [scheduleModalStore, setScheduleModalStore] = useState<EmployeeStorePublic | null>(null);
 
   // Review state for employee products: map of productId -> avg, count, user's rating
@@ -248,6 +256,39 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
     },
     [storeClientData?.summary],
   );
+
+  const hasStoreModalOpen = Boolean(
+    selectedItem ||
+    selectedEmpItem ||
+    scheduleModalStore ||
+    ordersCreated.length > 0,
+  );
+
+  useEffect(() => {
+    if (!hasStoreModalOpen || typeof document === 'undefined') return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [hasStoreModalOpen]);
+
+  useEffect(() => {
+    if (!hasStoreModalOpen || typeof window === 'undefined') return undefined;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (selectedEmpItem) setSelectedEmpItem(null);
+      else if (selectedItem) setSelectedItem(null);
+      else if (scheduleModalStore) setScheduleModalStore(null);
+      else if (ordersCreated.length > 0) setOrdersCreated([]);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [hasStoreModalOpen, ordersCreated.length, scheduleModalStore, selectedEmpItem, selectedItem]);
 
   const toggleFavorite = useCallback(async (itemId: string) => {
     try {
@@ -355,11 +396,20 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
     }, {});
   }, [cart]);
 
-  const availableItems = items.filter((item) => item.stock !== 0).length;
+  const visibleStoreItems = useMemo(
+    () => items.filter((item) => item.is_active && !item.meta?.isDeleted),
+    [items],
+  );
+
+  const availableItems = visibleStoreItems.filter((item) => item.stock !== 0).length;
+  const visibleFavoriteItems = useMemo(
+    () => visibleStoreItems.filter((item) => favoriteIds.has(item.id)),
+    [favoriteIds, visibleStoreItems],
+  );
   const groupedItems = useMemo(() => {
     const groups = new Map<string, StoreItem[]>();
 
-    for (const item of items) {
+    for (const item of visibleStoreItems) {
       const category = item.meta?.category?.trim() || 'Featured Rewards';
       const existing = groups.get(category) ?? [];
       existing.push(item);
@@ -370,7 +420,11 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
       category,
       items: [...categoryItems].sort((left, right) => left.points_cost - right.points_cost),
     }));
-  }, [items]);
+  }, [visibleStoreItems]);
+
+  useEffect(() => {
+    syncCartItems(visibleStoreItems);
+  }, [syncCartItems, visibleStoreItems]);
 
   const handleAddToCart = (item: StoreItem) => {
     addToCart(item);
@@ -579,7 +633,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       </section>
 
-      {storeMode === 'nyt' && (items.length === 0 ? (
+      {storeMode === 'nyt' && (visibleStoreItems.length === 0 ? (
         <div className="card" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
           <ShoppingBag size={48} style={{ color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
           <h2 style={{ marginBottom: '0.5rem' }}>The store is being refreshed</h2>
@@ -589,19 +643,17 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         </div>
       ) : (
         <div className="store-sections animate-fade-in delay-100">
-          {favoriteIds.size > 0 && (
+          {visibleFavoriteItems.length > 0 && (
             <section className="category-section">
               <div className="category-header">
                 <div>
                   <div className="category-kicker">Saved</div>
                   <h2 className="category-title">♥ Mis Favoritos</h2>
                 </div>
-                <div className="category-count">{favoriteIds.size} item{favoriteIds.size === 1 ? '' : 's'}</div>
+                <div className="category-count">{visibleFavoriteItems.length} item{visibleFavoriteItems.length === 1 ? '' : 's'}</div>
               </div>
               <div className="store-grid">
-                {items
-                  .filter((item) => favoriteIds.has(item.id))
-                  .map((item) => {
+                {visibleFavoriteItems.map((item) => {
                     const outOfStock = item.stock === 0;
                     const inCart = cartQuantities[item.id] ?? 0;
                     const insufficientPoints = profile.points < item.points_cost;
@@ -842,17 +894,31 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                   const isOpen = isStoreCurrentlyOpen(store);
                   const isScheduled = store.status === 'scheduled';
                   const statusInfo = getStoreScheduleStatus(store);
+                  const hasNewBadge = isEmployeeStoreNew(store);
                   return (
                     <button
                       key={store.id}
                       type="button"
-                      className={`emp-store-card ${!isOpen ? 'emp-store-card-closed' : ''} ${isScheduled ? 'emp-store-card-scheduled' : ''}`}
+                      className={`emp-store-card ${!isOpen ? 'emp-store-card-closed' : ''} ${isScheduled ? 'emp-store-card-scheduled' : ''} ${hasNewBadge ? 'emp-store-card-has-new' : ''}`}
                       onClick={() => setActiveStore(store)}
                       style={{
                         ...(store.accent_color ? { '--accent': store.accent_color } as React.CSSProperties : {}),
                         position: 'relative'
                       }}
                     >
+                      <div className={`emp-store-badge-row ${!isOpen ? 'emp-store-badge-row-closed' : ''}`}>
+                        {hasNewBadge && (
+                          <div className="emp-store-new-badge">
+                            <Star size={12} fill="black" /> Lo Nuevo
+                          </div>
+                        )}
+                        {!isOpen && (
+                          <div className={`emp-store-closed-overlay ${hasNewBadge ? 'emp-store-closed-overlay-with-new' : ''}`}>
+                            <Clock3 size={14} />
+                            {statusInfo.statusText}
+                          </div>
+                        )}
+                      </div>
                       {isScheduled && isOpen && (
                         <div className="emp-store-scheduled-badge" style={statusInfo.isClosingSoon ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : {}}>
                           <Clock3 size={12} />
@@ -867,17 +933,6 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                           >
                             <Calendar size={12} /> Ver Horarios
                           </span>
-                        </div>
-                      )}
-                      {isEmployeeStoreNew(store) && (
-                        <div className="emp-store-new-badge">
-                          <Star size={12} fill="black" /> Lo Nuevo
-                        </div>
-                      )}
-                      {!isOpen && (
-                        <div className="emp-store-closed-overlay">
-                          <Clock3 size={14} />
-                          {statusInfo.statusText}
                         </div>
                       )}
                       <div
@@ -1038,8 +1093,9 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
 
       {/* â”€â”€ Employee Product Quick View Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {selectedEmpItem && (
-        <div className="modal-overlay" onClick={() => setSelectedEmpItem(null)}>
-          <div className="store-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <StoreModalPortal>
+          <div className="modal-overlay" onClick={() => setSelectedEmpItem(null)} role="dialog" aria-modal="true" aria-label={`Detalles de ${selectedEmpItem.name}`}>
+            <div className="store-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="store-modal-image-container">
               {selectedEmpItem.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -1105,14 +1161,16 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                 </button>
               </div>
             </div>
+            </div>
           </div>
-        </div>
+        </StoreModalPortal>
       )}
 
       {/* â”€â”€ Order Created Popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {ordersCreated.length > 0 && (
-        <div className="modal-overlay" onClick={() => setOrdersCreated([])}>
-          <div className="store-modal animate-fade-in" style={{ maxWidth: 540, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
+        <StoreModalPortal>
+          <div className="modal-overlay" onClick={() => setOrdersCreated([])} role="dialog" aria-modal="true" aria-label="Órdenes creadas">
+            <div className="store-modal animate-fade-in" style={{ maxWidth: 540, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
             <div className="store-modal-copy" style={{ padding: '0.5rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: '50%', background: activeStore?.accent_color ? `linear-gradient(135deg, ${activeStore.accent_color}dd, ${activeStore.accent_color})` : 'linear-gradient(135deg,#059669,#10b981)', marginBottom: '1rem' }}>
@@ -1172,14 +1230,16 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
               <button className="btn btn-ghost" style={{ width: '100%', marginTop: '0.25rem' }} onClick={() => setOrdersCreated([])}>
                 Cerrar
               </button>
+              </div>
             </div>
           </div>
-        </div>
+        </StoreModalPortal>
       )}
 
       {selectedItem && (
-        <div className="modal-overlay" onClick={() => setSelectedItem(null)}>
-          <div className="store-modal animate-fade-in" onClick={(event) => event.stopPropagation()}>
+        <StoreModalPortal>
+          <div className="modal-overlay" onClick={() => setSelectedItem(null)} role="dialog" aria-modal="true" aria-label={`Reward details for ${selectedItem.name}`}>
+            <div className="store-modal animate-fade-in" onClick={(event) => event.stopPropagation()}>
             <div className="store-modal-media">
               {selectedItem.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -1292,15 +1352,17 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
                   {selectedItem.stock === 0 ? 'Unavailable' : 'Add to Cart'}
                 </button>
               </div>
+              </div>
             </div>
           </div>
-        </div>
+        </StoreModalPortal>
       )}
 
       {/* ── Schedule Modal ─────────────────────────────────── */}
       {scheduleModalStore && (
-        <div className="modal-overlay" onClick={() => setScheduleModalStore(null)}>
-          <div className="store-modal animate-fade-in" style={{ maxWidth: 420, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
+        <StoreModalPortal>
+          <div className="modal-overlay" onClick={() => setScheduleModalStore(null)} role="dialog" aria-modal="true" aria-label={`Horario de ${scheduleModalStore.name}`}>
+            <div className="store-modal animate-fade-in" style={{ maxWidth: 420, gridTemplateColumns: '1fr' }} onClick={(e) => e.stopPropagation()}>
             <div className="store-modal-copy" style={{ padding: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
                 <div style={{ width: 40, height: 40, borderRadius: '50%', background: scheduleModalStore.accent_color ?? '#7c6cff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1350,8 +1412,9 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
             <div className="store-modal-actions">
               <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setScheduleModalStore(null)}>Cerrar</button>
             </div>
+            </div>
           </div>
-        </div>
+        </StoreModalPortal>
       )}
 
       <style>{`
@@ -1701,6 +1764,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
 
         .store-modal {
           width: min(920px, 100%);
+          max-height: calc(100vh - 3rem);
           display: grid;
           grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
           gap: 1.5rem;
@@ -1709,6 +1773,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           background: rgba(15, 19, 35, 0.98);
           border: 1px solid var(--border-default);
           box-shadow: var(--shadow-card);
+          overflow: auto;
         }
 
         .store-modal-media {
@@ -1815,6 +1880,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           padding: 1.5rem;
           background: rgba(7, 9, 16, 0.72);
           backdrop-filter: blur(10px);
+          overflow-y: auto;
         }
 
         @media (max-width: 900px) {
@@ -1952,10 +2018,23 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           overflow: hidden;
         }
 
-        .emp-store-new-badge {
+        .emp-store-badge-row {
           position: absolute;
           top: 12px;
           left: 12px;
+          right: 12px;
+          z-index: 20;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+          pointer-events: none;
+        }
+        .emp-store-badge-row-closed {
+          justify-content: flex-start;
+        }
+        .emp-store-new-badge {
           background: linear-gradient(90deg, rgba(245, 158, 11, 0.98), rgba(251, 191, 36, 0.98));
           color: black;
           padding: 0.24rem 0.7rem;
@@ -1971,6 +2050,7 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           letter-spacing: 0.06em;
           border: 1px solid rgba(255,255,255,0.22);
           backdrop-filter: blur(6px);
+          pointer-events: auto;
         }
 
         .emp-store-logo {
@@ -2075,11 +2155,8 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
         }
 
         .emp-store-closed-overlay {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          max-width: calc(100% - 110px);
-          z-index: 20;
+          margin-left: auto;
+          max-width: min(100%, 320px);
           display: flex;
           align-items: center;
           gap: 0.4rem;
@@ -2096,6 +2173,25 @@ export function StoreClient({ items, profile, theme, employeeStores, buyerContac
           overflow: hidden;
           text-overflow: ellipsis;
           justify-content: center;
+          pointer-events: auto;
+        }
+        .emp-store-closed-overlay-with-new {
+          flex-basis: 100%;
+          margin-top: 0.35rem;
+          margin-left: 0;
+          max-width: 100%;
+        }
+        @media (max-width: 640px) {
+          .emp-store-badge-row {
+            left: 10px;
+            right: 10px;
+            top: 10px;
+          }
+          .emp-store-closed-overlay {
+            margin-left: 0;
+            width: 100%;
+            max-width: 100%;
+          }
         }
       `}</style>
     </div>
