@@ -61,9 +61,12 @@ interface RoleRequest {
 type TabKey = 'directory' | 'role-requests' | 'points' | 'activity';
 
 interface CsvImportRow {
-  identifier: string;
+  displayIdentifier: string;
   rawPoints: number;
   matchedEmployee: EmployeeDirectoryUser | null;
+  matchMethod: 'email' | 'id' | 'name' | 'manual' | null;
+  conflicts: EmployeeDirectoryUser[];
+  status: 'ready' | 'conflict' | 'unmatched' | 'invalid_points';
 }
 
 function formatDelta(points: number) {
@@ -662,49 +665,158 @@ export function UsersManagerClient({
     setCsvPreview(null);
 
     transfer.start(file.name);
-    transfer.setMessage('Reading CSV...');
+    transfer.setMessage('Reading file...');
 
     try {
-      const text = await readFileAsTextWithProgress(file, { onProgress: transfer.setProgress });
-      transfer.setMessage('Parsing CSV...');
+      let resultsData: Record<string, string>[] = [];
+      let headers: string[] = [];
 
-      const results = Papa.parse<Record<string, string>>(text, {
-        header: true,
-        skipEmptyLines: true,
-      });
+      if (file.name.match(/\.xlsx?$/i)) {
+        transfer.setMessage('Parsing Excel...');
+        const ExcelJS = await import('exceljs');
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        
+        if (worksheet) {
+          const firstRow = worksheet.getRow(1);
+          firstRow.eachCell((cell, colNumber) => {
+            headers[colNumber - 1] = String(cell.value ?? '').trim();
+          });
+          
+          worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            const rowData: Record<string, string> = {};
+            row.eachCell((cell, colNumber) => {
+              const header = headers[colNumber - 1];
+              if (header) {
+                rowData[header] = String(cell.text ?? cell.value ?? '');
+              }
+            });
+            resultsData.push(rowData);
+          });
+        }
+      } else {
+        const text = await readFileAsTextWithProgress(file, { onProgress: transfer.setProgress });
+        transfer.setMessage('Parsing CSV...');
 
-      const headers = results.meta.fields ?? [];
+        const results = Papa.parse<Record<string, string>>(text, {
+          header: true,
+          skipEmptyLines: true,
+        });
+
+        headers = results.meta.fields ?? [];
+        resultsData = results.data ?? [];
+      }
       if (headers.length < 2) {
-        setCsvError('CSV must have at least 2 columns: an identifier (name, email, or ID) and a points value.');
+        setCsvError('File must have at least 2 columns.');
         transfer.fail('Failed');
         return;
       }
 
-      const identifierCol = headers.find((h) => /name|email|employee|id/i.test(h)) ?? headers[0];
-      const pointsCol =
-        headers.find((h) => /point|pts|balance|score/i.test(h) && h !== identifierCol) ??
-        headers.find((h) => h !== identifierCol) ??
-        headers[1];
+      const emailCol = headers.find(h => /correo|email/i.test(h));
+      const idCol = headers.find(h => /\b(id|employee id|id empleado)\b/i.test(h));
+      const nameCol = headers.find(h => /nombre|name|empleado|employee/i.test(h)) ?? (!emailCol && !idCol ? headers[0] : undefined);
+      const pointsCol = headers.find(h => /punto|point|pts|score|balance/i.test(h)) ?? headers.find(h => h !== emailCol && h !== idCol && h !== nameCol);
 
-      const rows: CsvImportRow[] = (results.data ?? [])
-        .map((row) => {
-          const identifier = String(row[identifierCol] ?? '').trim();
-          const rawPoints = Math.max(0, Math.round(Number(row[pointsCol] ?? '')));
-          if (!identifier || !Number.isFinite(rawPoints)) return null;
+      if (!pointsCol) {
+        setCsvError('No valid points column found. Ensure there is a column named Puntos, Points, etc.');
+        transfer.fail('Failed');
+        return;
+      }
 
-          const lowerIdentifier = identifier.toLowerCase();
-          const matchedEmployee =
-            employees.find((e) => e.email?.toLowerCase() === lowerIdentifier) ??
-            employees.find((e) => e.employee_id?.toLowerCase() === lowerIdentifier) ??
-            employees.find((e) => e.name.toLowerCase().includes(lowerIdentifier)) ??
-            null;
+      const rows: CsvImportRow[] = resultsData.map((row) => {
+        const rawPointsStr = String(row[pointsCol] ?? '').replace(/,/g, '').trim().toLowerCase();
+        
+        let rawPoints = 0;
+        if (rawPointsStr === 'na' || rawPointsStr === 'n/a') {
+          rawPoints = 0;
+        } else {
+          rawPoints = Math.round(Number(rawPointsStr));
+        }
+        
+        let matchedEmployee: EmployeeDirectoryUser | null = null;
+        let matchMethod: 'email' | 'id' | 'name' | 'manual' | null = null;
+        let conflicts: EmployeeDirectoryUser[] = [];
+        let status: CsvImportRow['status'] = 'unmatched';
+        
+        const rowEmail = emailCol ? String(row[emailCol] ?? '').trim().toLowerCase() : '';
+        const rowId = idCol ? String(row[idCol] ?? '').trim().toLowerCase() : '';
+        const rowName = nameCol ? String(row[nameCol] ?? '').trim().toLowerCase() : '';
+        
+        const displayIdentifier = rowName || rowEmail || rowId || 'Unknown';
 
-          return { identifier, rawPoints, matchedEmployee };
-        })
-        .filter((r): r is CsvImportRow => r !== null);
+        if (Number.isNaN(rawPoints) || rawPoints < 0 || rawPointsStr === '') {
+           return {
+             displayIdentifier,
+             rawPoints: 0,
+             matchedEmployee: null,
+             matchMethod: null,
+             conflicts: [],
+             status: 'invalid_points'
+           };
+        }
+
+        if (rowEmail) {
+          const byEmail = employees.find(e => e.email?.toLowerCase() === rowEmail);
+          if (byEmail) {
+            matchedEmployee = byEmail;
+            matchMethod = 'email';
+            status = 'ready';
+          }
+        }
+
+        if (!matchedEmployee && rowId) {
+          const byId = employees.find(e => e.employee_id?.toLowerCase() === rowId);
+          if (byId) {
+            matchedEmployee = byId;
+            matchMethod = 'id';
+            status = 'ready';
+          }
+        }
+
+        if (!matchedEmployee && rowName) {
+          const qWords = rowName.split(/[\s,.-]+/).filter(p => p.length > 2);
+          const scored = employees.map(e => {
+            const tWords = e.name.toLowerCase().split(/[\s,.-]+/).filter(p => p.length > 2);
+            let matches = 0;
+            if (qWords.length > 0 && tWords.length > 0) {
+              for (const qw of qWords) {
+                if (tWords.some(tw => tw.includes(qw) || qw.includes(tw))) matches++;
+              }
+              const score = matches / Math.max(qWords.length, tWords.length);
+              return { emp: e, score: score + (e.name.toLowerCase() === rowName ? 1 : 0) };
+            }
+            return { emp: e, score: e.name.toLowerCase() === rowName ? 1 : 0 };
+          }).filter(x => x.score >= 0.5).sort((a, b) => b.score - a.score);
+
+          if (scored.length > 0) {
+            const topScore = scored[0].score;
+            const topScorers = scored.filter(x => x.score === topScore);
+            if (topScorers.length === 1) {
+              matchedEmployee = topScorers[0].emp;
+              matchMethod = 'name';
+              status = 'ready';
+            } else {
+              conflicts = topScorers.map(x => x.emp);
+              status = 'conflict';
+            }
+          }
+        }
+
+        return {
+          displayIdentifier,
+          rawPoints,
+          matchedEmployee,
+          matchMethod,
+          conflicts,
+          status
+        };
+      });
 
       if (rows.length === 0) {
-        setCsvError('No valid rows found. Make sure the file has an identifier column and a numeric points column.');
+        setCsvError('No valid rows found in the file.');
         transfer.fail('Failed');
         return;
       }
@@ -725,7 +837,7 @@ export function UsersManagerClient({
     if (!csvPreview) return;
 
     const updates = csvPreview
-      .filter((r) => r.matchedEmployee !== null)
+      .filter((r) => r.status === 'ready' && r.matchedEmployee !== null)
       .map((r) => ({
         userId: r.matchedEmployee!.id,
         points: r.rawPoints,
@@ -1238,12 +1350,12 @@ export function UsersManagerClient({
                 style={{ gap: '0.5rem', padding: '0.6rem 1rem' }}
               >
                 <Upload size={16} />
-                {transfer.state.phase === 'working' ? 'Importing...' : 'Import CSV'}
+                {transfer.state.phase === 'working' ? 'Importing...' : 'Import CSV / Excel'}
               </button>
               <input
                 ref={csvInputRef}
                 type="file"
-                accept=".csv"
+                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1278,10 +1390,11 @@ export function UsersManagerClient({
             <div className="csv-import-preview">
               <div className="csv-import-preview-header">
                 <div>
-                  <strong>CSV Import Preview</strong>
+                  <strong>Import Preview</strong>
                   <span className="text-muted" style={{ marginLeft: '0.75rem', fontSize: '0.85rem' }}>
-                    {csvPreview.filter((r) => r.matchedEmployee).length} matched ·{' '}
-                    {csvPreview.filter((r) => !r.matchedEmployee).length} unmatched (will be skipped)
+                    {csvPreview.filter((r) => r.status === 'ready').length} ready ·{' '}
+                    {csvPreview.filter((r) => r.status === 'conflict').length} conflicts ·{' '}
+                    {csvPreview.filter((r) => r.status === 'unmatched' || r.status === 'invalid_points').length} skipped
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1298,10 +1411,10 @@ export function UsersManagerClient({
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={() => void applyCsvImport()}
-                    disabled={applyingCsv || csvPreview.filter((r) => r.matchedEmployee).length === 0}
+                    disabled={applyingCsv || csvPreview.filter((r) => r.status === 'ready').length === 0}
                   >
                     <Save size={14} />
-                    {applyingCsv ? 'Applying...' : `Apply ${csvPreview.filter((r) => r.matchedEmployee).length} change${csvPreview.filter((r) => r.matchedEmployee).length === 1 ? '' : 's'}`}
+                    {applyingCsv ? 'Applying...' : `Apply ${csvPreview.filter((r) => r.status === 'ready').length} change${csvPreview.filter((r) => r.status === 'ready').length === 1 ? '' : 's'}`}
                   </button>
                 </div>
               </div>
@@ -1310,10 +1423,10 @@ export function UsersManagerClient({
                   <table className="data-table users-table">
                   <thead>
                     <tr>
-                      <th>Employee</th>
-                      <th>Role</th>
+                      <th>Status / Employee</th>
+                      <th>Match By</th>
                       <th>Current Points</th>
-                      <th>CSV Points</th>
+                      <th>Import Points</th>
                       <th>Change</th>
                     </tr>
                   </thead>
@@ -1321,34 +1434,73 @@ export function UsersManagerClient({
                     {csvPreview.map((row, index) => {
                       const emp = row.matchedEmployee;
                       const delta = emp ? row.rawPoints - emp.points : 0;
+                      
+                      let statusBadge = null;
+                      if (row.status === 'ready') statusBadge = <span className="badge badge-success" style={{ marginBottom: 4 }}><ShieldCheck size={12} /> Ready</span>;
+                      else if (row.status === 'conflict') statusBadge = <span className="badge badge-warning" style={{ marginBottom: 4 }}><AlertTriangle size={12} /> Conflict ({row.conflicts.length} matches)</span>;
+                      else if (row.status === 'invalid_points') statusBadge = <span className="badge badge-warning" style={{ marginBottom: 4, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}><AlertTriangle size={12} /> Invalid Points</span>;
+                      else statusBadge = <span className="badge badge-warning" style={{ marginBottom: 4 }}><AlertTriangle size={12} /> Not Found</span>;
+
                       return (
-                        <tr key={index} className={!emp ? 'csv-row-unmatched' : ''}>
+                        <tr key={index} className={row.status !== 'ready' ? 'csv-row-unmatched' : ''} style={{ opacity: row.status === 'ready' ? 1 : 0.85 }}>
                           <td>
+                            {statusBadge}
                             {emp ? (
-                              <div className="users-employee-cell">
+                              <div className="users-employee-cell" style={{ marginTop: '0.25rem' }}>
                                 <strong>{emp.name}</strong>
                                 <span>{emp.employee_id || 'No ID'} · {emp.email || 'No email'}</span>
                               </div>
-                            ) : (
-                              <div className="users-employee-cell">
-                                <span className="csv-unmatched-label">
-                                  <AlertTriangle size={13} /> {row.identifier}
+                            ) : row.status === 'conflict' ? (
+                              <div className="users-employee-cell" style={{ marginTop: '0.25rem' }}>
+                                <select 
+                                  className="form-select form-select-sm" 
+                                  style={{ maxWidth: '100%', fontSize: '0.85rem' }}
+                                  defaultValue=""
+                                  onChange={(e) => {
+                                    if (!e.target.value) return;
+                                    const selectedEmp = row.conflicts.find(c => c.id === e.target.value);
+                                    if (selectedEmp) {
+                                      setCsvPreview(prev => {
+                                        if (!prev) return prev;
+                                        const next = [...prev];
+                                        next[index] = { ...row, matchedEmployee: selectedEmp, status: 'ready', matchMethod: 'manual' };
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <option value="" disabled>Review conflict ({row.conflicts.length} options)...</option>
+                                  {row.conflicts.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name} ({c.employee_id || c.email || 'No Details'})</option>
+                                  ))}
+                                </select>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
+                                  Cannot decide automatically. Please select the correct user.
                                 </span>
-                                <span>No matching employee found</span>
+                              </div>
+                            ) : (
+                              <div className="users-employee-cell" style={{ marginTop: '0.25rem' }}>
+                                <span className="csv-unmatched-label">
+                                  {row.displayIdentifier}
+                                </span>
                               </div>
                             )}
                           </td>
                           <td>
-                            {emp ? renderRoleBadge(emp.role) : '—'}
+                            {row.matchMethod ? (
+                               <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--brand-primary-light)', fontWeight: 700 }}>
+                                 {row.matchMethod}
+                               </span>
+                            ) : '—'}
                           </td>
                           <td>
                             {emp ? <div className="users-points-balance">{emp.points.toLocaleString('en-US')} pts</div> : '—'}
                           </td>
                           <td>
-                            <strong>{row.rawPoints.toLocaleString('en-US')} pts</strong>
+                            {row.status !== 'invalid_points' ? <strong>{row.rawPoints.toLocaleString('en-US')} pts</strong> : <span className="text-muted">Invalid</span>}
                           </td>
                           <td>
-                            {emp ? (
+                            {row.status === 'ready' ? (
                               <span className={`users-delta ${delta !== 0 ? (delta > 0 ? 'users-delta-positive' : 'users-delta-negative') : ''}`}>
                                 {delta === 0 ? 'No change' : `${delta > 0 ? '+' : ''}${delta} pts`}
                               </span>
