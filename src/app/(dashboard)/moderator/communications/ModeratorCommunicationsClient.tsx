@@ -24,6 +24,9 @@ import {
 import { TransferProgress } from '@/components/uploads/TransferProgress';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useTransferState } from '@/components/uploads/useTransferState';
+import { SectionJumpNav } from '@/components/ui/SectionJumpNav';
+import { SplitWorkspace } from '@/components/ui/SplitWorkspace';
+import { StickyActionBar } from '@/components/ui/StickyActionBar';
 import type {
   AnnouncementBlock,
   AnnouncementDurationDays,
@@ -140,6 +143,13 @@ async function readJsonSafely<T>(response: Response): Promise<T | null> {
   }
 }
 
+function scrollToCommunicationSection(id: string) {
+  if (typeof document === 'undefined') return;
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function toBroadcastForm(item: BroadcastNotification): BroadcastFormState {
   return {
     title: item.title,
@@ -209,6 +219,8 @@ export function ModeratorCommunicationsClient({
   const [busy, setBusy] = useState<'broadcast' | 'announcement' | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'broadcast' | 'announcement'; id: string } | null>(null);
   const [notice, setNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
+  const [activeBroadcastSection, setActiveBroadcastSection] = useState('broadcast-meta');
+  const [activeAnnouncementSection, setActiveAnnouncementSection] = useState('announcement-meta');
   const [pdfBusyBlockId, setPdfBusyBlockId] = useState<string | null>(null);
   const [gifQuery, setGifQuery] = useState<Record<string, string>>({});
   const [gifResults, setGifResults] = useState<Record<string, TenorResult[]>>({});
@@ -296,6 +308,49 @@ export function ModeratorCommunicationsClient({
     }).length;
   }, [announcements, editingAnnouncementId, isStoreLimited, targetAnnouncementDateKey]);
 
+  const broadcastIssues = useMemo(() => {
+    const issues: Array<{ id: string; label: string; detail: string; tone: 'danger' | 'warning' }> = [];
+    if (!broadcastForm.title.trim()) {
+      issues.push({ id: 'broadcast-meta', label: 'Falta el título', detail: 'Agrega un título breve antes de guardar o publicar.', tone: 'danger' });
+    }
+    if (!broadcastForm.message.trim()) {
+      issues.push({ id: 'broadcast-message', label: 'Falta el mensaje', detail: 'El cuerpo de la notificación todavía está vacío.', tone: 'warning' });
+    }
+    if (broadcastForm.action === 'scheduled' && !broadcastForm.publishAt) {
+      issues.push({ id: 'broadcast-schedule', label: 'Programa la fecha', detail: 'El modo programado necesita fecha y hora.', tone: 'danger' });
+    }
+    return issues;
+  }, [broadcastForm]);
+
+  const announcementIssues = useMemo(() => {
+    const issues: Array<{ id: string; label: string; detail: string; tone: 'danger' | 'warning' }> = [];
+    if (!announcementForm.title.trim()) {
+      issues.push({ id: 'announcement-meta', label: 'Falta el título', detail: 'Ponle nombre al anuncio para poder encontrarlo rápido.', tone: 'danger' });
+    }
+    if (announcementForm.action === 'scheduled' && !announcementForm.publishAt) {
+      issues.push({ id: 'announcement-schedule', label: 'Falta la fecha programada', detail: 'El modo Schedule necesita fecha y hora.', tone: 'danger' });
+    }
+    if (announcementForm.content.length === 0) {
+      issues.push({ id: 'announcement-blocks', label: 'No hay bloques de contenido', detail: 'Añade al menos un bloque antes de publicarlo.', tone: 'warning' });
+    }
+    return issues;
+  }, [announcementForm]);
+
+  const broadcastJumpItems = useMemo(() => ([
+    { id: 'broadcast-meta', label: 'Meta', tone: broadcastIssues.some((issue) => issue.id === 'broadcast-meta') ? 'danger' as const : 'default' as const },
+    { id: 'broadcast-message', label: 'Mensaje', tone: broadcastIssues.some((issue) => issue.id === 'broadcast-message') ? 'warning' as const : 'default' as const },
+    { id: 'broadcast-delivery', label: 'Entrega' },
+    { id: 'broadcast-schedule', label: 'Programación', tone: broadcastIssues.some((issue) => issue.id === 'broadcast-schedule') ? 'danger' as const : 'default' as const },
+  ]), [broadcastIssues]);
+
+  const announcementJumpItems = useMemo(() => ([
+    { id: 'announcement-meta', label: 'Meta', tone: announcementIssues.some((issue) => issue.id === 'announcement-meta') ? 'danger' as const : 'default' as const },
+    { id: 'announcement-excerpt', label: 'Extracto' },
+    { id: 'announcement-cover', label: 'Cover' },
+    { id: 'announcement-blocks', label: 'Bloques', badge: announcementForm.content.length, tone: announcementIssues.some((issue) => issue.id === 'announcement-blocks') ? 'warning' as const : 'default' as const },
+    { id: 'announcement-schedule', label: 'Programación', tone: announcementIssues.some((issue) => issue.id === 'announcement-schedule') ? 'danger' as const : 'default' as const },
+  ]), [announcementForm.content.length, announcementIssues]);
+
   const previewAnnouncement: CompanyAnnouncement = useMemo(
     () => ({
       id: editingAnnouncementId ?? 'preview',
@@ -326,11 +381,13 @@ export function ModeratorCommunicationsClient({
   const resetBroadcastEditor = () => {
     setEditingBroadcastId(null);
     setBroadcastForm(createEmptyBroadcastForm());
+    setActiveBroadcastSection('broadcast-meta');
   };
 
   const resetAnnouncementEditor = () => {
     setEditingAnnouncementId(null);
     setAnnouncementForm(createEmptyAnnouncementForm());
+    setActiveAnnouncementSection('announcement-meta');
   };
 
   const handleBroadcastTemplate = (template: 'available' | 'stock' | 'site') => {
@@ -690,7 +747,15 @@ export function ModeratorCommunicationsClient({
       ) : null}
 
       {activeTab === 'notifications' ? (
-        <div className="communications-grid">
+        <SplitWorkspace
+          primaryLabel="Compose"
+          secondaryLabel="Queue"
+          panelMaxHeight="calc(100vh - 14rem)"
+          className="communications-workspace"
+          primaryPanelClassName="communications-workspace-panel"
+          secondaryPanelClassName="communications-workspace-panel"
+          primary={
+            <>
           <section className="card studio-panel">
             <div className="studio-panel-header">
               <div>
@@ -720,13 +785,71 @@ export function ModeratorCommunicationsClient({
               <div className="studio-stat-card"><strong>{broadcastStats.today}</strong><span>Today</span></div>
             </div>
 
+            {broadcastIssues.length > 0 ? (
+              <div className="studio-issue-list">
+                {broadcastIssues.map((issue) => (
+                  <button
+                    key={issue.id}
+                    type="button"
+                    className={`studio-issue-pill studio-issue-pill-${issue.tone}`}
+                    onClick={() => {
+                      setActiveBroadcastSection(issue.id);
+                      scrollToCommunicationSection(issue.id);
+                    }}
+                  >
+                    <span>{issue.label}</span>
+                    <small>{issue.detail}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <SectionJumpNav
+              items={broadcastJumpItems}
+              activeId={activeBroadcastSection}
+              onSelect={(id) => {
+                setActiveBroadcastSection(id);
+                scrollToCommunicationSection(id);
+              }}
+            />
+
+            <StickyActionBar
+              summary={(
+                <div className="studio-action-summary">
+                  <strong>{editingBroadcastId ? 'Editing notification' : 'New notification'}</strong>
+                  <span>{broadcastForm.action === 'published' ? 'Publish now' : broadcastForm.action === 'scheduled' ? 'Scheduled release' : 'Draft mode'}</span>
+                </div>
+              )}
+              actions={(
+                <button type="button" className="btn btn-primary" onClick={() => void handleSaveBroadcast()} disabled={busy === 'broadcast'}>
+                  {busy === 'broadcast' ? <Save size={15} /> : broadcastForm.action === 'published' ? <Send size={15} /> : <Save size={15} />}
+                  {busy === 'broadcast'
+                    ? 'Saving...'
+                    : broadcastForm.action === 'published'
+                      ? editingBroadcastId
+                        ? 'Update and send'
+                        : 'Send now'
+                      : broadcastForm.action === 'scheduled'
+                        ? 'Schedule notification'
+                        : 'Save draft'}
+                </button>
+              )}
+              mobileActions={(
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleSaveBroadcast()} disabled={busy === 'broadcast'}>
+                  {busy === 'broadcast' ? '...' : broadcastForm.action === 'published' ? 'Publish' : broadcastForm.action === 'scheduled' ? 'Schedule' : 'Save'}
+                </button>
+              )}
+              topOffset="0.75rem"
+              bottomOffset="calc(env(safe-area-inset-bottom) + 5.6rem)"
+            />
+
             <div className="studio-template-row">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleBroadcastTemplate('available')}>Available template</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleBroadcastTemplate('stock')}>Stock template</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleBroadcastTemplate('site')}>Site visit template</button>
             </div>
 
-            <div className="studio-form-grid">
+            <div id="broadcast-meta" className="studio-form-grid">
               <div>
                 <label className="studio-label">Title</label>
                 <input className="input" value={broadcastForm.title} onChange={(event) => setBroadcastForm((current) => ({ ...current, title: event.target.value }))} placeholder="Example: Store restocked" />
@@ -746,7 +869,7 @@ export function ModeratorCommunicationsClient({
               </div>
             </div>
 
-            <div style={{ marginTop: '1rem' }}>
+            <div id="broadcast-message" style={{ marginTop: '1rem' }}>
               <label className="studio-label">Message</label>
               <textarea
                 className="input studio-textarea"
@@ -756,7 +879,7 @@ export function ModeratorCommunicationsClient({
               />
             </div>
 
-            <div style={{ marginTop: '1rem' }}>
+            <div id="broadcast-delivery" style={{ marginTop: '1rem' }}>
               <label className="studio-label">Delivery mode</label>
               <div className="studio-mode-row">
                 {([
@@ -777,7 +900,7 @@ export function ModeratorCommunicationsClient({
             </div>
 
             {broadcastForm.action === 'scheduled' ? (
-              <div style={{ marginTop: '1rem' }}>
+              <div id="broadcast-schedule" style={{ marginTop: '1rem' }}>
                 <label className="studio-label">Publish date and time</label>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                   <ModernDatePicker
@@ -806,22 +929,11 @@ export function ModeratorCommunicationsClient({
               </div>
             ) : null}
 
-            <div className="studio-actions">
-              <button type="button" className="btn btn-primary" onClick={() => void handleSaveBroadcast()} disabled={busy === 'broadcast'}>
-                {busy === 'broadcast' ? <Save size={15} /> : broadcastForm.action === 'published' ? <Send size={15} /> : <Save size={15} />}
-                {busy === 'broadcast'
-                  ? 'Saving...'
-                  : broadcastForm.action === 'published'
-                    ? editingBroadcastId
-                      ? 'Update and send'
-                      : 'Send now'
-                    : broadcastForm.action === 'scheduled'
-                      ? 'Schedule notification'
-                      : 'Save draft'}
-              </button>
-            </div>
           </section>
-
+            </>
+          }
+          secondary={
+            <>
           <section className="card studio-panel">
             <div className="studio-panel-header">
               <div>
@@ -854,9 +966,19 @@ export function ModeratorCommunicationsClient({
               )}
             </div>
           </section>
-        </div>
+            </>
+          }
+        />
       ) : (
-        <div className="communications-grid communications-grid-wide">
+        <SplitWorkspace
+          primaryLabel="Build"
+          secondaryLabel="Preview"
+          panelMaxHeight="calc(100vh - 14rem)"
+          className="communications-workspace"
+          primaryPanelClassName="communications-workspace-panel"
+          secondaryPanelClassName="communications-workspace-panel"
+          primary={
+            <>
           <section className="card studio-panel">
             <div className="studio-panel-header">
               <div>
@@ -881,7 +1003,68 @@ export function ModeratorCommunicationsClient({
             </div>
 
             {/* ── Top metadata strip ── */}
-            <div className="studio-meta-strip">
+            {announcementIssues.length > 0 ? (
+              <div className="studio-issue-list">
+                {announcementIssues.map((issue) => (
+                  <button
+                    key={issue.id}
+                    type="button"
+                    className={`studio-issue-pill studio-issue-pill-${issue.tone}`}
+                    onClick={() => {
+                      setActiveAnnouncementSection(issue.id);
+                      scrollToCommunicationSection(issue.id);
+                    }}
+                  >
+                    <span>{issue.label}</span>
+                    <small>{issue.detail}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <SectionJumpNav
+              items={announcementJumpItems}
+              activeId={activeAnnouncementSection}
+              onSelect={(id) => {
+                setActiveAnnouncementSection(id);
+                scrollToCommunicationSection(id);
+              }}
+            />
+
+            <StickyActionBar
+              summary={(
+                <div className="studio-action-summary">
+                  <strong>{editingAnnouncementId ? 'Editing announcement' : 'New announcement'}</strong>
+                  <span>{announcementForm.action === 'published' ? 'Publish now' : announcementForm.action === 'scheduled' ? 'Scheduled release' : 'Draft mode'}</span>
+                </div>
+              )}
+              actions={(
+                <>
+                  {editingAnnouncementId && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={resetAnnouncementEditor}>Cancel</button>
+                  )}
+                  <button type="button" className="btn btn-primary" onClick={() => void handleSaveAnnouncement()} disabled={busy === 'announcement'}>
+                    {busy === 'announcement' ? <Save size={15} /> : announcementForm.action === 'published' ? <Send size={15} /> : <Save size={15} />}
+                    {busy === 'announcement'
+                      ? 'Saving...'
+                      : announcementForm.action === 'published'
+                        ? editingAnnouncementId ? 'Update & publish' : 'Publish now'
+                        : announcementForm.action === 'scheduled'
+                          ? 'Schedule'
+                          : 'Save draft'}
+                  </button>
+                </>
+              )}
+              mobileActions={(
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleSaveAnnouncement()} disabled={busy === 'announcement'}>
+                  {busy === 'announcement' ? '...' : announcementForm.action === 'published' ? 'Publish' : announcementForm.action === 'scheduled' ? 'Schedule' : 'Save'}
+                </button>
+              )}
+              topOffset="0.75rem"
+              bottomOffset="calc(env(safe-area-inset-bottom) + 5.6rem)"
+            />
+
+            <div id="announcement-meta" className="studio-meta-strip">
               <div className="studio-meta-strip-row">
                 <div className="studio-meta-field studio-meta-field-grow">
                   <label className="studio-label">Title</label>
@@ -901,7 +1084,7 @@ export function ModeratorCommunicationsClient({
               </div>
 
               {/* Publication mode — always visible at top */}
-              <div className="studio-pub-mode-row">
+              <div id="announcement-schedule" className="studio-pub-mode-row">
                 <span className="studio-pub-mode-label">Publish as:</span>
                 <div className="studio-mode-row">
                   {([
@@ -941,7 +1124,7 @@ export function ModeratorCommunicationsClient({
             </div>
 
             {/* ── Excerpt ── */}
-            <div>
+            <div id="announcement-excerpt">
               <label className="studio-label">Excerpt <span className="studio-label-hint">(shown on announcement card)</span></label>
               <textarea
                 className="input studio-textarea"
@@ -952,7 +1135,7 @@ export function ModeratorCommunicationsClient({
             </div>
 
             {/* ── Cover image — compact strip ── */}
-            <div className="studio-cover-strip">
+            <div id="announcement-cover" className="studio-cover-strip">
               <div className="studio-cover-strip-thumb">
                 {announcementForm.coverImageUrl
                   ? <img src={announcementForm.coverImageUrl} alt="Cover" />
@@ -979,7 +1162,7 @@ export function ModeratorCommunicationsClient({
             ) : null}
 
             {/* ---- Visual block picker ---- */}
-            <div>
+            <div id="announcement-blocks">
               <label className="studio-label" style={{ marginBottom: '0.55rem' }}>Add a content block</label>
               <div className="studio-block-picker">
                 {([
@@ -1276,30 +1459,11 @@ export function ModeratorCommunicationsClient({
               })}
             </div>
 
-            <div className="studio-sticky-actions">
-              <div className="studio-sticky-actions-left">
-                <span className="studio-sticky-mode-label">
-                  {announcementForm.action === 'published' ? '🟢 Publish now' : announcementForm.action === 'scheduled' ? '🕐 Scheduled' : '📝 Draft'}
-                </span>
-              </div>
-              <div className="studio-sticky-actions-right">
-                {editingAnnouncementId && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={resetAnnouncementEditor}>Cancel</button>
-                )}
-                <button type="button" className="btn btn-primary" onClick={() => void handleSaveAnnouncement()} disabled={busy === 'announcement'}>
-                  {busy === 'announcement' ? <Save size={15} /> : announcementForm.action === 'published' ? <Send size={15} /> : <Save size={15} />}
-                  {busy === 'announcement'
-                    ? 'Saving...'
-                    : announcementForm.action === 'published'
-                      ? editingAnnouncementId ? 'Update & publish' : 'Publish now'
-                      : announcementForm.action === 'scheduled'
-                        ? 'Schedule'
-                        : 'Save draft'}
-                </button>
-              </div>
-            </div>
           </section>
-
+            </>
+          }
+          secondary={
+            <>
           <div className="communications-preview-column">
             <section className="card studio-panel">
               <div className="studio-panel-header">
@@ -1339,7 +1503,9 @@ export function ModeratorCommunicationsClient({
               </div>
             </section>
           </div>
-        </div>
+            </>
+          }
+        />
       )}
 
       <style>{`
@@ -1461,10 +1627,19 @@ export function ModeratorCommunicationsClient({
           grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
         }
 
+        .communications-workspace {
+          gap: 1rem;
+        }
+
+        .communications-workspace-panel {
+          min-height: 0;
+        }
+
         .communications-preview-column {
           display: grid;
           gap: 1rem;
           align-content: start;
+          min-height: 0;
         }
 
         .studio-panel {
@@ -1515,6 +1690,65 @@ export function ModeratorCommunicationsClient({
         .studio-stat-card span {
           color: var(--text-muted);
           font-size: 0.8rem;
+        }
+
+        .studio-issue-list {
+          display: grid;
+          gap: 0.65rem;
+        }
+
+        .studio-issue-pill {
+          display: grid;
+          gap: 0.18rem;
+          padding: 0.8rem 0.9rem;
+          border-radius: 16px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.03);
+          text-align: left;
+          cursor: pointer;
+          transition: transform 0.18s ease, border-color 0.18s ease;
+        }
+
+        .studio-issue-pill:hover {
+          transform: translateY(-1px);
+          border-color: rgba(124, 108, 255, 0.32);
+        }
+
+        .studio-issue-pill span {
+          color: var(--text-primary);
+          font-size: 0.82rem;
+          font-weight: 700;
+        }
+
+        .studio-issue-pill small {
+          color: var(--text-muted);
+          font-size: 0.74rem;
+          line-height: 1.5;
+        }
+
+        .studio-issue-pill-danger {
+          background: rgba(239, 68, 68, 0.08);
+          border-color: rgba(239, 68, 68, 0.22);
+        }
+
+        .studio-issue-pill-warning {
+          background: rgba(245, 158, 11, 0.08);
+          border-color: rgba(245, 158, 11, 0.22);
+        }
+
+        .studio-action-summary {
+          display: grid;
+          gap: 0.18rem;
+        }
+
+        .studio-action-summary strong {
+          color: var(--text-primary);
+          font-size: 0.86rem;
+        }
+
+        .studio-action-summary span {
+          color: var(--text-muted);
+          font-size: 0.74rem;
         }
 
         .studio-template-row,

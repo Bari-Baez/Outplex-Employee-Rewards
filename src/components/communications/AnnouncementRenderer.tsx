@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { AnnouncementBlock, CompanyAnnouncement } from '@/types/database';
 import { ChevronLeft, ChevronRight, Download, FileText, GalleryHorizontal, Search, X, ZoomIn } from 'lucide-react';
 import { proxifyMediaUrl } from '@/lib/media-proxy';
@@ -398,6 +398,9 @@ export function AnnouncementRenderer({
         .announcement-image-shell,
         .announcement-slider-frame,
         .announcement-hero-image-shell {
+          display: flex;
+          align-items: center;
+          justify-content: center;
           overflow: hidden;
           border-radius: 20px;
           border: 1px solid rgba(255, 255, 255, 0.08);
@@ -410,8 +413,17 @@ export function AnnouncementRenderer({
         .announcement-slider-image {
           display: block;
           width: 100%;
-          height: auto;
-          object-fit: cover;
+          height: 100%;
+          max-height: clamp(240px, 68vh, 760px);
+          object-fit: contain;
+          background: rgba(255, 255, 255, 0.96);
+        }
+
+        .announcement-image-shell,
+        .announcement-slider-frame {
+          min-height: clamp(240px, 48vh, 560px);
+          max-height: clamp(240px, 68vh, 760px);
+          padding: clamp(0.5rem, 1.5vw, 0.9rem);
         }
 
         /* ---- Hero image — viewport-relative so portrait images don't fill the screen ---- */

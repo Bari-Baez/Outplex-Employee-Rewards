@@ -59,6 +59,7 @@ export function EmployeeDashboard({
       {/* Stats row — 2×2 grid on mobile, 4 columns on desktop */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
         <StatCard
+          href="/ot-calendar"
           label="Hours This Month"
           value={totalHours.toFixed(1)}
           icon={<TrendingUp size={14} />}
@@ -66,6 +67,7 @@ export function EmployeeDashboard({
           color="#6d5dfc"
         />
         <StatCard
+          href="/ot-calendar"
           label="Upcoming OT"
           value={`${upcomingSlots.length}`}
           icon={<Clock size={14} />}
@@ -73,6 +75,7 @@ export function EmployeeDashboard({
           color="#10b981"
         />
         <StatCard
+          href="/ot-calendar"
           label="Last 60 Days"
           value={recentHours.toFixed(1)}
           icon={<History size={14} />}
@@ -80,6 +83,7 @@ export function EmployeeDashboard({
           color="#06b6d4"
         />
         <StatCard
+          href="/store"
           label="Points"
           value={`${profile?.points ?? 0}`}
           icon={<Zap size={14} />}
@@ -113,7 +117,7 @@ export function EmployeeDashboard({
         ) : (
           <div className="flex flex-col md:grid md:grid-cols-2 gap-2 md:gap-4">
             {upcomingSlots.map((slot) => (
-              <div key={slot.id} className="p-3 md:p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3 hover:border-[#6d5dfc]/30 hover:bg-white/10 transition-all">
+              <Link key={slot.id} href="/ot-calendar" className="p-3 md:p-4 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3 hover:border-[#6d5dfc]/30 hover:bg-white/10 transition-all no-underline">
                 <div className="h-11 w-11 md:h-14 md:w-14 rounded-xl bg-white/5 border border-white/5 flex flex-col items-center justify-center overflow-hidden shrink-0">
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter bg-white/5 w-full text-center py-0.5">{new Date(`${slot.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}</span>
                   <span className="text-lg md:text-xl font-black text-white">{new Date(`${slot.date}T00:00:00`).getDate()}</span>
@@ -123,7 +127,7 @@ export function EmployeeDashboard({
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{slot.shift_label || 'Regular OT'}</p>
                 </div>
                 <ChevronRight size={16} className="text-[#6d5dfc] shrink-0" />
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -146,7 +150,7 @@ export function EmployeeDashboard({
             </div>
           ) : (
             raffles.slice(0, 3).map((raffle) => (
-              <div key={raffle.id} className="p-3 bg-white/5 border border-white/5 rounded-xl flex justify-between items-center">
+              <Link key={raffle.id} href="/raffles" className="p-3 bg-white/5 border border-white/5 rounded-xl flex justify-between items-center no-underline">
                 <div className="min-w-0 mr-2">
                   <p className="text-xs font-black text-white line-clamp-1">{raffle.title}</p>
                   <p className="text-[10px] text-slate-500 font-bold mt-0.5">{raffle.draw_date ? new Date(raffle.draw_date).toDateString() : 'TBD'}</p>
@@ -154,7 +158,7 @@ export function EmployeeDashboard({
                 <div className={`shrink-0 p-1 px-2 rounded-md text-[9px] font-black uppercase ${raffle.status === 'live' ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-blue-500/20 text-blue-500'}`}>
                   {raffle.status}
                 </div>
-              </div>
+              </Link>
             ))
           )}
         </div>
@@ -182,12 +186,14 @@ export function EmployeeDashboard({
 }
 
 function StatCard({
+  href,
   label,
   value,
   icon,
   sublabel,
   color,
 }: {
+  href: string;
   label: string;
   value: string;
   icon: ReactNode;
@@ -195,7 +201,7 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="glass-card flex flex-col gap-2 md:gap-6 group hover:border-[#6d5dfc33] transition-all p-3 md:p-6">
+    <Link href={href} className="glass-card flex flex-col gap-2 md:gap-6 group hover:border-[#6d5dfc33] transition-all p-3 md:p-6 no-underline">
       <div className="flex items-center gap-2">
         <div className="p-1.5 md:p-2.5 rounded-lg md:rounded-xl bg-white/5 border border-white/5 transition-all group-hover:bg-[#6d5dfc11]" style={{ color }}>
           {icon}
@@ -206,6 +212,6 @@ function StatCard({
         <span className="text-2xl md:text-4xl font-black text-white lining-nums group-hover:text-[#6d5dfc] transition-colors">{value}</span>
         <span className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest">{sublabel}</span>
       </div>
-    </div>
+    </Link>
   );
 }

@@ -64,10 +64,16 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
     { href: '/moderator/store/orders', title: 'Order Fulfillment', desc: 'Process storefront orders.', icon: <Store size={18} /> },
     { href: '/moderator/employee-stores', title: 'Store Requests', desc: 'Moderate employee store applications.', icon: <LayoutList size={18} /> },
   ];
+  const desktopStats = [
+    { href: '/moderator/users', label: 'My Team', value: stats.teamSize.toString(), icon: <Users size={16} />, sublabel: 'Assigned members', color: 'var(--brand-primary)' },
+    { href: '/moderator/ot-manager', label: 'Team OT Hours', value: stats.teamOTHours.toFixed(1), icon: <Clock size={16} />, sublabel: 'Logged this month', color: 'var(--status-available)' },
+    { href: '/moderator/employee-stores', label: 'Team Requests', value: stats.teamPendingStoreRequests.toString(), icon: <Store size={16} />, sublabel: 'Pending store review', color: 'var(--brand-accent)' },
+    { href: '/moderator/users', label: 'Team Points', value: stats.teamTotalPoints.toLocaleString(), icon: <Zap size={16} />, sublabel: 'Cumulative balance', color: '#fbbf24' },
+  ];
 
   return (
     <div className="flex flex-col gap-5 md:gap-8 w-full max-w-[1600px] p-3 md:p-6 animate-fade-in">
-      <div className="md:hidden supervisor-mobile-shell">
+      <div className="lg:hidden supervisor-mobile-shell">
         <div className="card supervisor-mobile-hero">
           <span className="supervisor-mobile-kicker">Supervisor</span>
           <h1 className="supervisor-mobile-title">Team dashboard</h1>
@@ -109,7 +115,7 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         </div>
       </div>
 
-      <div className="hidden md:block dashboard-header">
+      <div className="hidden lg:block dashboard-header">
         <div>
           <h1 className="dashboard-title">
             Supervisor <span className="gradient-text">Dashboard</span>
@@ -120,38 +126,21 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         </div>
       </div>
 
-      <div className="hidden md:grid stats-grid">
-        <StatCard
-          label="My Team"
-          value={stats.teamSize.toString()}
-          icon={<Users size={16} />}
-          sublabel="Assigned members"
-          color="var(--brand-primary)"
-        />
-        <StatCard
-          label="Team OT Hours"
-          value={stats.teamOTHours.toFixed(1)}
-          icon={<Clock size={16} />}
-          sublabel="Logged this month"
-          color="var(--status-available)"
-        />
-        <StatCard
-          label="Team Requests"
-          value={stats.teamPendingStoreRequests.toString()}
-          icon={<Store size={16} />}
-          sublabel="Pending store review"
-          color="var(--brand-accent)"
-        />
-        <StatCard
-          label="Team Points"
-          value={stats.teamTotalPoints.toLocaleString()}
-          icon={<Zap size={16} />}
-          sublabel="Cumulative balance"
-          color="#fbbf24"
-        />
+      <div className="hidden lg:grid stats-grid">
+        {desktopStats.map((card) => (
+          <StatCard
+            key={card.label}
+            href={card.href}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            sublabel={card.sublabel}
+            color={card.color}
+          />
+        ))}
       </div>
 
-      <div className="hidden md:grid dashboard-grid">
+      <div className="hidden lg:grid dashboard-grid">
         <section className="card">
           <div className="card-header">
             <h2 className="card-title">
@@ -384,7 +373,10 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
         .icon-link {
           color: var(--brand-primary-light);
         }
-        @media (max-width: 1024px) {
+        .supervisor-stat-link {
+          text-decoration: none;
+        }
+        @media (max-width: 1279px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr); }
           .dashboard-grid { grid-template-columns: 1fr; }
         }
@@ -393,15 +385,15 @@ export function SupervisorDashboard({ stats, userName }: SupervisorDashboardProp
   );
 }
 
-function StatCard({ label, value, icon, sublabel, color }: { label: string; value: string; icon: ReactNode; sublabel: string; color: string }) {
+function StatCard({ href, label, value, icon, sublabel, color }: { href: string; label: string; value: string; icon: ReactNode; sublabel: string; color: string }) {
   return (
-    <div className="card flex flex-col gap-5 border-l-4 transition-all hover:bg-white/5" style={{ borderLeftColor: color }}>
+    <Link href={href} className="card supervisor-stat-link flex flex-col gap-5 border-l-4 transition-all hover:bg-white/5" style={{ borderLeftColor: color }}>
       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
         <span style={{ color }}>{icon}</span> {label}
       </div>
       <div style={{ fontSize: '2.5rem', fontWeight: 900, lineHeight: 1, color: 'white' }}>{value}</div>
       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 500 }}>{sublabel}</div>
-    </div>
+    </Link>
   );
 }
 

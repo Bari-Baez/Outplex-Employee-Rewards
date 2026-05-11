@@ -7,23 +7,15 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
-  ChevronDown,
   ClipboardList,
   Copy,
   Download,
   FormInput,
   GripVertical,
   Lock,
-  Minus,
-  MoreVertical,
   Plus,
-  Send,
-  Settings,
   Share2,
-  Star,
   Trash2,
-  Type,
-  Users,
   X,
 } from 'lucide-react';
 import {
@@ -32,14 +24,12 @@ import {
   Pie,
   BarChart,
   Bar,
-  XAxis,
-  YAxis,
   Cell,
   Tooltip,
 } from 'recharts';
 import { ModernSelect } from '@/components/ui/Select';
-import { ModernDatePicker } from '@/components/ui/DatePicker';
-import { ModernTimePicker } from '@/components/ui/TimePicker';
+import { SectionJumpNav } from '@/components/ui/SectionJumpNav';
+import { StickyActionBar } from '@/components/ui/StickyActionBar';
 import {
   DEFAULT_FORM_SETTINGS,
   FIELD_TYPE_LABELS,
@@ -59,6 +49,14 @@ import { proxifyMediaUrl } from '@/lib/media-proxy';
 type AppView = 'list' | 'builder';
 type BuilderTab = 'questions' | 'responses' | 'settings';
 type ResponseSubTab = 'summary' | 'question' | 'individual';
+type BuilderIssueTone = 'danger' | 'warning';
+
+interface BuilderIssue {
+  id: string;
+  label: string;
+  detail: string;
+  tone: BuilderIssueTone;
+}
 
 interface Props { moderatorName: string; }
 
@@ -163,6 +161,13 @@ function newField(type: FormFieldType): FormField {
 }
 function duplicateField(f: FormField): FormField {
   return { ...f, id: makeId() };
+}
+
+function scrollToBuilderNode(id: string) {
+  if (typeof document === 'undefined') return;
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ─── Question Card Component ──────────────────────────────────────────────────
@@ -520,7 +525,7 @@ function aggregateField(field: FormField, responses: FormResponse[]) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
+export function ModeratorFormsClient({ moderatorName }: Props) {
   const [view, setView]                   = useState<AppView>('list');
   const [forms, setForms]                 = useState<FormSummaryWithStats[]>([]);
   const [isLoading, setIsLoading]         = useState(true);
@@ -530,6 +535,7 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
   const [draft, setDraft]                 = useState<FormDefinition | null>(null);
   const [builderTab, setBuilderTab]       = useState<BuilderTab>('questions');
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
+  const [activeBuilderSection, setActiveBuilderSection] = useState('builder-title-card');
   const [isSaving, setIsSaving]           = useState(false);
   const [isPublishing, setIsPublishing]   = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -623,6 +629,11 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
       setMobileToolbarOffset({ x: 0, y: 0 });
     }
   }, [draft?.id, view]);
+
+  useEffect(() => {
+    if (!activeFieldId) return;
+    setActiveBuilderSection(`builder-field-${activeFieldId}`);
+  }, [activeFieldId]);
 
   useEffect(() => {
     if (!isMobileViewport) {
@@ -839,6 +850,64 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
   };
 
   // ─── Memos ───────────────────────────────────────────────────────────────────
+  const jumpToBuilderSection = (sectionId: string) => {
+    setBuilderTab('questions');
+    setActiveBuilderSection(sectionId);
+    if (sectionId.startsWith('builder-field-')) {
+      setActiveFieldId(sectionId.replace('builder-field-', ''));
+    } else if (sectionId === 'builder-title-card') {
+      setActiveFieldId(null);
+    }
+    window.setTimeout(() => scrollToBuilderNode(sectionId), 50);
+  };
+
+  const builderIssues = useMemo<BuilderIssue[]>(() => {
+    if (!draft) return [];
+    const issues: BuilderIssue[] = [];
+    if (!draft.title.trim()) {
+      issues.push({
+        id: 'builder-title-card',
+        label: 'Falta el título',
+        detail: 'Agrega un título para guardar o publicar sin fricción.',
+        tone: 'danger',
+      });
+    }
+    if (draft.fields.length === 0) {
+      issues.push({
+        id: 'builder-question-list',
+        label: 'No hay preguntas todavía',
+        detail: 'Añade al menos un campo usando la barra flotante.',
+        tone: 'warning',
+      });
+    }
+    return issues;
+  }, [draft]);
+
+  const builderJumpItems = useMemo(() => {
+    if (!draft) return [];
+    const sectionItems = draft.fields
+      .filter((field) => field.type === 'section')
+      .map((field, index) => ({
+        id: `builder-field-${field.id}`,
+        label: field.label?.trim() || `Sección ${index + 1}`,
+      }));
+
+    return [
+      {
+        id: 'builder-title-card',
+        label: 'Portada',
+        tone: builderIssues.some((issue) => issue.id === 'builder-title-card') ? 'danger' as const : 'default' as const,
+      },
+      ...sectionItems,
+      {
+        id: 'builder-question-list',
+        label: sectionItems.length > 0 ? 'Todas las preguntas' : 'Preguntas',
+        badge: draft.fields.length,
+        tone: builderIssues.some((issue) => issue.id === 'builder-question-list') ? 'warning' as const : 'default' as const,
+      },
+    ];
+  }, [builderIssues, draft]);
+
   const completionRate = useMemo(() => completion
     ? Math.round((completion.completed.length / Math.max(1, completion.completed.length + completion.pending.length)) * 100)
     : null, [completion]);
@@ -1107,11 +1176,13 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
   }
 
   // ─── BUILDER VIEW ─────────────────────────────────────────────────────────────
+  const moderatorWorkspaceLabel = moderatorName.trim();
+
   if (!draft) return null;
   const sc = STATUS_STYLE[draft.status as FormStatus];
 
   return (
-    <div className="gf-builder-root">
+    <div className="gf-builder-root" data-moderator={moderatorWorkspaceLabel || undefined}>
       {/* Top bar */}
       <div className="gf-builder-dock-container">
         <div className={`gf-builder-dock ${isMobileViewport ? 'gf-builder-dock-mobile' : ''}`}>
@@ -1169,12 +1240,69 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
       )}
 
       {/* ── TAB: PREGUNTAS ──────────────────────────────────────────────────── */}
+      <StickyActionBar
+        showDesktop={false}
+        summary={(
+          <div className="gf-mobile-action-summary">
+            <strong>{draft.fields.length} campo{draft.fields.length !== 1 ? 's' : ''}</strong>
+            <span>{sc.label}</span>
+          </div>
+        )}
+        actions={(
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={() => void saveDraft()} disabled={isSaving}>
+              {isSaving ? '...' : 'Guardar'}
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => void togglePublish()} disabled={isPublishing}>
+              {isPublishing ? '...' : draft.status === 'published' ? 'Cerrar' : 'Publicar'}
+            </button>
+          </>
+        )}
+        bottomOffset="calc(env(safe-area-inset-bottom) + 9.4rem)"
+      />
+
       {builderTab === 'questions' && (
         <div className="gf-questions-layout">
           {/* Center column */}
           <div className="gf-questions-center" onClick={() => setActiveFieldId(null)}>
+            {builderIssues.length > 0 && (
+              <div className="gf-issue-summary">
+                {builderIssues.map((issue) => (
+                  <button
+                    key={issue.id}
+                    type="button"
+                    className={`gf-issue-summary-item gf-issue-summary-item-${issue.tone}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      jumpToBuilderSection(issue.id);
+                    }}
+                  >
+                    <AlertCircle size={14} />
+                    <div>
+                      <strong>{issue.label}</strong>
+                      <span>{issue.detail}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <SectionJumpNav
+              items={builderJumpItems}
+              activeId={activeBuilderSection}
+              onSelect={jumpToBuilderSection}
+              className="gf-jump-nav"
+            />
+
             {/* Title card */}
-            <div className="gf-title-card" onClick={(e) => e.stopPropagation()}>
+            <div
+              id="builder-title-card"
+              className="gf-title-card"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveBuilderSection('builder-title-card');
+              }}
+            >
               <div className="gf-title-card-accent" />
               <div className="gf-title-card-body">
                 <input
@@ -1192,15 +1320,26 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
               </div>
             </div>
 
+            <div id="builder-question-list" className="gf-question-list">
             {/* Question cards */}
             {draft.fields.map((field, idx) => (
-              <div key={field.id} onClick={(e) => e.stopPropagation()}>
+              <div
+                key={field.id}
+                id={`builder-field-${field.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveBuilderSection(`builder-field-${field.id}`);
+                }}
+              >
                 <QuestionCard
                   field={field}
                   index={idx}
                   total={draft.fields.length}
                   isActive={activeFieldId === field.id}
-                  onActivate={() => setActiveFieldId(field.id)}
+                  onActivate={() => {
+                    setActiveFieldId(field.id);
+                    setActiveBuilderSection(`builder-field-${field.id}`);
+                  }}
                   onChange={updateField}
                   onRemove={() => removeField(field.id)}
                   onDuplicate={() => dupField(field.id)}
@@ -1208,6 +1347,7 @@ export function ModeratorFormsClient({ moderatorName: _mod }: Props) {
                 />
               </div>
             ))}
+            </div>
 
             {draft.fields.length === 0 && (
               <div className="gf-empty-builder">
@@ -1685,7 +1825,19 @@ function GfStyles() {
       /* Questions layout */
       .gf-questions-layout { display: flex; flex: 1; overflow: hidden; justify-content: center; gap: 1rem; padding: 5.5rem 1rem 1.5rem 1rem; position: relative; }
       .gf-questions-center { flex: 0 1 680px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.65rem; padding-bottom: 3rem; }
+      .gf-question-list { display: grid; gap: 0.65rem; }
       .gf-empty-builder { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; padding: 3rem 1rem; color: var(--text-muted); text-align: center; border: 1px dashed rgba(255,255,255,0.1); border-radius: 16px; }
+      .gf-jump-nav { margin-bottom: 0.15rem; }
+      .gf-issue-summary { display: grid; gap: 0.55rem; }
+      .gf-issue-summary-item { display: grid; grid-template-columns: auto 1fr; gap: 0.65rem; align-items: start; padding: 0.85rem 0.95rem; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); text-align: left; color: inherit; cursor: pointer; transition: transform 0.18s ease, border-color 0.18s ease; }
+      .gf-issue-summary-item:hover { transform: translateY(-1px); border-color: rgba(99,102,241,0.35); }
+      .gf-issue-summary-item strong { display: block; font-size: 0.82rem; color: var(--text-primary); }
+      .gf-issue-summary-item span { display: block; margin-top: 0.18rem; font-size: 0.74rem; color: var(--text-muted); line-height: 1.5; }
+      .gf-issue-summary-item-danger { background: rgba(239,68,68,0.09); border-color: rgba(239,68,68,0.22); }
+      .gf-issue-summary-item-warning { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.18); }
+      .gf-mobile-action-summary { display: grid; gap: 0.15rem; }
+      .gf-mobile-action-summary strong { color: var(--text-primary); font-size: 0.78rem; }
+      .gf-mobile-action-summary span { color: var(--text-muted); font-size: 0.7rem; }
 
       /* Title card */
       .gf-title-card { border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--bg-elevated); overflow: hidden; display: flex; }
@@ -1868,7 +2020,7 @@ function GfStyles() {
         .gf-questions-layout,
         .gf-responses-layout,
         .gf-settings-layout {
-          padding: 0.25rem 0.5rem 6.5rem;
+          padding: 0.25rem 0.5rem 12rem;
         }
 
         .gf-questions-layout {

@@ -1,13 +1,16 @@
 ﻿'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Clock3, Edit2, Eye, EyeOff, ImageIcon, LayoutDashboard, Loader2, Lock, MoreVertical, Package, Palette, PencilLine, Plus, Save, Settings, ShoppingBag, Sparkles, Store as StoreIcon, Tag, Trash2, TrendingUp, Upload, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Clock3, Eye, EyeOff, ImageIcon, Info, Loader2, Lock, Package, Palette, PencilLine, Plus, Save, Sparkles, Store as StoreIcon, Tag, Trash2, Upload, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { TransferProgress } from '@/components/uploads/TransferProgress';
 import { useTransferState } from '@/components/uploads/useTransferState';
 import { ModernDatePicker } from '@/components/ui/DatePicker';
 import { ModernTimePicker } from '@/components/ui/TimePicker';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { SectionJumpNav } from '@/components/ui/SectionJumpNav';
+import { SplitWorkspace } from '@/components/ui/SplitWorkspace';
+import { StickyActionBar } from '@/components/ui/StickyActionBar';
 import type { EmployeeStore, EmployeeStoreProduct, EmployeeStoreRequest, Notification } from '@/types/database';
 import { uploadFormDataWithProgress } from '@/lib/file-transfer';
 import { createClient } from '@/lib/supabase/client';
@@ -71,6 +74,109 @@ interface SellerOrder {
 }
 
 type StoreOperatingHours = NonNullable<EmployeeStore['operating_hours']>;
+type StoreProfileDraft = {
+  name: string;
+  description: string;
+  category: string;
+  banner_image: string;
+  logo_image: string;
+  accent_color: string;
+  status: EmployeeStore['status'];
+  is_open: boolean;
+  operating_hours: StoreOperatingHours;
+};
+
+type StoreProfileSectionId =
+  | 'profile-preview-section'
+  | 'profile-details-section'
+  | 'profile-visibility-section'
+  | 'profile-schedule-section';
+
+const STORE_APPROVAL_REMINDER_MS = 5 * 60 * 60 * 1000;
+const STORE_APPROVAL_REMINDER_KEY_PREFIX = 'my-store-approval-reminder';
+const STORE_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+const DEFAULT_STORE_HOURS: StoreOperatingHours = {
+  monday: { isOpen: true, open: '09:00', close: '17:00' },
+  tuesday: { isOpen: true, open: '09:00', close: '17:00' },
+  wednesday: { isOpen: true, open: '09:00', close: '17:00' },
+  thursday: { isOpen: true, open: '09:00', close: '17:00' },
+  friday: { isOpen: true, open: '09:00', close: '17:00' },
+  saturday: { isOpen: false, open: '09:00', close: '17:00' },
+  sunday: { isOpen: false, open: '09:00', close: '17:00' },
+};
+
+function cloneDefaultStoreHours(): StoreOperatingHours {
+  return STORE_DAYS.reduce((acc, day) => {
+    acc[day] = { ...DEFAULT_STORE_HOURS[day] };
+    return acc;
+  }, {} as StoreOperatingHours);
+}
+
+function normalizeOperatingHours(hours: StoreOperatingHours | null | undefined): StoreOperatingHours {
+  const next = cloneDefaultStoreHours();
+  if (!hours || typeof hours !== 'object') return next;
+  for (const day of STORE_DAYS) {
+    const current = hours[day];
+    if (!current) continue;
+    next[day] = {
+      isOpen: current.isOpen ?? next[day].isOpen,
+      open: current.open || next[day].open,
+      close: current.close || next[day].close,
+    };
+  }
+  return next;
+}
+
+function buildProfileDraft(store: EmployeeStore): StoreProfileDraft {
+  return {
+    name: store.name,
+    description: store.description ?? '',
+    category: store.category ?? '',
+    banner_image: store.banner_image ?? '',
+    logo_image: store.logo_image ?? '',
+    accent_color: store.accent_color ?? '#7c6cff',
+    status: store.status,
+    is_open: store.is_open ?? true,
+    operating_hours: normalizeOperatingHours((store.operating_hours as StoreOperatingHours | null) ?? null),
+  };
+}
+
+function hasPublishedFirstStoreProduct(
+  store: EmployeeStore | null,
+  products: ExtendedEmployeeStoreProduct[],
+): boolean {
+  return Boolean(store?.first_product_published_at) || products.length > 0;
+}
+
+function getStoreApprovalReminderKey(storeId: string) {
+  return `${STORE_APPROVAL_REMINDER_KEY_PREFIX}:${storeId}`;
+}
+
+function getStoreStatusPresentation(
+  store: EmployeeStore,
+  hasFirstProductPublished: boolean,
+): { tone: 'active' | 'paused' | 'closed' | 'scheduled' | 'setup'; label: string } {
+  if (!hasFirstProductPublished) {
+    return { tone: 'setup', label: 'Setup pending' };
+  }
+  if (store.status === 'paused') {
+    return { tone: 'paused', label: 'Hidden' };
+  }
+  if (store.status === 'scheduled') {
+    return { tone: 'scheduled', label: 'Scheduled' };
+  }
+  if (store.is_open === false) {
+    return { tone: 'closed', label: 'Closed' };
+  }
+  return { tone: 'active', label: 'Active' };
+}
+
+function scrollToSection(id: string) {
+  if (typeof document === 'undefined') return;
+  const section = document.getElementById(id);
+  if (!section) return;
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 function toNonNegativeInt(value: string | number): number {
   const numeric = Math.round(Number(value));
@@ -131,15 +237,50 @@ export function MyStoreClient({
   const router = useRouter();
   const [store, setStore] = useState<EmployeeStore | null>(initialStore);
   const [request, setRequest] = useState<EmployeeStoreRequest | null>(initialLatestRequest);
-    const [products, setProducts] = useState<ExtendedEmployeeStoreProduct[]>(initialProducts);
-  const suspendedProduct = products.find(p => p.status === 'suspended');
+  const [products, setProducts] = useState<ExtendedEmployeeStoreProduct[]>(initialProducts);
+  const suspendedProduct = products.find((product) => product.status === 'suspended');
   const [showSuspensionAlert, setShowSuspensionAlert] = useState(!!suspendedProduct);
   const [orders, setOrders] = useState<SellerOrder[]>(initialOrders);
   const [notifications, setNotifications] = useState<Notification[]>(moderationNotifications);
   const [message, setMessage] = useState<{ tone: 'success' | 'danger' | 'info'; text: string } | null>(null);
+  const [showApprovalReminder, setShowApprovalReminder] = useState(false);
+  const [showSetupHint, setShowSetupHint] = useState(false);
 
   const needsRequest = !store && (!request || request.status === 'rejected' || request.status === 'approved');
   const isPending = !store && request?.status === 'pending';
+  const hasFirstProductPublished = hasPublishedFirstStoreProduct(store, products);
+  const storeStatusPresentation = store ? getStoreStatusPresentation(store, hasFirstProductPublished) : null;
+
+  useEffect(() => {
+    if (!store) return;
+    const key = getStoreApprovalReminderKey(store.id);
+    let nextShouldShow = false;
+    if (hasFirstProductPublished) {
+      localStorage.removeItem(key);
+    } else {
+      let acceptedAt = 0;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          acceptedAt = Number(JSON.parse(raw)?.acceptedAt ?? 0);
+        } catch {
+          acceptedAt = 0;
+        }
+      }
+      nextShouldShow = !acceptedAt || Date.now() - acceptedAt >= STORE_APPROVAL_REMINDER_MS;
+    }
+    const timer = window.setTimeout(() => setShowApprovalReminder(nextShouldShow), 0);
+    return () => window.clearTimeout(timer);
+  }, [store, hasFirstProductPublished]);
+
+  const acknowledgeApprovalReminder = () => {
+    if (!store) return;
+    localStorage.setItem(
+      getStoreApprovalReminderKey(store.id),
+      JSON.stringify({ acceptedAt: Date.now() }),
+    );
+    setShowApprovalReminder(false);
+  };
 
   if (!roleAllowed) {
     return (
@@ -174,10 +315,33 @@ export function MyStoreClient({
             directly from fellow employees.
           </p>
         </div>
-        {store && (
-          <div className={`store-pill store-pill-${store.status}`}>
-            <Sparkles size={14} />
-            {store.status === 'active' ? 'Active' : store.status === 'paused' ? 'Paused' : 'Closed'}
+        {store && storeStatusPresentation && (
+          <div className="store-header-status">
+            <div className={`store-pill store-pill-${storeStatusPresentation.tone}`}>
+              <Sparkles size={14} />
+              {storeStatusPresentation.label}
+            </div>
+            {!hasFirstProductPublished && (
+              <div
+                className="store-hint-wrap"
+                onMouseEnter={() => setShowSetupHint(true)}
+                onMouseLeave={() => setShowSetupHint(false)}
+              >
+                <button
+                  type="button"
+                  className="store-hint-btn"
+                  aria-label="Learn how to activate the public store"
+                  onFocus={() => setShowSetupHint(true)}
+                  onBlur={() => setShowSetupHint(false)}
+                  onClick={() => setShowSetupHint((current) => !current)}
+                >
+                  <Info size={14} />
+                </button>
+                <div className={`store-hint-popover ${showSetupHint ? 'store-hint-popover-visible' : ''}`}>
+                  Add your first product so this store becomes visible in the employee Store section.
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -221,6 +385,13 @@ export function MyStoreClient({
           }}
           onOrdersChanged={(next) => setOrders(next)}
           onMessage={(tone, text) => setMessage({ tone, text })}
+        />
+      )}
+
+      {showApprovalReminder && store && !hasFirstProductPublished && (
+        <StoreApprovalReminderPopup
+          storeName={store.name}
+          onAccept={acknowledgeApprovalReminder}
         />
       )}
 
@@ -571,7 +742,14 @@ function StoreEditor({
         <ProductsTab store={store} products={products} onProductsChanged={onProductsChanged} onMessage={onMessage} />
       )}
       {tab === 'orders' && <OrdersTab orders={orders} onOrdersChanged={onOrdersChanged} onMessage={onMessage} />}
-      {tab === 'profile' && <ProfileTab store={store} onStoreUpdated={onStoreUpdated} onMessage={onMessage} />}
+      {tab === 'profile' && (
+        <ProfileTab
+          store={store}
+          hasPublishedFirstProduct={Boolean(store.first_product_published_at) || products.length > 0}
+          onStoreUpdated={onStoreUpdated}
+          onMessage={onMessage}
+        />
+      )}
       {tab === 'dashboard' && <DashboardTab products={products} orders={orders} />}
     </>
   );
@@ -601,7 +779,6 @@ function ProductsTab({
   const draftCost = toNonNegativeInt(draft.cost_dop);
   const draftProfit = toNonNegativeInt(draft.profit_dop);
   const draftTotal = draftCost + draftProfit;
-  const isSuspended = products.some((product) => (product.status === 'suspended'));
   const hasBlockedModerationFlow = products.some((product) => (product.status === 'suspended') || product.status === 'pending_review');
   const canCreate =
     !hasBlockedModerationFlow &&
@@ -745,85 +922,130 @@ function ProductsTab({
         </div>
       </div>
 
-      <div className="add-product">
-        {hasBlockedModerationFlow && (
-          <div className="my-store-status my-store-status-info" style={{ marginBottom: '1rem' }}>
-            <AlertCircle size={16} />
-            <span>
-              You cannot add new products while another product is suspended or pending review. Update the flagged product and wait for moderation.
-            </span>
-          </div>
-        )}
-        <div className="add-product-row">
-          <label className="form-field" style={{ flex: 2 }}>
-            <span>Name *</span>
-            <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Product name" />
-          </label>
-          <label className="form-field" style={{ flex: 1 }}>
-            <span>Costo de producción (DOP) *</span>
-            <input
-              className="input"
-              type="number"
-              min="0"
-              value={draft.cost_dop}
-              onChange={(e) => setDraft({ ...draft, cost_dop: e.target.value, price_dop: String(toNonNegativeInt(e.target.value) + toNonNegativeInt(draft.profit_dop)) })}
-              placeholder="60"
-            />
-          </label>
-          <label className="form-field" style={{ flex: 1 }}>
-            <span>Ganancia por producto (DOP) *</span>
-            <input
-              className="input"
-              type="number"
-              min="0"
-              value={draft.profit_dop}
-              onChange={(e) => setDraft({ ...draft, profit_dop: e.target.value, price_dop: String(toNonNegativeInt(draft.cost_dop) + toNonNegativeInt(e.target.value)) })}
-              placeholder="60"
-            />
-          </label>
-          <label className="form-field" style={{ flex: 1 }}>
-            <span>Total a cobrar (DOP)</span>
-            <input className="input" type="text" value={formatDop(draftTotal)} readOnly />
-          </label>
-          <label className="form-field" style={{ flex: 1 }}>
-            <span>Stock</span>
-            <input className="input" type="number" min="0" value={draft.stock} onChange={(e) => setDraft({ ...draft, stock: e.target.value })} />
-          </label>
-          <label className="form-field" style={{ flex: 1 }}>
-            <span>Category</span>
-            <input className="input" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="Optional" />
-          </label>
-        </div>
-        <div className="add-product-row">
-          <label className="form-field" style={{ flex: 2 }}>
-            <span>Image</span>
-            <ImageFileUpload value={draft.image_url} onChange={(url) => setDraft({ ...draft, image_url: url })} onUploadError={(msg) => onMessage('danger', msg)} placeholder="Image URL or PNG" />
-          </label>
-          <label className="form-field" style={{ flex: 3 }}>
-            <span>Description</span>
-            <input className="input" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Short description" />
-          </label>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button className="btn btn-primary" disabled={!canCreate || submitting} onClick={() => void create()}>
-              {submitting ? <Loader2 size={16} className="spinning" /> : <Plus size={16} />}
-              Add product
-            </button>
-          </div>
-        </div>
-      </div>
+      <SplitWorkspace
+        primaryLabel="Composer"
+        secondaryLabel={`Inventory (${products.length})`}
+        panelMaxHeight="calc(100vh - 15rem)"
+        className="editor-workspace"
+        primaryPanelClassName="product-workspace-panel product-workspace-primary"
+        secondaryPanelClassName="product-workspace-panel product-workspace-secondary"
+        primary={
+          <div className="workspace-stack" id="product-composer">
+            <div className="workspace-section-copy">
+              <span className="workspace-kicker">Create</span>
+              <h3 className="workspace-title">Product composer</h3>
+              <p className="workspace-copy">
+                Keep the action close to the draft so adding products never forces a long scroll loop.
+              </p>
+            </div>
 
-      {products.length === 0 ? (
-        <div className="empty-state">
-          <Package size={32} />
-          <p>No products yet. Add your first one above to start selling.</p>
-        </div>
-      ) : (
-        <div className="products-grid">
-          {products.map((product) => {
-            const isEditing = editingId === product.id;
-            const isSaving = savingId === product.id;
-            return (
-              <article key={product.id} className={`product-card ${!product.is_active || (product.status === 'suspended') ? 'product-card-inactive' : ''} ${(product.status === 'suspended') ? 'product-card-suspended' : ''}`}>
+            <StickyActionBar
+              summary={(
+                <div className="workspace-action-summary">
+                  <strong>{draft.name.trim() ? draft.name : 'New product draft'}</strong>
+                  <span>{formatDop(draftTotal)} · {toNonNegativeInt(draft.stock)} units</span>
+                </div>
+              )}
+              actions={(
+                <button className="btn btn-primary" disabled={!canCreate || submitting} onClick={() => void create()}>
+                  {submitting ? <Loader2 size={16} className="spinning" /> : <Plus size={16} />}
+                  Add product
+                </button>
+              )}
+              mobileActions={(
+                <button className="btn btn-primary btn-sm" disabled={!canCreate || submitting} onClick={() => void create()}>
+                  {submitting ? <Loader2 size={14} className="spinning" /> : <Plus size={14} />}
+                  Add
+                </button>
+              )}
+              topOffset="0.75rem"
+              bottomOffset="calc(env(safe-area-inset-bottom) + 5.6rem)"
+            />
+
+            <div className="add-product add-product-sticky">
+              {hasBlockedModerationFlow && (
+                <div className="my-store-status my-store-status-info">
+                  <AlertCircle size={16} />
+                  <span>
+                    You cannot add new products while another product is suspended or pending review. Update the flagged product and wait for moderation.
+                  </span>
+                </div>
+              )}
+              <div className="add-product-row">
+                <label className="form-field" style={{ flex: 2 }}>
+                  <span>Name *</span>
+                  <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Product name" />
+                </label>
+                <label className="form-field" style={{ flex: 1 }}>
+                  <span>Costo de producción (DOP) *</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    value={draft.cost_dop}
+                    onChange={(e) => setDraft({ ...draft, cost_dop: e.target.value, price_dop: String(toNonNegativeInt(e.target.value) + toNonNegativeInt(draft.profit_dop)) })}
+                    placeholder="60"
+                  />
+                </label>
+                <label className="form-field" style={{ flex: 1 }}>
+                  <span>Ganancia por producto (DOP) *</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    value={draft.profit_dop}
+                    onChange={(e) => setDraft({ ...draft, profit_dop: e.target.value, price_dop: String(toNonNegativeInt(draft.cost_dop) + toNonNegativeInt(e.target.value)) })}
+                    placeholder="60"
+                  />
+                </label>
+                <label className="form-field" style={{ flex: 1 }}>
+                  <span>Total a cobrar (DOP)</span>
+                  <input className="input" type="text" value={formatDop(draftTotal)} readOnly />
+                </label>
+                <label className="form-field" style={{ flex: 1 }}>
+                  <span>Stock</span>
+                  <input className="input" type="number" min="0" value={draft.stock} onChange={(e) => setDraft({ ...draft, stock: e.target.value })} />
+                </label>
+                <label className="form-field" style={{ flex: 1 }}>
+                  <span>Category</span>
+                  <input className="input" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="Optional" />
+                </label>
+              </div>
+              <div className="add-product-row">
+                <label className="form-field" style={{ flex: 2 }}>
+                  <span>Image</span>
+                  <ImageFileUpload value={draft.image_url} onChange={(url) => setDraft({ ...draft, image_url: url })} onUploadError={(msg) => onMessage('danger', msg)} placeholder="Image URL or PNG" />
+                </label>
+                <label className="form-field" style={{ flex: 3 }}>
+                  <span>Description</span>
+                  <input className="input" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Short description" />
+                </label>
+              </div>
+            </div>
+          </div>
+        }
+        secondary={
+          <div className="workspace-stack">
+            <div className="workspace-section-copy workspace-section-copy-tight">
+              <span className="workspace-kicker">Inventory</span>
+              <h3 className="workspace-title">Existing products</h3>
+              <p className="workspace-copy">
+                Edit or moderate items here while the composer stays pinned to its own workspace.
+              </p>
+            </div>
+
+            {products.length === 0 ? (
+              <div className="empty-state">
+                <Package size={32} />
+                <p>No products yet. Add your first one in the composer tab to start selling.</p>
+              </div>
+            ) : (
+              <div className="products-grid products-grid-compact">
+                {products.map((product) => {
+                  const isEditing = editingId === product.id;
+                  const isSaving = savingId === product.id;
+                  return (
+                    <article key={product.id} className={`product-card ${!product.is_active || (product.status === 'suspended') ? 'product-card-inactive' : ''} ${(product.status === 'suspended') ? 'product-card-suspended' : ''}`}>
                 {(product.status === 'suspended') && (
                   <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '10px 10px 0 0', padding: '0.6rem 0.9rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
@@ -927,17 +1149,25 @@ function ProductsTab({
                       <button className="btn btn-ghost btn-sm" onClick={() => startEdit(product)} disabled={isSaving}>
                         <PencilLine size={13} /> Edit
                       </button>
-                      <button className="btn btn-ghost btn-sm btn-danger-ghost" onClick={() => setDeleteConfirmId(product.id)} disabled={isSaving || isSuspended} title={isSuspended ? 'No puedes eliminar productos mientras hay uno suspendido' : undefined}>
+                      <button
+                        className="btn btn-ghost btn-sm btn-danger-ghost"
+                        onClick={() => setDeleteConfirmId(product.id)}
+                        disabled={isSaving || hasBlockedModerationFlow}
+                        title={hasBlockedModerationFlow ? 'No puedes eliminar productos mientras exista uno suspendido o en revisión' : undefined}
+                      >
                         <Trash2 size={13} /> Delete
                       </button>
                     </div>
                   </div>
                 )}
-              </article>
-            );
-          })}
-        </div>
-      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        }
+      />
 
       {deleteConfirmId && (
         <ConfirmDialog
@@ -955,6 +1185,46 @@ function ProductsTab({
         />
       )}
     </section>
+  );
+}
+
+function StoreApprovalReminderPopup({
+  storeName,
+  onAccept,
+}: {
+  storeName: string;
+  onAccept: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" style={{ zIndex: 10001 }}>
+      <div className="modal-card" style={{ maxWidth: '540px' }}>
+        <div className="modal-head">
+          <CheckCircle2 size={22} style={{ color: '#22c55e' }} />
+          <h3>Tienda aprobada</h3>
+        </div>
+        <div style={{ display: 'grid', gap: '0.95rem' }}>
+          <p className="text-muted" style={{ margin: 0, lineHeight: 1.7 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{storeName}</strong> fue aprobada y ya puedes terminar de configurarla.
+          </p>
+          <div className="store-approval-note">
+            <div className="store-approval-note-icon">
+              <Info size={16} />
+            </div>
+            <div>
+              <strong>Importante</strong>
+              <p>
+                Hasta que no subas tu primer producto, la tienda no aparecerá en el apartado de <em>Store</em> para los demás empleados.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-primary" onClick={onAccept}>
+            Aceptar
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1209,40 +1479,30 @@ function OrdersTab({
 // ============================================================
 function ProfileTab({
   store,
+  hasPublishedFirstProduct,
   onStoreUpdated,
   onMessage,
 }: {
   store: EmployeeStore;
+  hasPublishedFirstProduct: boolean;
   onStoreUpdated: (next: EmployeeStore) => void;
   onMessage: (tone: 'success' | 'danger' | 'info', text: string) => void;
 }) {
-  const [draft, setDraft] = useState({
-    name: store.name,
-    description: store.description ?? '',
-    category: store.category ?? '',
-    banner_image: store.banner_image ?? '',
-    logo_image: store.logo_image ?? '',
-    accent_color: store.accent_color ?? '#7c6cff',
-    status: store.status,
-    is_open: store.is_open ?? true,
-    operating_hours: (store.operating_hours as StoreOperatingHours | null) || {
-      monday: { isOpen: true, open: '09:00', close: '17:00' },
-      tuesday: { isOpen: true, open: '09:00', close: '17:00' },
-      wednesday: { isOpen: true, open: '09:00', close: '17:00' },
-      thursday: { isOpen: true, open: '09:00', close: '17:00' },
-      friday: { isOpen: true, open: '09:00', close: '17:00' },
-      saturday: { isOpen: false, open: '09:00', close: '17:00' },
-      sunday: { isOpen: false, open: '09:00', close: '17:00' },
-    },
-  });
+  const [draft, setDraft] = useState<StoreProfileDraft>(() => buildProfileDraft(store));
   const [saving, setSaving] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [activeSection, setActiveSection] = useState<StoreProfileSectionId>('profile-preview-section');
+  const baseDraft = useMemo(() => buildProfileDraft(store), [store]);
 
-  const daysArr = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  useEffect(() => {
+    setDraft(buildProfileDraft(store));
+  }, [store]);
+
+  const daysArr = [...STORE_DAYS];
   const visibleDays = [
     daysArr[carouselIndex % 7],
     daysArr[(carouselIndex + 1) % 7],
-    daysArr[(carouselIndex + 2) % 7]
+    daysArr[(carouselIndex + 2) % 7],
   ];
 
   const nextCarousel = () => {
@@ -1254,17 +1514,17 @@ function ProfileTab({
 
   const dirty = useMemo(() => {
     return (
-      draft.name.trim() !== store.name ||
-      draft.description !== (store.description ?? '') ||
-      draft.category !== (store.category ?? '') ||
-      draft.banner_image !== (store.banner_image ?? '') ||
-      draft.logo_image !== (store.logo_image ?? '') ||
-      draft.accent_color !== (store.accent_color ?? '#7c6cff') ||
-      draft.status !== store.status ||
-      draft.is_open !== store.is_open ||
-      JSON.stringify(draft.operating_hours) !== JSON.stringify(store.operating_hours)
+      draft.name.trim() !== baseDraft.name ||
+      draft.description !== baseDraft.description ||
+      draft.category !== baseDraft.category ||
+      draft.banner_image !== baseDraft.banner_image ||
+      draft.logo_image !== baseDraft.logo_image ||
+      draft.accent_color !== baseDraft.accent_color ||
+      draft.status !== baseDraft.status ||
+      draft.is_open !== baseDraft.is_open ||
+      JSON.stringify(draft.operating_hours) !== JSON.stringify(baseDraft.operating_hours)
     );
-  }, [draft, store]);
+  }, [baseDraft, draft]);
 
   const save = async () => {
     setSaving(true);
@@ -1295,6 +1555,15 @@ function ProfileTab({
     }
   };
 
+  const resetDraft = () => {
+    setDraft(buildProfileDraft(store));
+  };
+
+  const jumpToSection = (sectionId: StoreProfileSectionId) => {
+    setActiveSection(sectionId);
+    scrollToSection(sectionId);
+  };
+
   return (
     <section className="card editor-panel">
       <div className="editor-panel-head">
@@ -1302,126 +1571,241 @@ function ProfileTab({
           <h2 className="section-title">Store profile</h2>
           <p className="text-muted">Customize how your store appears to other employees.</p>
         </div>
-        <button className="btn btn-primary" disabled={!dirty || saving} onClick={() => void save()}>
-          {saving ? <Loader2 size={16} className="spinning" /> : <Save size={16} />}
-          Save changes
-        </button>
       </div>
 
-      <div
-        className="profile-preview"
-        style={{
-          background: draft.banner_image
-            ? `linear-gradient(180deg, rgba(5,8,16,0.2), rgba(5,8,16,0.82)), url(${draft.banner_image}) center/cover`
-            : `linear-gradient(135deg, ${draft.accent_color}22, rgba(5,8,16,0.65))`,
-          borderColor: `${draft.accent_color}55`,
-        }}
-      >
-        <div className="profile-preview-logo" style={{ background: draft.accent_color }}>
-          {draft.logo_image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={proxifyMediaUrl(draft.logo_image)} alt="" />
-          ) : (
-            <StoreIcon size={20} />
-          )}
-        </div>
-        <div className="profile-preview-text">
-          <strong>{draft.name || 'Untitled store'}</strong>
-          <span>{draft.category || 'Uncategorized'}</span>
-          {draft.description && <p>{draft.description}</p>}
+      <StickyActionBar
+        summary={(
+          <div className="workspace-action-summary">
+            <strong>{dirty ? 'Unsaved store changes' : 'Store profile synced'}</strong>
+            <span>{draft.status === 'paused' ? 'Hidden from employees' : 'Ready for your next update'}</span>
+          </div>
+        )}
+        actions={(
+          <>
+            <button className="btn btn-ghost btn-sm" disabled={!dirty || saving} onClick={resetDraft}>
+              Reset
+            </button>
+            <button className="btn btn-primary" disabled={!dirty || saving} onClick={() => void save()}>
+              {saving ? <Loader2 size={16} className="spinning" /> : <Save size={16} />}
+              Save changes
+            </button>
+          </>
+        )}
+        mobileActions={(
+          <>
+            <button className="btn btn-ghost btn-sm" disabled={!dirty || saving} onClick={resetDraft}>
+              Reset
+            </button>
+            <button className="btn btn-primary btn-sm" disabled={!dirty || saving} onClick={() => void save()}>
+              {saving ? <Loader2 size={14} className="spinning" /> : <Save size={14} />}
+              Save
+            </button>
+          </>
+        )}
+        topOffset="0.75rem"
+        bottomOffset="calc(env(safe-area-inset-bottom) + 5.6rem)"
+      />
+
+      <SectionJumpNav
+        items={[
+          { id: 'profile-preview-section', label: 'Preview' },
+          { id: 'profile-details-section', label: 'Branding' },
+          { id: 'profile-visibility-section', label: 'Visibility', tone: draft.status === 'paused' ? 'warning' : 'default' },
+          { id: 'profile-schedule-section', label: 'Schedule', tone: draft.status === 'scheduled' ? 'success' : 'default' },
+        ]}
+        activeId={activeSection}
+        onSelect={(id) => jumpToSection(id as StoreProfileSectionId)}
+      />
+
+      <div id="profile-preview-section" className="profile-section-block">
+        <div
+          className="profile-preview"
+          style={{
+            background: draft.banner_image
+              ? `linear-gradient(180deg, rgba(5,8,16,0.2), rgba(5,8,16,0.82)), url(${draft.banner_image}) center/cover`
+              : `linear-gradient(135deg, ${draft.accent_color}22, rgba(5,8,16,0.65))`,
+            borderColor: `${draft.accent_color}55`,
+          }}
+        >
+          <div className="profile-preview-logo" style={{ background: draft.accent_color }}>
+            {draft.logo_image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={proxifyMediaUrl(draft.logo_image)} alt="" />
+            ) : (
+              <StoreIcon size={20} />
+            )}
+          </div>
+          <div className="profile-preview-text">
+            <strong>{draft.name || 'Untitled store'}</strong>
+            <span>{draft.category || 'Uncategorized'}</span>
+            {draft.description && <p>{draft.description}</p>}
+          </div>
         </div>
       </div>
 
-      <div className="form-grid">
-        <label className="form-field">
-          <span>Store name</span>
-          <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        </label>
-        <label className="form-field">
-          <span>Category</span>
-          <input className="input" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="e.g. Accessories" />
-        </label>
-        <label className="form-field form-field-wide">
-          <span>Description</span>
-          <textarea className="input" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-        </label>
-        <label className="form-field">
-          <span>Banner image</span>
-          <ImageFileUpload value={draft.banner_image} onChange={(url) => setDraft({ ...draft, banner_image: url })} onUploadError={(msg) => onMessage('danger', msg)} placeholder="Banner Image URL" />
-        </label>
-        <label className="form-field">
-          <span>Logo image</span>
-          <ImageFileUpload value={draft.logo_image} onChange={(url) => setDraft({ ...draft, logo_image: url })} onUploadError={(msg) => onMessage('danger', msg)} placeholder="Logo Image URL" />
-        </label>
-        <label className="form-field">
-          <span>Accent color</span>
-          <input className="input" type="color" value={draft.accent_color} onChange={(e) => setDraft({ ...draft, accent_color: e.target.value })} />
-        </label>
-        <div className="form-field">
-          <span>Visibilidad</span>
-          <select
-            className="input"
-            value={draft.status === 'paused' ? 'paused' : 'visible'}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === 'paused') {
-                setDraft({ ...draft, status: 'paused' });
-              } else {
-                // Return to whatever operation mode was set before (active or scheduled)
-                setDraft({ ...draft, status: draft.status === 'paused' ? 'active' : draft.status });
-              }
-            }}
-          >
-            <option value="visible">Publicada (Visible para Todos)</option>
-            <option value="paused">Oculta (Solo Privada)</option>
-          </select>
-          <p className="field-helper" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }}>
-            {draft.status === 'paused' ? 'Nadie puede entrar a tu tienda.' : 'Tu tienda es visible en el listado principal.'}
-          </p>
+      <div id="profile-details-section" className="profile-section-block">
+        <div className="workspace-section-copy workspace-section-copy-tight">
+          <span className="workspace-kicker">Branding</span>
+          <h3 className="workspace-title">Store details and visual identity</h3>
+          <p className="workspace-copy">Update the essentials, images and accent color in one compact section.</p>
         </div>
 
-        <div className="form-field">
-          <span>Modo de Operación</span>
-          <select
-            className="input"
-            disabled={draft.status === 'paused'}
-            style={{
-              transition: 'all 0.2s ease',
-              ...(draft.status === 'paused'
-                ? { opacity: 0.5, borderColor: 'var(--border-subtle)' }
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Store name</span>
+            <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          </label>
+          <label className="form-field">
+            <span>Category</span>
+            <input className="input" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="e.g. Accessories" />
+          </label>
+          <label className="form-field form-field-wide">
+            <span>Description</span>
+            <textarea className="input" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+          </label>
+          <label className="form-field">
+            <span>Banner image</span>
+            <ImageFileUpload value={draft.banner_image} onChange={(url) => setDraft({ ...draft, banner_image: url })} onUploadError={(msg) => onMessage('danger', msg)} placeholder="Banner Image URL" />
+          </label>
+          <label className="form-field">
+            <span>Logo image</span>
+            <ImageFileUpload value={draft.logo_image} onChange={(url) => setDraft({ ...draft, logo_image: url })} onUploadError={(msg) => onMessage('danger', msg)} placeholder="Logo Image URL" />
+          </label>
+          <label className="form-field">
+            <span>Accent color</span>
+            <div className="accent-color-field">
+              <label className="accent-color-picker" style={{ background: draft.accent_color }}>
+                <Palette size={18} />
+                <input
+                  type="color"
+                  value={draft.accent_color}
+                  onChange={(e) => setDraft({ ...draft, accent_color: e.target.value })}
+                  aria-label="Choose an accent color"
+                />
+              </label>
+              <div className="accent-color-meta">
+                <strong>{draft.accent_color.toUpperCase()}</strong>
+                <span>This color is used across highlights, badges and the preview header.</span>
+                <div
+                  className="accent-color-bar"
+                  style={{ background: `linear-gradient(90deg, ${draft.accent_color}, ${draft.accent_color}40, rgba(255,255,255,0.12))` }}
+                />
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="profile-visibility-section" className="profile-section-block">
+        <div className="workspace-section-copy workspace-section-copy-tight">
+          <span className="workspace-kicker">Visibility</span>
+          <h3 className="workspace-title">Availability and store status</h3>
+          <p className="workspace-copy">Keep publication and operation decisions together so the store state is always clear.</p>
+        </div>
+
+        <div className="form-grid">
+          <div className="form-field form-field-wide">
+            <div className="field-heading">
+              <span>Visibilidad</span>
+              <span className="field-heading-note">Controla si la tienda aparece disponible para otros empleados.</span>
+            </div>
+            <div className="profile-option-grid profile-option-grid-two">
+              <button
+                type="button"
+                className={`profile-option-card ${draft.status !== 'paused' ? 'profile-option-card-active profile-option-card-success' : ''}`}
+                onClick={() => setDraft({ ...draft, status: draft.status === 'paused' ? 'active' : draft.status })}
+              >
+                <div className="profile-option-icon"><Eye size={18} /></div>
+                <div className="profile-option-copy">
+                  <strong>Publicada</strong>
+                  <p>Visible dentro del listado principal cuando ya tengas productos.</p>
+                </div>
+                {draft.status !== 'paused' && <Check size={16} className="profile-option-check" />}
+              </button>
+              <button
+                type="button"
+                className={`profile-option-card ${draft.status === 'paused' ? 'profile-option-card-active profile-option-card-danger' : ''}`}
+                onClick={() => setDraft({ ...draft, status: 'paused' })}
+              >
+                <div className="profile-option-icon"><EyeOff size={18} /></div>
+                <div className="profile-option-copy">
+                  <strong>Oculta</strong>
+                  <p>La tienda queda privada hasta que la vuelvas a publicar.</p>
+                </div>
+                {draft.status === 'paused' && <Check size={16} className="profile-option-check" />}
+              </button>
+            </div>
+            <p className="field-helper">
+              {draft.status === 'paused' ? 'Nadie podrá entrar a tu tienda mientras esté oculta.' : 'La publicación queda lista para verse cuando exista al menos un producto.'}
+            </p>
+          </div>
+
+          <div className="form-field form-field-wide">
+            <div className="field-heading">
+              <span>Modo de operación</span>
+              {!hasPublishedFirstProduct && (
+                <span className="inline-info-chip">
+                  <Info size={13} />
+                  Debes subir tu primer producto para que la tienda aparezca en Store.
+                </span>
+              )}
+            </div>
+            <div className="profile-option-grid profile-option-grid-three">
+              <button
+                type="button"
+                className={`profile-option-card ${draft.is_open && draft.status !== 'scheduled' && draft.status !== 'paused' ? 'profile-option-card-active profile-option-card-success' : ''}`}
+                disabled={draft.status === 'paused'}
+                onClick={() => setDraft({ ...draft, is_open: true, status: 'active' })}
+              >
+                <div className="profile-option-icon"><Sparkles size={18} /></div>
+                <div className="profile-option-copy">
+                  <strong>Abierta 24/7</strong>
+                  <p>Siempre disponible sin depender del horario.</p>
+                </div>
+                {draft.is_open && draft.status !== 'scheduled' && draft.status !== 'paused' && <Check size={16} className="profile-option-check" />}
+              </button>
+              <button
+                type="button"
+                className={`profile-option-card ${draft.is_open && draft.status === 'scheduled' ? 'profile-option-card-active profile-option-card-warning' : ''}`}
+                disabled={draft.status === 'paused'}
+                onClick={() => setDraft({ ...draft, is_open: true, status: 'scheduled' })}
+              >
+                <div className="profile-option-icon"><Clock3 size={18} /></div>
+                <div className="profile-option-copy">
+                  <strong>Programada</strong>
+                  <p>Sigue el horario configurado debajo.</p>
+                </div>
+                {draft.is_open && draft.status === 'scheduled' && <Check size={16} className="profile-option-check" />}
+              </button>
+              <button
+                type="button"
+                className={`profile-option-card ${!draft.is_open ? 'profile-option-card-active profile-option-card-danger' : ''}`}
+                disabled={draft.status === 'paused'}
+                onClick={() => setDraft({ ...draft, is_open: false })}
+              >
+                <div className="profile-option-icon"><Lock size={18} /></div>
+                <div className="profile-option-copy">
+                  <strong>Cerrada manualmente</strong>
+                  <p>Muestra la tienda como cerrada hasta que la reactives.</p>
+                </div>
+                {!draft.is_open && <Check size={16} className="profile-option-check" />}
+              </button>
+            </div>
+            <p className="field-helper">
+              {draft.status === 'paused'
+                ? 'Vuelve a publicar la tienda para habilitar el modo operativo.'
                 : !draft.is_open
-                ? { background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.4)', color: '#f87171' }
-                : draft.status === 'scheduled'
-                ? { background: 'rgba(234,179,8,0.08)', borderColor: 'rgba(234,179,8,0.4)', color: '#facc15' }
-                : { background: 'rgba(34,197,94,0.12)', borderColor: 'rgba(34,197,94,0.4)', color: '#4ade80' }
-              )
-            }}
-            value={!draft.is_open ? 'manual_closed' : (draft.status === 'scheduled' ? 'scheduled' : 'active')}
-            onChange={(e) => {
-              const val = e.target.value as 'manual_closed' | 'scheduled' | 'active';
-              if (val === 'manual_closed') {
-                setDraft({ ...draft, is_open: false });
-              } else if (val === 'scheduled') {
-                setDraft({ ...draft, is_open: true, status: 'scheduled' });
-              } else {
-                setDraft({ ...draft, is_open: true, status: 'active' });
-              }
-            }}
-          >
-            <option value="active" style={{ background: '#0f172a', color: '#4ade80' }}>● Abierta 24/7 (Siempre Disponible)</option>
-            <option value="scheduled" style={{ background: '#0f172a', color: '#facc15' }}>● Programada (Sigue tu Horario)</option>
-            <option value="manual_closed" style={{ background: '#0f172a', color: '#f87171' }}>● Cerrada (Manual / Override)</option>
-          </select>
-          <p className="field-helper" style={{ marginTop: '0.4rem', fontSize: '0.75rem' }}>
-            {draft.status === 'paused' ? 'Habilita la visibilidad para cambiar el modo.' : 
-             !draft.is_open ? 'La tienda mostrará un aviso de cerrada permanentemente.' :
-             draft.status === 'scheduled' ? 'Se abrirá automáticamente según las horas debajo.' :
-             'La tienda estará abierta todo el día, todos los días.'}
-          </p>
+                  ? 'La tienda aparecerá cerrada hasta que la abras manualmente.'
+                  : draft.status === 'scheduled'
+                    ? 'Se abrirá y cerrará automáticamente según el horario configurado.'
+                    : 'La tienda estará disponible todo el tiempo.'}
+            </p>
+          </div>
         </div>
       </div>
 
       <div 
+        id="profile-schedule-section"
         className="card" 
         style={{ 
           marginTop: '1rem', 
@@ -1682,14 +2066,90 @@ const styles = `
   .my-store-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
   .my-store-title { font-size: 1.875rem; font-weight: 800; margin: 0 0 0.5rem; }
   .my-store-subtitle { margin: 0; color: var(--text-secondary); line-height: 1.7; max-width: 72ch; }
+  .store-header-status { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; }
   .store-pill { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.9rem; border-radius: 999px; font-weight: 700; font-size: 0.82rem; }
   .store-pill-active { background: rgba(34,197,94,0.12); color: #22c55e; border: 1px solid rgba(34,197,94,0.28); }
   .store-pill-paused { background: rgba(245,158,11,0.12); color: #f59e0b; border: 1px solid rgba(245,158,11,0.28); }
   .store-pill-closed { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.28); }
+  .store-pill-scheduled { background: rgba(250,204,21,0.12); color: #facc15; border: 1px solid rgba(250,204,21,0.3); }
+  .store-pill-setup { background: rgba(96,165,250,0.12); color: #93c5fd; border: 1px solid rgba(96,165,250,0.28); }
+  .store-hint-wrap { position: relative; }
+  .store-hint-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: #93c5fd;
+    cursor: pointer;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  }
+  .store-hint-btn:hover,
+  .store-hint-btn:focus-visible {
+    transform: translateY(-1px);
+    border-color: rgba(96,165,250,0.35);
+    background: rgba(96,165,250,0.1);
+    outline: none;
+  }
+  .store-hint-popover {
+    position: absolute;
+    top: calc(100% + 0.55rem);
+    right: 0;
+    width: min(280px, 80vw);
+    padding: 0.8rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(96,165,250,0.2);
+    background: rgba(8, 12, 26, 0.96);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.55;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 5;
+  }
+  .store-hint-popover-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
   .my-store-status { display: flex; align-items: center; gap: 0.65rem; padding: 0.9rem 1rem; border-radius: 14px; position: relative; }
   .my-store-status-success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.22); }
   .my-store-status-danger { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.22); }
   .my-store-status-info { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.22); }
+  .store-approval-note {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.8rem;
+    padding: 0.95rem 1rem;
+    border-radius: 16px;
+    border: 1px solid rgba(96,165,250,0.18);
+    background: rgba(59,130,246,0.08);
+  }
+  .store-approval-note-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    color: #93c5fd;
+    background: rgba(96,165,250,0.12);
+  }
+  .store-approval-note strong {
+    display: block;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+  }
+  .store-approval-note p {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
 
   .carousel-nav-btn {
     background: rgba(255, 255, 255, 0.05);
@@ -1725,6 +2185,84 @@ const styles = `
   .form-field .input { font-weight: 500; color: var(--text-primary); }
   .form-field-wide { grid-column: 1 / -1; }
   .form-hint { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+  .field-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .field-heading-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .field-helper {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+  .inline-info-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.38rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(96,165,250,0.12);
+    border: 1px solid rgba(96,165,250,0.22);
+    color: #93c5fd;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+  .accent-color-field {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.9rem;
+    align-items: center;
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(255,255,255,0.03);
+  }
+  .accent-color-picker {
+    position: relative;
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    color: white;
+    overflow: hidden;
+    box-shadow: 0 16px 30px rgba(0,0,0,0.25);
+    cursor: pointer;
+  }
+  .accent-color-picker input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .accent-color-meta {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .accent-color-meta strong {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
+  }
+  .accent-color-meta span {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+  .accent-color-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
   .policy-check { display: flex; gap: 0.75rem; align-items: flex-start; padding: 1rem; border-radius: 12px; border: 1px solid var(--border-subtle); background: rgba(255,255,255,0.02); font-size: 0.88rem; line-height: 1.6; color: var(--text-secondary); }
   .policy-check input { margin-top: 0.2rem; width: 16px; height: 16px; flex-shrink: 0; }
   .form-actions { display: flex; justify-content: flex-end; }
@@ -1741,10 +2279,25 @@ const styles = `
   .editor-tabs { display: flex; gap: 0.75rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid var(--border-subtle); }
   .editor-panel { display: grid; gap: 1rem; }
   .editor-panel-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+  .editor-workspace { gap: 1rem; }
+  .workspace-stack { display: grid; gap: 1rem; min-height: 100%; align-content: start; }
+  .workspace-section-copy { display: grid; gap: 0.35rem; }
+  .workspace-section-copy-tight { margin-bottom: -0.1rem; }
+  .workspace-kicker { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #a5b4fc; }
+  .workspace-title { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--text-primary); }
+  .workspace-copy { margin: 0; font-size: 0.82rem; line-height: 1.6; color: var(--text-muted); }
+  .workspace-action-summary { display: grid; gap: 0.2rem; min-width: 0; }
+  .workspace-action-summary strong { color: var(--text-primary); font-size: 0.88rem; }
+  .workspace-action-summary span { color: var(--text-muted); font-size: 0.75rem; }
+  .product-workspace-panel { min-height: 0; }
+  .product-workspace-secondary .products-grid { grid-template-columns: 1fr; }
+  .profile-section-block { display: grid; gap: 0.9rem; }
   .add-product { display: grid; gap: 0.75rem; padding: 1rem; border-radius: 14px; border: 1px solid var(--border-subtle); background: rgba(124,108,255,0.04); }
+  .add-product-sticky { align-content: start; }
   .add-product-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
   .add-product-row .form-field { min-width: 0; }
   .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .products-grid-compact { align-content: start; }
   .product-card { border: 1px solid var(--border-subtle); border-radius: 18px; overflow: hidden; background: rgba(255,255,255,0.03); display: flex; flex-direction: column; transition: border-color 0.18s ease, transform 0.18s ease; }
   .product-card:hover { border-color: rgba(124,108,255,0.4); transform: translateY(-2px); }
   .product-card-inactive { opacity: 0.65; }
@@ -1774,6 +2327,50 @@ const styles = `
   .profile-preview-text strong { font-size: 1.25rem; }
   .profile-preview-text span { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
   .profile-preview-text p { margin: 0.35rem 0 0; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; max-width: 60ch; }
+  .profile-option-grid { display: grid; gap: 0.85rem; }
+  .profile-option-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .profile-option-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .profile-option-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.025);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  }
+  .profile-option-card:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: rgba(124,108,255,0.35);
+    background: rgba(255,255,255,0.04);
+  }
+  .profile-option-card:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .profile-option-card-active { border-color: rgba(124,108,255,0.35); background: rgba(124,108,255,0.08); }
+  .profile-option-card-success.profile-option-card-active { border-color: rgba(34,197,94,0.28); background: rgba(34,197,94,0.08); }
+  .profile-option-card-warning.profile-option-card-active { border-color: rgba(250,204,21,0.28); background: rgba(250,204,21,0.08); }
+  .profile-option-card-danger.profile-option-card-active { border-color: rgba(248,113,113,0.28); background: rgba(248,113,113,0.08); }
+  .profile-option-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: rgba(255,255,255,0.06);
+    color: var(--brand-primary-light);
+  }
+  .profile-option-copy { display: grid; gap: 0.2rem; min-width: 0; }
+  .profile-option-copy strong { color: var(--text-primary); font-size: 0.9rem; }
+  .profile-option-copy p { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.45; }
+  .profile-option-check { color: #c4b5fd; }
   .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
   .dashboard-metric { padding: 1rem; border-radius: 16px; border: 1px solid var(--border-subtle); background: rgba(255,255,255,0.03); }
   .dashboard-metric-disabled { opacity: 0.5; filter: grayscale(1); }
@@ -1809,6 +2406,10 @@ const styles = `
     .form-grid { grid-template-columns: 1fr; }
     .editor-stats { grid-template-columns: 1fr; }
     .add-product-row { flex-direction: column; }
+    .profile-option-grid-two,
+    .profile-option-grid-three { grid-template-columns: 1fr; }
+    .accent-color-field { grid-template-columns: 1fr; }
+    .workspace-title { font-size: 1rem; }
   }
 
   /* Schedule Bubbles (Modern UI) */

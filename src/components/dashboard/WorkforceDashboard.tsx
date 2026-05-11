@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Users, Package, CalendarDays, Zap, Clock, Store, LayoutList, Activity } from 'lucide-react';
+import { Users, Package, CalendarDays, Zap, Clock, Store, LayoutList } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
@@ -65,10 +65,16 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
     { href: '/moderator/store/orders', title: 'Store Ops', desc: 'Review orders and stock.', icon: <Package size={18} /> },
     { href: '/moderator/employee-stores', title: 'Stores', desc: 'Moderate employee storefronts.', icon: <Store size={18} /> },
   ];
+  const desktopStats = [
+    { href: '/moderator/users', label: 'Total Employees', value: stats.totalEmployees.toString(), icon: <Users size={16} />, sublabel: 'Registered Users', color: '#6d5dfc' },
+    { href: '/staging', label: 'Pending OT', value: stats.pendingOT.toString(), icon: <Clock size={16} />, sublabel: 'Awaiting Review', color: '#10b981' },
+    { href: '/moderator/employee-stores', label: 'Store Requests', value: stats.pendingStoreRequests.toString(), icon: <Store size={16} />, sublabel: 'Pending Approval', color: '#06b6d4' },
+    { href: '/moderator/users', label: 'Points Flow', value: stats.pointsDistributed.toLocaleString(), icon: <Zap size={16} />, sublabel: 'Total Economy', color: '#fbbf24' },
+  ];
 
   return (
     <div className="flex flex-col gap-5 md:gap-8 w-full max-w-[1600px] p-3 md:p-6">
-      <div className="md:hidden glass-card workforce-mobile-hero">
+      <div className="lg:hidden glass-card workforce-mobile-hero">
         <div className="workforce-mobile-kicker">Dashboard</div>
         <div className="workforce-mobile-headline">
           <span className="workforce-mobile-icon"><Zap size={18} /></span>
@@ -100,7 +106,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         </div>
       </div>
 
-      <div className="hidden md:flex glass-card bento-card--full justify-between items-center bg-gradient-to-r from-[rgba(109,93,252,0.1)] to-transparent border-l-4 border-l-[#6d5dfc]">
+      <div className="hidden lg:flex glass-card bento-card--full justify-between items-center bg-gradient-to-r from-[rgba(109,93,252,0.1)] to-transparent border-l-4 border-l-[#6d5dfc]">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
             <span className="p-2 bg-[#6d5dfc] rounded-xl shadow-[0_0_20px_rgba(109,93,252,0.4)]">
@@ -112,7 +118,7 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         </div>
       </div>
 
-      <div className="md:hidden workforce-mobile-actions">
+      <div className="lg:hidden workforce-mobile-actions">
         {mobileActions.map((action) => (
           <Link key={action.href} href={action.href} className="workforce-mobile-action">
             <span className="workforce-mobile-action-icon">{action.icon}</span>
@@ -134,41 +140,21 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
         </div>
       </div>
 
-      <div className="hidden md:grid bento-grid">
-        <StatCard
-          label="Total Employees"
-          value={stats.totalEmployees.toString()}
-          icon={<Users size={16} />}
-          sublabel="Registered Users"
-          color="#6d5dfc"
-          className="bento-card"
-        />
-        <StatCard
-          label="Pending OT"
-          value={stats.pendingOT.toString()}
-          icon={<Clock size={16} />}
-          sublabel="Awaiting Review"
-          color="#10b981"
-          className="bento-card"
-        />
-        <StatCard
-          label="Store Requests"
-          value={stats.pendingStoreRequests.toString()}
-          icon={<Store size={16} />}
-          sublabel="Pending Approval"
-          color="#06b6d4"
-          className="bento-card"
-        />
-        <StatCard
-          label="Points Flow"
-          value={stats.pointsDistributed.toLocaleString()}
-          icon={<Zap size={16} />}
-          sublabel="Total Economy"
-          color="#fbbf24"
-          className="bento-card"
-        />
+      <div className="hidden lg:grid bento-grid">
+        {desktopStats.map((card) => (
+          <StatCard
+            key={card.label}
+            href={card.href}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            sublabel={card.sublabel}
+            color={card.color}
+            className="bento-card"
+          />
+        ))}
 
-        <div className="bento-card--wide glass-card">
+        <div className="bento-card--full glass-card">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-[#6d5dfc]/20 rounded-lg text-[#6d5dfc]"><LayoutList size={20} /></div>
             <h2 className="text-xl font-black text-white">System Operations</h2>
@@ -178,29 +164,6 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
             <ToolLink href="/moderator/users" title="Employee Directory" desc="Manage teams, points and profiles." icon={<Users size={20} />} />
             <ToolLink href="/moderator/store/orders" title="Store Operations" desc="Manage inventory and fulfillment." icon={<Package size={20} />} />
             <ToolLink href="/moderator/employee-stores" title="Employee Stores" desc="Review and moderate user storefronts." icon={<Store size={20} />} />
-          </div>
-        </div>
-
-        <div className="bento-card glass-card flex flex-col">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-[#06b6d4]/20 rounded-lg text-[#06b6d4]"><Activity size={20} /></div>
-            <h2 className="text-xl font-black text-white">Health</h2>
-          </div>
-          <div className="flex-1 space-y-4">
-            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
-              <span className="text-sm font-bold text-slate-400">Active Stores</span>
-              <span className="text-xl font-black text-white">{stats.activeStores}</span>
-            </div>
-            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
-              <span className="text-sm font-bold text-slate-400">Total Decisions</span>
-              <span className={`text-xl font-black ${stats.pendingStoreRequests + stats.pendingOT > 10 ? 'text-red-500' : 'text-[#6d5dfc]'}`}>
-                {stats.pendingStoreRequests + stats.pendingOT}
-              </span>
-            </div>
-            <div className="mt-auto p-4 bg-[#6d5dfc]/10 rounded-2xl text-center">
-              <p className="text-[10px] font-black uppercase text-[#6d5dfc] tracking-widest">Operational Status</p>
-              <p className="text-sm text-white font-bold mt-1">System Optimal</p>
-            </div>
           </div>
         </div>
       </div>
@@ -376,7 +339,10 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
           color: white;
           font-size: 1rem;
         }
-        @media (max-width: 1024px) {
+        .stat-card-link {
+          text-decoration: none;
+        }
+        @media (max-width: 1279px) {
           .bento-grid { grid-template-columns: 1fr; }
         }
       `}</style>
@@ -384,16 +350,16 @@ export function WorkforceDashboard({ stats, userName }: WorkforceDashboardProps)
   );
 }
 
-function StatCard({ label, value, icon, sublabel, color, className }: { label: string; value: string; icon: ReactNode; sublabel: string; color: string; className?: string }) {
+function StatCard({ href, label, value, icon, sublabel, color, className }: { href: string; label: string; value: string; icon: ReactNode; sublabel: string; color: string; className?: string }) {
   return (
-    <div className={`glass-card ${className || ''} flex flex-col gap-4 border-l-4 transition-all hover:bg-white/5`} style={{ borderLeftColor: color }}>
+    <Link href={href} className={`glass-card ${className || ''} stat-card-link flex flex-col gap-4 border-l-4 transition-all hover:bg-white/5`} style={{ borderLeftColor: color }}>
       <div className="flex items-center gap-2.5 text-[10px] uppercase tracking-[0.15em] font-black text-slate-500">
         <span style={{ color }}>{icon}</span>
         {label}
       </div>
       <div className="text-4xl font-black text-white lining-nums">{value}</div>
       <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{sublabel}</div>
-    </div>
+    </Link>
   );
 }
 
