@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { assertModeratorAccess, persistRaffleRuntime } from '@/lib/raffles/server';
-import { parseRaffleRuntimeSetting } from '@/lib/raffles/runtime';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { assertModeratorAccess, persistRaffleRuntime } from '@backend/modules/raffles/application/raffle-service';
+import { parseRaffleRuntimeSetting } from '@backend/modules/raffles/domain/runtime';
 
 const RAFFLE_DELETED_KEY_PREFIX = 'raffle_deleted:';
 
@@ -73,7 +73,7 @@ export async function POST(
     if (insertError) throw new Error(insertError.message);
 
     // Restore the runtime
-    const runtime = parseRaffleRuntimeSetting({ key: `raffle_runtime:${raffleId}`, value: val.runtime as import('@/types/database').AppSettingValue });
+    const runtime = parseRaffleRuntimeSetting({ key: `raffle_runtime:${raffleId}`, value: val.runtime as import('@shared/contracts/database').AppSettingValue });
     if (runtime) {
       await persistRaffleRuntime(serviceClient, runtime);
     }

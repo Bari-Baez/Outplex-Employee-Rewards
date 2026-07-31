@@ -16,7 +16,7 @@
     "test": "node --test tests/architecture/*.test.mjs tests/smoke/*.test.mjs tests/unit/*.test.mjs",
     "test:architecture": "node --test tests/architecture/*.test.mjs",
     "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
-    "test:supabase": "node supabase/tests/run-contracts.mjs",
+    "test:supabase": "node database/tests/run-contracts.mjs",
     "quality:audit": "node scripts/check-audit-baseline.mjs",
     "quality:audit:tooling": "node scripts/check-tooling-audit.mjs",
     "quality:routes": "node scripts/api-route-inventory.mjs",

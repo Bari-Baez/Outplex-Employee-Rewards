@@ -1,9 +1,9 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { runCommunicationsMaintenance } from '@/lib/communications-server';
-import { NotificationsCenterClient } from './NotificationsCenterClient';
-import type { BroadcastNotification } from '@/types/database';
+import { runCommunicationsMaintenance } from '@backend/modules/communications/application/communications-service';
+import { NotificationsCenterClient } from '@frontend/modules/communications/ui/NotificationsCenterClient';
+import type { BroadcastNotification } from '@shared/contracts/database';
 
 export const metadata: Metadata = { title: 'Notifications' };
 

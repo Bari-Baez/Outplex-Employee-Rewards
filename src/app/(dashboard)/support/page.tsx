@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { SupportCenterClient } from './SupportCenterClient';
+import { createClient } from '@backend/platform/supabase/server';
+import { SupportCenterClient } from '@frontend/modules/support/ui/SupportCenterClient';
 import type { Metadata } from 'next';
-import type { SupportTicket, UserRole } from '@/types/database';
+import type { SupportTicket, UserRole } from '@shared/contracts/database';
 
 export const metadata: Metadata = { title: 'Support Center' };
 const SUPPORT_TICKET_SELECT = 'id,user_id,department,subject,message,status,created_at';

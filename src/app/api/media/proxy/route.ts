@@ -1,12 +1,12 @@
 import 'server-only';
 
-import { authorizeCapability } from '@/platform/auth/capabilities';
-import { getAppOrigin, getMediaProxyAllowedHosts } from '@/platform/config/server-env';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { fetchSafeBytes, SafeFetchError } from '@/platform/http/safe-fetch';
-import { errorResponse, rateLimitedResponse } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { authorizeCapability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin, getMediaProxyAllowedHosts } from '@backend/platform/config/server-env';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { fetchSafeBytes, SafeFetchError } from '@backend/platform/http/safe-fetch';
+import { errorResponse, rateLimitedResponse } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
 
 export const runtime = 'nodejs';
 

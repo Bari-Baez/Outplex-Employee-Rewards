@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import type { FormField } from '@/lib/forms/types';
-import { isFormModeratorRole } from '@/lib/forms/auth';
-import { generateFormExcel } from '@/lib/forms-excel';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import type { FormField } from '@backend/modules/forms/contracts/form';
+import { isFormModeratorRole } from '@backend/modules/forms/domain/authorization';
+import { generateFormExcel } from '@backend/modules/forms/infrastructure/excel-export';
 
 type Ctx = { params: Promise<{ formId: string }> };
 

@@ -1,46 +1,54 @@
 # Reglas de dependencia
 
-## Objetivo
+## Estructura física
 
-Mantener Outplex como monolito modular: un despliegue y una base de código, con dependencias dirigidas y límites de seguridad verificables.
+```text
+frontend/                    # presentación, estado y adaptadores de navegador
+backend/                     # dominio, aplicación, infraestructura y plataforma servidor
+database/                    # baseline, pruebas, desarrollo y archivo SQL
+shared/                      # contratos y utilidades puras
+src/app/                     # entrypoints obligatorios de Next.js
+supabase/migrations/         # historia forward-only desplegable
+```
+
+`src/app` no es una cuarta capa de negocio. Next.js exige que páginas, layouts y
+Route Handlers permanezcan allí; estos archivos actúan como composition roots y
+delegan en frontend o backend.
 
 ## Dirección permitida
 
 ```text
-presentación (app/components/hooks)
-        ↓
-aplicación (Route Handlers y orquestación)
-        ↓
-dominio / casos de uso (lib por capacidad)
-        ↓
-adaptadores (supabase, slack, google, archivos)
-        ↓
-sistemas externos
-```
+src/app/page|layout  -> frontend -> shared
+        |                  |
+        +-------------> backend/domain|contracts
 
-Los tipos y utilidades puras pueden ser consumidos por capas superiores. Una capa inferior no importa UI para completar su trabajo.
+src/app/api|auth|proxy -> backend -> shared -> proveedores
+
+supabase/migrations -> PostgreSQL/Supabase
+database -> evidencia y pruebas, nunca runtime
+```
 
 ## Reglas ejecutables
 
 | ID | Regla | Gate |
 |---|---|---|
-| DEP-001 | Un archivo con `use client` no importa módulos Supabase de servidor, `*-server`, `platform`, infraestructura de módulos, read models ni built-ins de Node. | `tests/architecture/dependency-boundaries.test.mjs` |
-| DEP-002 | Los módulos de servidor/datos, `platform` e infraestructura no importan `app`, `components` ni `hooks`. | Test de arquitectura |
-| DEP-003 | Un Route Handler no importa componentes ni hooks de navegador. | Test de arquitectura |
-| DEP-004 | Toda ruta o método API nuevo actualiza el inventario generado; no puede añadir drift OpenAPI fuera de la baseline explícita. | `scripts/api-route-inventory.mjs` |
-| DEP-005 | Los secretos permanecen en servidor; `NEXT_PUBLIC_*` se considera público. | Secret scan + revisión |
-| DEP-006 | Dominio/contratos no dependen de application/infrastructure; application no depende de infrastructure. | Test de arquitectura |
-| DEP-007 | `platform` contiene primitivas compartidas y no depende de módulos de producto ni UI. | Test de arquitectura |
+| DEP-001 | Un Client Component no importa plataforma, aplicación o infraestructura backend ni built-ins de Node. | `dependency-boundaries.test.mjs` |
+| DEP-002 | Backend no importa frontend ni entrypoints de `src/app`. | Test de arquitectura |
+| DEP-003 | Shared no depende de frontend ni backend. | Test de arquitectura |
+| DEP-004 | Route Handlers no importan frontend ni adaptadores de navegador. | Test de arquitectura |
+| DEP-005 | Los aliases retirados no reaparecen. | Test de arquitectura |
+| DEP-006 | Todo SQL vive en `database/` o en `supabase/migrations/`. | Test de arquitectura |
+| DEP-007 | Toda ruta o método API nuevo mantiene OpenAPI e inventario sin drift. | `api-route-inventory.mjs` |
+| DEP-008 | `SUPABASE_SERVICE_ROLE_KEY` pertenece exclusivamente al backend servidor. | Secret scan + test de frontera |
 
-## Reglas de diseño revisadas por PR
+## Criterios de revisión
 
-- Organizar nuevas capacidades bajo un nombre de dominio estable; evitar un `utils` genérico como punto de acoplamiento.
-- Mantener validación y autorización cerca de la entrada del caso de uso, no solo en la UI.
-- El acceso con `createServiceClient` debe estar precedido por una decisión de autorización auditable.
-- No reutilizar respuestas o cachés entre usuarios salvo que el dato esté clasificado como público/compartido.
-- Los adaptadores externos traducen errores y aplican timeouts/allowlists; el dominio no depende de SDKs de UI.
-- Los cambios de límites requieren actualizar esta página y, si cambian una decisión, crear un ADR.
-
-## Evolución
-
-El test inicial protege violaciones de alto impacto sin exigir una reestructuración masiva. Cuando un módulo se extraiga a una carpeta de dominio propia, se agrega primero una regla que describa la dirección deseada y después se mueve el código en cambios pequeños.
+- `frontend/` contiene UI, hooks, estado, proveedores y adaptadores browser-only.
+- `backend/modules/<capacidad>` usa `domain`, `contracts`, `application` e
+  `infrastructure` sólo cuando existe una responsabilidad real.
+- `backend/platform` contiene capacidades transversales de servidor y no UI.
+- `shared/` sólo contiene hojas puras que ambos lados pueden consumir.
+- `database/archive/` nunca se ejecuta; la única historia promovible está en
+  `supabase/migrations/` por requisito de Supabase GitHub Integration.
+- Los cambios de frontera requieren actualizar este documento, las pruebas y,
+  cuando cambien una decisión duradera, un ADR.

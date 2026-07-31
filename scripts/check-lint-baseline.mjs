@@ -9,11 +9,15 @@ const baselinePath = path.join(repositoryRoot, "docs", "quality", "eslint-warnin
 const eslintBin = path.join(repositoryRoot, "node_modules", "eslint", "bin", "eslint.js");
 
 const baseline = JSON.parse(await readFile(baselinePath, "utf8"));
-const result = spawnSync(process.execPath, [eslintBin, "src", "--format", "json"], {
+const result = spawnSync(
+  process.execPath,
+  [eslintBin, "src", "frontend", "backend", "shared", "--format", "json"],
+  {
   cwd: repositoryRoot,
   encoding: "utf8",
   maxBuffer: 32 * 1024 * 1024,
-});
+  },
+);
 
 if (result.error || result.status === 2 || !result.stdout.trim()) {
   console.error(result.stderr || result.error?.message || "ESLint did not return a report.");

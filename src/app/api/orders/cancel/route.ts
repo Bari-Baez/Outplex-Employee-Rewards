@@ -1,16 +1,16 @@
 import 'server-only';
 
-import type { StoreOrderMutationCode } from '@/modules/store/application/ports';
-import { cancelOrderInputSchema } from '@/modules/store/contracts/orders';
-import { createSupabaseStoreOrderRepository } from '@/modules/store/infrastructure/supabase-store-order-repository';
-import { authorizeCapability } from '@/platform/auth/capabilities';
-import { getAppOrigin } from '@/platform/config/server-env';
-import { hashIdempotentRequest, parseIdempotencyKey } from '@/platform/idempotency/guard';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
+import type { StoreOrderMutationCode } from '@backend/modules/store/application/ports';
+import { cancelOrderInputSchema } from '@backend/modules/store/contracts/orders';
+import { createSupabaseStoreOrderRepository } from '@backend/modules/store/infrastructure/supabase-store-order-repository';
+import { authorizeCapability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin } from '@backend/platform/config/server-env';
+import { hashIdempotentRequest, parseIdempotencyKey } from '@backend/platform/idempotency/guard';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
 
 const ERRORS: Record<StoreOrderMutationCode, { status: number; message: string }> = {
   forbidden: { status: 403, message: 'Forbidden' },

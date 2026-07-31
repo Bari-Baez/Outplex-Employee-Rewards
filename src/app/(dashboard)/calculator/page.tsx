@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Calculator, ChevronLeft } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentOTDateTime, shiftOTDate } from '@/lib/ot';
-import { EmployeeCompensationCalculator } from '@/app/(dashboard)/dashboard/EmployeeCompensationCalculator';
+import { createClient } from '@backend/platform/supabase/server';
+import { getCurrentOTDateTime, shiftOTDate } from '@backend/modules/ot/domain/schedule';
+import { EmployeeCompensationCalculator } from '@frontend/modules/dashboard/ui/EmployeeCompensationCalculator';
 
 export const metadata: Metadata = {
   title: 'Calculator',
@@ -54,7 +54,7 @@ export default async function CalculatorPage() {
 
   const claimedSlotsRaw = claimedSlotsResult.data ?? [];
   const claimedSlotIds = claimedSlotsRaw.map((slot) => slot.id);
-  const claimMetasMap: Record<string, import('@/lib/ot-claim-meta').OTClaimKind> = {};
+  const claimMetasMap: Record<string, import('@backend/modules/ot/domain/claim-kind').OTClaimKind> = {};
 
   if (claimedSlotIds.length > 0) {
     const { data: metaRows } = await supabase.rpc('get_my_ot_claim_metadata', {

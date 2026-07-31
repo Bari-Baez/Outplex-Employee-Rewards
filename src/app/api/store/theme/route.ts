@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { normalizeStoreThemeConfig, STORE_THEME_KEY } from '@/lib/store-helpers';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import type { StoreThemeConfig } from '@/types/database';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { normalizeStoreThemeConfig, STORE_THEME_KEY } from '@backend/modules/store/domain/catalog';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import type { StoreThemeConfig } from '@shared/contracts/database';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 async function getAuthorizedModerator() {
   const supabase = await createClient();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { getValidAccessToken } from '@/lib/google/oauth';
-import { importGoogleForm } from '@/lib/google/forms';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { getValidAccessToken } from '@backend/platform/integrations/google/oauth';
+import { importGoogleForm } from '@backend/modules/forms/infrastructure/google-forms';
 
 export async function POST(req: NextRequest) {
   try {

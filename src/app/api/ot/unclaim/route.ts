@@ -1,16 +1,16 @@
 import 'server-only';
 
-import { authorizeCapability } from '@/platform/auth/capabilities';
-import { getAppOrigin } from '@/platform/config/server-env';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
-import { unclaimOtSlot } from '@/modules/ot/application/claim-slot';
-import type { OtMutationCode } from '@/modules/ot/application/ports';
-import { unclaimOtSlotInputSchema } from '@/modules/ot/contracts/claim';
-import { createSupabaseOtClaimRepository } from '@/modules/ot/infrastructure/supabase-ot-claim-repository';
+import { authorizeCapability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin } from '@backend/platform/config/server-env';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
+import { unclaimOtSlot } from '@backend/modules/ot/application/claim-slot';
+import type { OtMutationCode } from '@backend/modules/ot/application/ports';
+import { unclaimOtSlotInputSchema } from '@backend/modules/ot/contracts/claim';
+import { createSupabaseOtClaimRepository } from '@backend/modules/ot/infrastructure/supabase-ot-claim-repository';
 
 const MAX_BODY_BYTES = 8 * 1024;
 

@@ -4,9 +4,9 @@ import {
   isModeratorOrderDeleteEligible,
   parseStoreOrderMeta,
   RECENT_ORDER_HISTORY_WINDOW_DAYS,
-} from '@/lib/store-helpers';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+} from '@backend/modules/store/domain/catalog';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 async function getAuthorizedModerator() {
   const supabase = await createClient();

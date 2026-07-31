@@ -2,11 +2,11 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { ArrowLeft, CalendarDays, TimerReset, User } from 'lucide-react';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { runCommunicationsMaintenance, normalizeAnnouncementRecord } from '@/lib/communications-server';
-import { announcementDurationLabel, formatCommunicationDate } from '@/lib/communications';
-import { AnnouncementRenderer } from '@/components/communications/AnnouncementRenderer';
-import type { CompanyAnnouncement, EmployeeAnnouncement } from '@/types/database';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { runCommunicationsMaintenance, normalizeAnnouncementRecord } from '@backend/modules/communications/application/communications-service';
+import { announcementDurationLabel, formatCommunicationDate } from '@backend/modules/communications/domain/announcements';
+import { AnnouncementRenderer } from '@frontend/modules/communications/ui/AnnouncementRenderer';
+import type { CompanyAnnouncement, EmployeeAnnouncement } from '@shared/contracts/database';
 
 export const metadata: Metadata = { title: 'Announcement detail' };
 

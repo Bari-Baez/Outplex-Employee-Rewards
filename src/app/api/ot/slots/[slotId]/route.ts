@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { doOTTimeRangesOverlap } from '@/lib/ot';
-import type { OTClaimKind } from '@/lib/ot-claim-meta';
-import { deleteOtClaimMetadata, setOtClaimMetadata } from '@/modules/ot/infrastructure/supabase-ot-metadata-repository';
-import { calcDuration, formatOTDate, formatTime, getShiftLabel, parseSpanishTime } from '@/lib/utils';
-import { canEditTool } from '@/lib/permissions';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { doOTTimeRangesOverlap } from '@backend/modules/ot/domain/schedule';
+import type { OTClaimKind } from '@backend/modules/ot/domain/claim-kind';
+import { deleteOtClaimMetadata, setOtClaimMetadata } from '@backend/modules/ot/infrastructure/supabase-ot-metadata-repository';
+import { calcDuration, formatOTDate, getShiftLabel, parseSpanishTime } from '@backend/modules/ot/domain/time';
+import { formatTime } from '@shared/utils/format';
+import { canEditTool } from '@backend/modules/access/domain/permissions';
 
 async function requireOTManagerEditor() {
   const supabase = await createClient();

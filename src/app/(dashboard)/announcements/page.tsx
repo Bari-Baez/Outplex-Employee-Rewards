@@ -1,9 +1,9 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { runCommunicationsMaintenance } from '@/lib/communications-server';
-import type { CompanyAnnouncement, EmployeeAnnouncement, Notification, User } from '@/types/database';
-import { AnnouncementsHubClient } from './AnnouncementsHubClient';
+import { runCommunicationsMaintenance } from '@backend/modules/communications/application/communications-service';
+import type { CompanyAnnouncement, EmployeeAnnouncement, Notification, User } from '@shared/contracts/database';
+import { AnnouncementsHubClient } from '@frontend/modules/communications/ui/AnnouncementsHubClient';
 
 export const metadata: Metadata = { title: 'Announcements' };
 

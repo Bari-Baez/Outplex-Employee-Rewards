@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
-import { createSupportTicket } from '@/modules/support/application/create-ticket';
-import { SupportApplicationError } from '@/modules/support/application/errors';
-import { createSupportTicketSchema } from '@/modules/support/contracts/ticket';
-import { SupabaseSupportTicketRepository } from '@/modules/support/infrastructure/supabase-support-repository';
-import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { createClient } from '@backend/platform/supabase/server';
+import { createSupportTicket } from '@backend/modules/support/application/create-ticket';
+import { SupportApplicationError } from '@backend/modules/support/application/errors';
+import { createSupportTicketSchema } from '@backend/modules/support/contracts/ticket';
+import { SupabaseSupportTicketRepository } from '@backend/modules/support/infrastructure/supabase-support-repository';
+import { readJsonObject, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);

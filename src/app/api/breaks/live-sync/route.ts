@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { processFileBuffer, sha256 } from '@/lib/breaks';
-import { createScheduleBatchAndSchedules } from '@/lib/breaks-server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { processFileBuffer, sha256 } from '@backend/modules/breaks/domain/schedule';
+import { createScheduleBatchAndSchedules } from '@backend/modules/breaks/application/schedule-service';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 /**
  * POST /api/breaks/live-sync

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient, createClient } from '@backend/platform/supabase/server';
 import ExcelJS from 'exceljs';
-import type { ScheduleVarianceRow } from '@/types/database';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import type { ScheduleVarianceRow } from '@shared/contracts/database';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 /** GET /api/breaks/report/export — generates Excel file with formula cells */
 export async function GET(req: NextRequest) {

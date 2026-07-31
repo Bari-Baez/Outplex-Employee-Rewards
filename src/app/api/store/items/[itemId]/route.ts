@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { revalidateCompanyStoreViews } from '@/lib/store-cache';
-import { getStoreItemMetaKey, parseStoreItemMeta } from '@/lib/store-helpers';
-import { notifyModeratorsOfLowStock, shouldNotifyLowStock } from '@/lib/store-notifications';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import type { StoreItemMeta } from '@/types/database';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { revalidateCompanyStoreViews } from '@backend/modules/store/application/cache';
+import { getStoreItemMetaKey, parseStoreItemMeta } from '@backend/modules/store/domain/catalog';
+import { notifyModeratorsOfLowStock, shouldNotifyLowStock } from '@backend/modules/store/application/notifications';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import type { StoreItemMeta } from '@shared/contracts/database';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 interface UpdateItemPayload {
   name?: string;

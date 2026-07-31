@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { DEFAULT_FORM_SETTINGS } from '@/lib/forms/types';
-import { isFormModeratorRole } from '@/lib/forms/auth';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { DEFAULT_FORM_SETTINGS } from '@backend/modules/forms/contracts/form';
+import { isFormModeratorRole } from '@backend/modules/forms/domain/authorization';
 
 export async function GET() {
   try {

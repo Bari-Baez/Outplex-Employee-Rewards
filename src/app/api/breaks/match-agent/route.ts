@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { manuallyMatchAgent } from '@/lib/breaks-server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createServiceClient } from '@backend/platform/supabase/server';
+import { manuallyMatchAgent } from '@backend/modules/breaks/application/schedule-service';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 export async function POST(req: NextRequest) {
   try {

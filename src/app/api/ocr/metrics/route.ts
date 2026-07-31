@@ -1,14 +1,14 @@
 import 'server-only';
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { authorizeCapability } from '@/platform/auth/capabilities';
-import { getAppOrigin, getOptionalServerEnv } from '@/platform/config/server-env';
-import { validateFile, type SafeFileKind } from '@/platform/http/file-validation';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { readMultipartFormData, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { authorizeCapability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin, getOptionalServerEnv } from '@backend/platform/config/server-env';
+import { validateFile, type SafeFileKind } from '@backend/platform/http/file-validation';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { readMultipartFormData, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
 
 export const maxDuration = 30;
 export const runtime = 'nodejs';

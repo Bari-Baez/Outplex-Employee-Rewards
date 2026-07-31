@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getCachedShellSharedSnapshot } from '@/lib/read-models/dashboard';
-import type { Notification, SupportTicket, User } from '@/types/database';
+import { createClient } from '@backend/platform/supabase/server';
+import { getCachedShellSharedSnapshot } from '@backend/modules/shell/application/shell-read-model';
+import type { Notification, SupportTicket, User } from '@shared/contracts/database';
 
 type ShellNotification = Notification & {
   sender?: Pick<User, 'id' | 'name' | 'avatar_url' | 'role'> | null;

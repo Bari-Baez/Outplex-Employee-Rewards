@@ -26,4 +26,4 @@ jobs:
           SUPABASE_TEST_PROJECT_REF: ${{ secrets.SUPABASE_TEST_PROJECT_REF }}
           SUPABASE_TEST_ALLOW_REMOTE: QA_REMOTE_ONLY
           SUPABASE_TEST_CONFIRM: RUN_DESTRUCTIVE_SUPABASE_TESTS
-        run: node supabase/tests/run-contracts.mjs
+        run: node database/tests/run-contracts.mjs

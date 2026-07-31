@@ -4,7 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 
 const policySource = await readFile(
-  new URL("../../src/modules/support/domain/ticket-policy.ts", import.meta.url),
+  new URL("../../backend/modules/support/domain/ticket-policy.ts", import.meta.url),
   "utf8",
 );
 const transpiledPolicy = ts.transpileModule(policySource, {

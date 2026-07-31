@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 
 /** GET /api/breaks/my-schedule — returns employee's schedule for today */
 export async function GET() {

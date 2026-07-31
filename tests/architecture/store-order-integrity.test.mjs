@@ -11,8 +11,8 @@ test('store mutation endpoints and their clients share the idempotency contract'
   const [checkoutRoute, cancelRoute, checkoutClient, cancelClient] = await Promise.all([
     read('src/app/api/store/checkout/route.ts'),
     read('src/app/api/orders/cancel/route.ts'),
-    read('src/app/(dashboard)/store/checkout/page.tsx'),
-    read('src/app/(dashboard)/orders/OrdersClient.tsx'),
+    read('frontend/modules/store/ui/CheckoutScreen.tsx'),
+    read('frontend/modules/store/ui/OrdersClient.tsx'),
   ]);
   assert.match(checkoutRoute, /parseIdempotencyKey\(request\)/);
   assert.match(cancelRoute, /parseIdempotencyKey\(request\)/);
@@ -27,7 +27,7 @@ test('store checkout and cancellation are database transactions with an outbox c
     read('src/app/api/store/checkout/route.ts'),
     read('src/app/api/orders/cancel/route.ts'),
     read('src/app/api/moderator/maintenance/cleanup-logs/route.ts'),
-    read('src/modules/store/infrastructure/outbox-handlers.ts'),
+    read('backend/modules/store/infrastructure/outbox-handlers.ts'),
   ]);
   assert.match(migration, /checkout_store_order_transactional/);
   assert.match(migration, /cancel_store_order_transactional/);

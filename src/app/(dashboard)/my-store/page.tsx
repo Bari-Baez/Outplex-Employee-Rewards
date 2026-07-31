@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { MyStoreClient } from './MyStoreClient';
-import type { Notification } from '@/types/database';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { MyStoreClient } from '@frontend/modules/store/ui/MyStoreClient';
+import type { Notification } from '@shared/contracts/database';
 
 export const metadata: Metadata = { title: 'My Store' };
 

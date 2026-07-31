@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getStoreItemMetaKey } from '@/lib/store-helpers';
-import { revalidateCompanyStoreViews } from '@/lib/store-cache';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { getStoreItemMetaKey } from '@backend/modules/store/domain/catalog';
+import { revalidateCompanyStoreViews } from '@backend/modules/store/application/cache';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 async function getAuthorizedModerator() {
   const supabase = await createClient();

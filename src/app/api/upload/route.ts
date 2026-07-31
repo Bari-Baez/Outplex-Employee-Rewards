@@ -1,16 +1,16 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
-import { createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { authorizeCapability, hasCapability, type Capability } from '@/platform/auth/capabilities';
-import { getAppOrigin } from '@/platform/config/server-env';
-import { validateFile, type SafeFileKind } from '@/platform/http/file-validation';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { readMultipartFormData, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse, rateLimitedResponse, withRequestId } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { authorizeCapability, hasCapability, type Capability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin } from '@backend/platform/config/server-env';
+import { validateFile, type SafeFileKind } from '@backend/platform/http/file-validation';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { readMultipartFormData, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse, withRequestId } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
 
 export const runtime = 'nodejs';
 

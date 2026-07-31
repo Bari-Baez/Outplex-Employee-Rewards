@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { EmployeeStoresQueueClient } from './EmployeeStoresQueueClient';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { EmployeeStoresQueueClient } from '@frontend/modules/store/ui/EmployeeStoresQueueClient';
 
 export const metadata: Metadata = { title: 'Employee Stores' };
 

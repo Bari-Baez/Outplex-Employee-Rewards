@@ -1,15 +1,15 @@
 import 'server-only';
 
 import { timingSafeEqual } from 'node:crypto';
-import { authorizeCapability } from '@/platform/auth/capabilities';
-import { getAppOrigin, getOptionalServerEnv } from '@/platform/config/server-env';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
-import { runPlatformMaintenance } from '@/platform/jobs/maintenance';
-import { dispatchOutboxBatch } from '@/platform/integrations/outbox/dispatcher';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
-import { storeOutboxHandlers } from '@/modules/store/infrastructure/outbox-handlers';
+import { authorizeCapability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin, getOptionalServerEnv } from '@backend/platform/config/server-env';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@backend/platform/http/responses';
+import { runPlatformMaintenance } from '@backend/platform/jobs/maintenance';
+import { dispatchOutboxBatch } from '@backend/platform/integrations/outbox/dispatcher';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
+import { storeOutboxHandlers } from '@backend/modules/store/infrastructure/outbox-handlers';
 
 export const runtime = 'nodejs';
 

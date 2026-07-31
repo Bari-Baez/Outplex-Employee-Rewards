@@ -3,13 +3,13 @@ import { File } from "node:buffer";
 import test from "node:test";
 import { loadTypeScriptModule } from "../helpers/load-typescript-module.mjs";
 
-const capabilities = await loadTypeScriptModule("src/platform/auth/capabilities.ts", {
-  removeRuntimeImports: ["@/lib/supabase/server"],
+const capabilities = await loadTypeScriptModule("backend/platform/auth/capabilities.ts", {
+  removeRuntimeImports: ["@backend/platform/supabase/server"],
 });
-const redirects = await loadTypeScriptModule("src/platform/http/redirects.ts");
-const fileValidation = await loadTypeScriptModule("src/platform/http/file-validation.ts");
-const requestBody = await loadTypeScriptModule("src/platform/http/request-body.ts");
-const safeFetch = await loadTypeScriptModule("src/platform/http/safe-fetch.ts");
+const redirects = await loadTypeScriptModule("backend/platform/http/redirects.ts");
+const fileValidation = await loadTypeScriptModule("backend/platform/http/file-validation.ts");
+const requestBody = await loadTypeScriptModule("backend/platform/http/request-body.ts");
+const safeFetch = await loadTypeScriptModule("backend/platform/http/safe-fetch.ts");
 
 test("authorization capability matrix denies unapproved role/capability combinations", () => {
   const roles = ["employee", "staff", "moderator", "moderator_a1", "moderator_b1", "admin"];

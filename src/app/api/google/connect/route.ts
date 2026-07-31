@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { getGoogleAuthUrl } from '@/lib/google/oauth';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { getGoogleAuthUrl } from '@backend/platform/integrations/google/oauth';
 import { randomUUID } from 'crypto';
 
 const NONCE_TTL_MS = 10 * 60 * 1000; // 10 minutes

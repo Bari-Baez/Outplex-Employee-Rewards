@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { StagingClient } from './StagingClient';
+import { StagingClient } from '@frontend/modules/ot/ui/StagingClient';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {

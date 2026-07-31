@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { assertModeratorAccess } from '@/lib/raffles/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { assertModeratorAccess } from '@backend/modules/raffles/application/raffle-service';
 
 export const RAFFLE_DELETED_KEY_PREFIX = 'raffle_deleted:';
 

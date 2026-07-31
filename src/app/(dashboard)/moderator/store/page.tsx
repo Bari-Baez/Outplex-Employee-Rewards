@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import type { StoreOperationsTab } from './renderStoreOperationsPage';
+import type { StoreOperationsTab } from '@/app/_composition/store-operations-page';
 
 export const metadata: Metadata = { title: 'Store Operations' };
 

@@ -1,5 +1,5 @@
 import type { Instrumentation } from 'next';
-import { writeOperationalEvent } from '@/platform/observability/operational-events';
+import { writeOperationalEvent } from '@backend/platform/observability/operational-events';
 
 const SAFE_METHOD = /^(?:DELETE|GET|HEAD|OPTIONS|PATCH|POST|PUT)$/;
 

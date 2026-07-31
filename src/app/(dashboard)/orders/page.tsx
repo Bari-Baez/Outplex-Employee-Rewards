@@ -1,7 +1,7 @@
-import { mergeOrdersWithMeta, STORE_ORDER_META_PREFIX } from '@/lib/store-helpers';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { mergeOrdersWithMeta, STORE_ORDER_META_PREFIX } from '@backend/modules/store/domain/catalog';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { OrdersClient } from './OrdersClient';
+import { OrdersClient } from '@frontend/modules/store/ui/OrdersClient';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Order History' };

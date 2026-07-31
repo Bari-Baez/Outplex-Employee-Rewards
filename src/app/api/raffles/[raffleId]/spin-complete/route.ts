@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { isModeratorRole } from '@/lib/auth/roles';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
 import {
   loadRaffleRuntime,
   persistRaffleRuntime,
   sendWinnerNotifications,
   upsertPrizeAssignment,
-} from '@/lib/raffles/server';
-import { WINNER_REVEAL_MS, type RaffleRuntimeState } from '@/lib/raffles/runtime';
+} from '@backend/modules/raffles/application/raffle-service';
+import { WINNER_REVEAL_MS, type RaffleRuntimeState } from '@backend/modules/raffles/domain/runtime';
 
 export async function POST(
   request: NextRequest,

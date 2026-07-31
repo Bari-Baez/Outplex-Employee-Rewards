@@ -1,9 +1,9 @@
 {
   "capturedAt": "2026-07-31",
-  "scope": "src",
-  "maximumWarnings": 78,
+  "scope": "src, frontend, backend, shared",
+  "maximumWarnings": 71,
   "rules": {
-    "@typescript-eslint/no-unused-vars": 68,
+    "@typescript-eslint/no-unused-vars": 61,
     "@next/next/no-img-element": 8,
     "react-hooks/exhaustive-deps": 2
   }

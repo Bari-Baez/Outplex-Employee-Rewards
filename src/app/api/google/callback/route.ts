@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { exchangeCodeForTokens, getGoogleUserEmail } from '@/lib/google/oauth';
-import { syncUserGoogleForms } from '@/lib/google/forms';
+import { createServiceClient } from '@backend/platform/supabase/server';
+import { exchangeCodeForTokens, getGoogleUserEmail } from '@backend/platform/integrations/google/oauth';
+import { syncUserGoogleForms } from '@backend/modules/forms/infrastructure/google-forms';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;

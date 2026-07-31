@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { formatOTDate, formatTime } from '@/lib/utils';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { formatOTDate } from '@backend/modules/ot/domain/time';
+import { formatTime } from '@shared/utils/format';
 
 export async function POST(
   _request: NextRequest,

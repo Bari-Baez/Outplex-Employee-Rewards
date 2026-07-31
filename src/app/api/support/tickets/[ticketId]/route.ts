@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
-import { SupportApplicationError } from '@/modules/support/application/errors';
-import { updateSupportTicketStatus } from '@/modules/support/application/update-ticket-status';
-import { supportTicketIdSchema, updateSupportTicketSchema } from '@/modules/support/contracts/ticket';
-import { SupabaseSupportTicketRepository } from '@/modules/support/infrastructure/supabase-support-repository';
-import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { createClient } from '@backend/platform/supabase/server';
+import { SupportApplicationError } from '@backend/modules/support/application/errors';
+import { updateSupportTicketStatus } from '@backend/modules/support/application/update-ticket-status';
+import { supportTicketIdSchema, updateSupportTicketSchema } from '@backend/modules/support/contracts/ticket';
+import { SupabaseSupportTicketRepository } from '@backend/modules/support/infrastructure/supabase-support-repository';
+import { readJsonObject, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
 
 export async function PATCH(
   request: Request,
