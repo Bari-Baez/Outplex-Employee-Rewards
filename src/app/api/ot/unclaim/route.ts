@@ -1,72 +1,81 @@
-import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { getOTClaimMetaKey } from '@/lib/ot-claim-meta';
+import 'server-only';
 
-const UNCLAIM_WINDOW_MS = 20 * 60 * 1000;
+import { authorizeCapability } from '@/platform/auth/capabilities';
+import { getAppOrigin } from '@/platform/config/server-env';
+import { isSameOriginRequest } from '@/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { unclaimOtSlot } from '@/modules/ot/application/claim-slot';
+import type { OtMutationCode } from '@/modules/ot/application/ports';
+import { unclaimOtSlotInputSchema } from '@/modules/ot/contracts/claim';
+import { createSupabaseOtClaimRepository } from '@/modules/ot/infrastructure/supabase-ot-claim-repository';
+
+const MAX_BODY_BYTES = 8 * 1024;
+
+const ERRORS: Record<OtMutationCode, { status: number; message: string }> = {
+  claim_changed: { status: 409, message: 'This OT slot changed while it was being released.' },
+  daily_claim_exists: { status: 409, message: 'An OT scheduling conflict was detected.' },
+  forbidden: { status: 403, message: 'Forbidden' },
+  invalid_claim_kind: { status: 400, message: 'Invalid OT request.' },
+  not_claimed: { status: 409, message: 'This OT slot is no longer claimed.' },
+  not_owner: { status: 403, message: 'You can only release your own OT slot.' },
+  slot_not_found: { status: 404, message: 'Slot not found.' },
+  slot_unavailable: { status: 409, message: 'This OT slot is unavailable.' },
+  unclaim_window_expired: { status: 409, message: 'The 20-minute unclaim window has already expired.' },
+  unavailable: { status: 503, message: 'OT service is temporarily unavailable.' },
+};
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const serviceClient = await createServiceClient();
+  const requestId = getRequestId(request);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    if (!isSameOriginRequest(request, getAppOrigin())) {
+      return errorResponse(requestId, 403, 'Forbidden');
+    }
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+    const authorization = await authorizeCapability('ot:claim');
+    if (!authorization.ok) {
+      return errorResponse(requestId, authorization.status, authorization.error);
+    }
 
-  const { slotId } = (await request.json()) as {
-    slotId?: string;
-  };
+    const rateLimit = await consumeRateLimit({
+      scope: 'ot:unclaim',
+      subject: authorization.profile.id,
+      limit: 10,
+      windowSeconds: 60,
+      requestId,
+    });
+    if (!rateLimit.allowed) {
+      return jsonResponse(
+        requestId,
+        { error: 'Too many requests. Please try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
+      );
+    }
 
-  if (!slotId) {
-    return NextResponse.json({ error: 'slotId is required' }, { status: 400 });
-  }
+    const parsed = unclaimOtSlotInputSchema.safeParse(await readJsonObject(request, MAX_BODY_BYTES));
+    if (!parsed.success) {
+      return errorResponse(requestId, 400, 'Invalid OT release request.');
+    }
 
-  const { data: slot, error } = await serviceClient
-    .from('ot_slots')
-    .select('id, claimed_by, claimed_at, status')
-    .eq('id', slotId)
-    .single();
-
-  if (error || !slot) {
-    return NextResponse.json({ error: 'Slot not found' }, { status: 404 });
-  }
-
-  if (slot.claimed_by !== user.id) {
-    return NextResponse.json({ error: 'You can only unclaim your own OT slot.' }, { status: 403 });
-  }
-
-  if (!slot.claimed_at) {
-    return NextResponse.json({ error: 'This OT slot does not have a claim timestamp.' }, { status: 400 });
-  }
-
-  const msSinceClaim = Date.now() - new Date(slot.claimed_at).getTime();
-  if (msSinceClaim > UNCLAIM_WINDOW_MS) {
-    return NextResponse.json(
-      { error: 'The 20-minute unclaim window has already expired.' },
-      { status: 400 },
+    const result = await unclaimOtSlot(
+      createSupabaseOtClaimRepository(),
+      authorization.profile.id,
+      parsed.data,
     );
+    if (!result.ok) {
+      const failure = ERRORS[result.code];
+      return errorResponse(requestId, failure.status, failure.message);
+    }
+
+    return jsonResponse(requestId, { data: result.slot, message: 'OT slot released successfully.' });
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    logServerError('api.ot.unclaim', requestId, error);
+    return errorResponse(requestId, 500, 'Unable to release the OT slot.');
   }
-
-  const { data: updated, error: updateError } = await serviceClient
-    .from('ot_slots')
-    .update({
-      status: 'available',
-      claimed_by: null,
-      claimed_at: null,
-    })
-    .eq('id', slotId)
-    .eq('claimed_by', user.id)
-    .select()
-    .single();
-
-  if (updateError || !updated) {
-    return NextResponse.json({ error: 'Unable to release the OT slot.' }, { status: 409 });
-  }
-
-  await serviceClient.from('app_settings').delete().eq('key', getOTClaimMetaKey(slotId));
-
-  return NextResponse.json({ data: updated, message: 'OT slot released successfully.' });
 }

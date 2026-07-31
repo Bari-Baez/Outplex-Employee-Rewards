@@ -9,7 +9,6 @@ import {
   STORE_THEME_KEY,
 } from '@/lib/store-helpers';
 import { getCurrentOTDateTime, shiftOTDate } from '@/lib/ot';
-import { getOTClaimMetaKey } from '@/lib/ot-claim-meta';
 import {
   persistRaffleRuntime,
   prepareRuntimeForCreate,
@@ -152,8 +151,7 @@ async function deletePresentationSettings(serviceClient: ServiceSupabaseClient) 
         key === STORE_THEME_KEY ||
         key.startsWith(STORE_ORDER_META_PREFIX) ||
         key.startsWith(STORE_ITEM_META_PREFIX) ||
-        key.startsWith(RAFFLE_RUNTIME_KEY_PREFIX) ||
-        key.startsWith('ot_claim_meta:'),
+        key.startsWith(RAFFLE_RUNTIME_KEY_PREFIX),
     );
 
   if (keysToDelete.length === 0) {
@@ -689,31 +687,30 @@ async function seedOT(serviceClient: ServiceSupabaseClient, users: SeedUserMap, 
         batch_id: publishedBatch.id,
       },
     ])
-    .select('id, claimed_by, date, start_time, end_time');
+    .select('id, claimed_by, claimed_at, date, start_time, end_time');
 
   if (slotError || !slots) {
     throw new Error(slotError?.message ?? 'Unable to seed OT slots.');
   }
 
-  const claimSettings = slots
+  const claimMetadata = slots
     .filter((slot) => slot.claimed_by)
     .map((slot, index) => ({
-      key: getOTClaimMetaKey(slot.id),
-      value: {
-        slotId: slot.id,
-        userId: slot.claimed_by,
-        claimKind: index % 2 === 0 ? 'scheduled_extension' : 'day_off',
-        claimedAt: shiftIso(now, { hours: -(index + 1) }),
-        date: slot.date,
-        startTime: slot.start_time,
-        endTime: slot.end_time,
-      },
+      slotId: slot.id,
+      userId: slot.claimed_by as string,
+      claimKind: index % 2 === 0 ? 'scheduled_extension' : 'day_off',
+      claimedAt: slot.claimed_at ?? shiftIso(now, { hours: -(index + 1) }),
     }));
 
-  if (claimSettings.length > 0) {
-    const { error: claimMetaError } = await serviceClient.from('app_settings').upsert(claimSettings, { onConflict: 'key' });
-    if (claimMetaError) {
-      throw new Error(claimMetaError.message);
+  for (const metadata of claimMetadata) {
+    const { data: stored, error: claimMetaError } = await serviceClient.rpc('set_ot_claim_metadata', {
+      p_slot_id: metadata.slotId,
+      p_user_id: metadata.userId,
+      p_claim_kind: metadata.claimKind,
+      p_claimed_at: metadata.claimedAt,
+    });
+    if (claimMetaError || stored !== true) {
+      throw new Error('Unable to seed OT claim metadata.');
     }
   }
 

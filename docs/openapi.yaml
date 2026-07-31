@@ -57,6 +57,8 @@ tags:
     description: Moderation tools for users, stores, and point balances
   - name: Notifications
     description: User notification management
+  - name: Observability
+    description: Bounded browser security and operational telemetry ingestion
   - name: Onboarding
     description: New-user onboarding flow
   - name: Orders
@@ -327,7 +329,7 @@ components:
           type: array
           items:
             type: object
-            description: Content block (type: text | image | slider | pdf)
+            description: "Content block (type: text | image | slider | pdf)"
         action:
           type: string
           enum: [draft, scheduled, published]
@@ -2828,13 +2830,11 @@ paths:
   /api/moderator/maintenance/cleanup-logs:
     post:
       tags: [Moderator]
-      summary: Purge old platform records
+      summary: Run bounded platform-runtime cleanup
       description: |
-        Deletes aged records by category:
-        - Activity logs older than 30 days
-        - Store orders older than 30 days
-        - Completed raffles older than 20 days
-        - Processed store requests older than 15 days
+        Deletes expired rate-limit buckets and idempotency records plus old
+        processed/dead outbox jobs. Each category is capped at 1,000 rows per run.
+        Requires an approved admin session or the configured cron bearer secret.
       security:
         - sessionCookie: []
       responses:
@@ -2848,13 +2848,68 @@ paths:
                   message:
                     type: string
                   purged:
-                    type: array
-                    items:
-                      type: string
+                    type: object
+                    required: [rateLimitBuckets, idempotencyKeys, outboxJobs]
+                    properties:
+                      rateLimitBuckets:
+                        type: integer
+                        minimum: 0
+                      idempotencyKeys:
+                        type: integer
+                        minimum: 0
+                      outboxJobs:
+                        type: integer
+                        minimum: 0
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          description: Maintenance rate limit exceeded
+
+  /api/observability/csp-report:
+    post:
+      tags: [Observability]
+      summary: Accept bounded Content Security Policy violation reports
+      description: |
+        Public browser-report endpoint. Accepts at most 32 KiB and records only
+        directive, disposition, and status code; document and blocked URLs,
+        source locations, samples, headers, and cookies are not retained.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/csp-report:
+            schema:
+              type: object
+              additionalProperties: true
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/reports+json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        '204':
+          description: Report accepted
+        '400':
+          description: Invalid report payload
+        '413':
+          description: Report body exceeds 32 KiB
+        '415':
+          description: Unsupported report content type
+        '429':
+          description: Report ingestion rate limit exceeded
+        '500':
+          description: Report could not be accepted
 
   # ═══════════════════════════════════════
   # NOTIFICATIONS
@@ -3040,6 +3095,16 @@ paths:
       description: Cancels a pending order within the 5-minute cancellation window and refunds points.
       security:
         - sessionCookie: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable key reused for retries of the same logical cancellation.
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$'
       requestBody:
         required: true
         content:
@@ -3770,9 +3835,19 @@ paths:
     post:
       tags: [Store]
       summary: Process store checkout
-      description: Validates cart, deducts points, reserves stock, and creates orders. Low-stock alerts fire automatically.
+      description: Atomically validates the cart, deducts points, reserves stock, creates one grouped order, and records outbox events.
       security:
         - sessionCookie: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Stable key reused for retries of the same logical checkout.
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$'
       requestBody:
         required: true
         content:
@@ -3783,6 +3858,8 @@ paths:
               properties:
                 cart:
                   type: array
+                  minItems: 1
+                  maxItems: 50
                   items:
                     type: object
                     required: [item, quantity]
@@ -3795,6 +3872,8 @@ paths:
                             format: uuid
                       quantity:
                         type: integer
+                        minimum: 1
+                        maximum: 100
       responses:
         '200':
           description: Checkout result
@@ -4299,6 +4378,34 @@ paths:
       responses:
         '200':
           description: Proxied Supabase response
+    options:
+      tags: [System]
+      summary: Proxy OPTIONS to Supabase API
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proxied Supabase preflight response
+    head:
+      tags: [System]
+      summary: Proxy HEAD to Supabase API
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proxied Supabase metadata response
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -4317,6 +4424,28 @@ paths:
           application/json:
             schema:
               type: object
+      responses:
+        '200':
+          description: Proxied Supabase response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [System]
+      summary: Proxy PUT to Supabase REST API
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: supabasePath
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
       responses:
         '200':
           description: Proxied Supabase response
@@ -4421,5 +4550,361 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Success'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Additional implemented routes captured by the route-contract gate.
+
+  /api/dashboard/shell:
+    get:
+      tags: [System]
+      summary: Load the authenticated dashboard shell snapshot
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: User-scoped notifications, support tickets, points, and shared shell data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notifications, tickets, pointsBalance, shared]
+                properties:
+                  notifications:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  tickets:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  pointsBalance:
+                    type: number
+                  shared:
+                    type: object
+                    additionalProperties: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/gif/search:
+    get:
+      tags: [System]
+      summary: Search or list trending GIFs for an authenticated user
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: GIF search results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {}
+                        title: {}
+                        gif:
+                          type: string
+                        tinygif:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: GIF provider is not configured
+
+  /api/media/proxy:
+    get:
+      tags: [System]
+      summary: Fetch bounded public media through the SSRF-safe proxy
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Proxied image, audio, video, PDF, or binary media
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Missing, invalid, or blocked URL
+        '413':
+          description: Upstream body exceeds the configured limit
+        '415':
+          description: Unsupported upstream media type
+        '416':
+          description: Invalid range header
+        '502':
+          description: Upstream network failure
+        '504':
+          description: Upstream timeout
+
+  /api/ocr:
+    post:
+      tags: [System]
+      summary: Extract bounded OT rows from an uploaded image
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OCR attempts and normalized rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attempts]
+                properties:
+                  attempts:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          description: Image or multipart body is too large
+        '415':
+          description: Expected multipart form data
+        '503':
+          description: OCR provider is unavailable or not configured
+
+  /api/ocr/metrics:
+    post:
+      tags: [System]
+      summary: Extract bounded performance metrics from an uploaded image
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Normalized metrics rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rows]
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          description: Image or multipart body is too large
+        '415':
+          description: Expected multipart form data
+        '503':
+          description: OCR provider is unavailable or not configured
+
+  /api/ot/export/preview:
+    get:
+      tags: [OT]
+      summary: Preview the filtered OT export rows
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: supervisorFilter
+          in: query
+          schema:
+            type: string
+        - name: employeeQuery
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Filtered export rows and effective date range
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rows, dateFrom, dateTo]
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  dateFrom:
+                    type: string
+                    format: date
+                  dateTo:
+                    type: string
+                    format: date
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/ot/export/xlsx:
+    get:
+      tags: [OT]
+      summary: Download the filtered OT report as XLSX
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: supervisorFilter
+          in: query
+          schema:
+            type: string
+        - name: employeeQuery
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: XLSX report
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/ot/slots/{slotId}/cancel:
+    post:
+      tags: [OT]
+      summary: Cancel an OT slot while preserving claim audit fields
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cancelled slot and confirmation message
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, message]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: true
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Slot is already cancelled
+
+  /api/store/client-data:
+    get:
+      tags: [Store]
+      summary: Load authenticated store favorites and shared review summary
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: User favorites and review summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [favoriteItemIds, summary]
+                properties:
+                  favoriteItemIds:
+                    type: array
+                    items:
+                      type: string
+                  summary:
+                    type: object
+                    additionalProperties: true
         '401':
           $ref: '#/components/responses/Unauthorized'

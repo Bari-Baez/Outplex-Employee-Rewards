@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import confetti from 'canvas-confetti';
 import { X } from 'lucide-react';
 
 type OverlayPhase = 'processing' | 'success';
@@ -37,7 +36,11 @@ export function PurchaseOverlay({
     }
 
     hasFiredConfettiRef.current = true;
-    const t = window.setTimeout(() => {
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      const confettiModule = await import('canvas-confetti').catch(() => null);
+      if (cancelled) return;
+
       const rect = successIconRef.current?.getBoundingClientRect();
       const origin = rect
         ? {
@@ -45,7 +48,7 @@ export function PurchaseOverlay({
             y: (rect.top + rect.height / 2) / Math.max(window.innerHeight, 1),
           }
         : { x: 0.5, y: 0.35 };
-      confetti({
+      confettiModule?.default({
         particleCount: 130,
         spread: 72,
         origin,
@@ -55,7 +58,10 @@ export function PurchaseOverlay({
       });
     }, 1250);
 
-    return () => window.clearTimeout(t);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
   }, [open, phase]);
 
   const ariaLabel = useMemo(() => {

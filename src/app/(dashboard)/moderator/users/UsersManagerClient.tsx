@@ -673,7 +673,7 @@ export function UsersManagerClient({
 
       if (file.name.match(/\.xlsx?$/i)) {
         transfer.setMessage('Parsing Excel...');
-        const ExcelJS = await import('exceljs');
+        const { default: ExcelJS } = await import('exceljs/dist/exceljs.min.js');
         const buffer = await file.arrayBuffer();
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(buffer);

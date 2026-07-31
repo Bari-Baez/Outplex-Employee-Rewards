@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { doOTTimeRangesOverlap } from '@/lib/ot';
-import { getOTClaimMetaKey, type OTClaimKind } from '@/lib/ot-claim-meta';
+import type { OTClaimKind } from '@/lib/ot-claim-meta';
+import { deleteOtClaimMetadata, setOtClaimMetadata } from '@/modules/ot/infrastructure/supabase-ot-metadata-repository';
 import { calcDuration, formatOTDate, formatTime, getShiftLabel, parseSpanishTime } from '@/lib/utils';
 import { canEditTool } from '@/lib/permissions';
 
@@ -107,7 +108,12 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  if (nextStatus === 'claimed' && claimKind !== 'day_off' && claimKind !== 'scheduled_extension') {
+  if (
+    nextStatus === 'claimed'
+    && claimKind !== 'day_off'
+    && claimKind !== 'scheduled_extension'
+    && claimKind !== 'recovery'
+  ) {
     return NextResponse.json(
       { error: 'Choose whether the OT is a day off OT or a schedule extension OT.' },
       { status: 400 },
@@ -189,23 +195,14 @@ export async function PATCH(
   }
 
   if (nextClaimedBy && claimKind) {
-    await serviceClient.from('app_settings').upsert(
-      {
-        key: getOTClaimMetaKey(slotId),
-        value: {
-          slotId,
-          userId: nextClaimedBy,
-          claimKind,
-          claimedAt: updatedSlot.claimed_at ?? new Date().toISOString(),
-          date: updatedSlot.date,
-          startTime: updatedSlot.start_time,
-          endTime: updatedSlot.end_time,
-        },
-      },
-      { onConflict: 'key' },
-    );
+    await setOtClaimMetadata({
+      slotId,
+      userId: nextClaimedBy,
+      claimKind,
+      claimedAt: updatedSlot.claimed_at ?? new Date().toISOString(),
+    });
   } else {
-    await serviceClient.from('app_settings').delete().eq('key', getOTClaimMetaKey(slotId));
+    await deleteOtClaimMetadata(slotId);
   }
 
   const previousSummary = formatSlotMessage(
@@ -278,7 +275,7 @@ export async function DELETE(
     return NextResponse.json({ error: updateError?.message ?? 'Unable to remove OT slot.' }, { status: 500 });
   }
 
-  await serviceClient.from('app_settings').delete().eq('key', getOTClaimMetaKey(slotId));
+  await deleteOtClaimMetadata(slotId);
 
   if (currentSlot.claimed_by) {
     await createNotification(

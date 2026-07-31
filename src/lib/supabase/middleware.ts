@@ -2,8 +2,12 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSupabaseBrowserEnv } from './env';
 
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+export async function updateSession(
+  request: NextRequest,
+  forwardedHeaders = request.headers,
+) {
+  const responseInit = { request: { headers: forwardedHeaders } };
+  let supabaseResponse = NextResponse.next(responseInit);
   const { url, anonKey } = getSupabaseBrowserEnv();
 
   const supabase = createServerClient(
@@ -18,7 +22,7 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = NextResponse.next(responseInit);
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );

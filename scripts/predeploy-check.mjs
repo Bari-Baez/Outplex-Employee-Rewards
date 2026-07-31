@@ -1,10 +1,13 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-// ── Env var validation ────────────────────────────────────────────────────────
-
-const INVALID_VALUES = new Set(['PENDIENTE', 'PLACEHOLDER', 'your_anon_key_here',
-  'your_service_role_key_here', 'YOUR_PROJECT_ID']);
+const INVALID_VALUES = new Set([
+  'pendiente',
+  'placeholder',
+  'your_anon_key_here',
+  'your_service_role_key_here',
+  'your_project_id',
+]);
 
 const REQUIRED_VARS = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -12,65 +15,93 @@ const REQUIRED_VARS = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'NEXT_PUBLIC_APP_URL',
   'ALLOWED_EMAIL_DOMAINS',
-  'DEV_BOOTSTRAP_TOKEN',
-  'DEV_PROMOTE_TOKEN',
 ];
 
-function isInvalid(key, val) {
-  if (!val) return 'missing';
-  if (INVALID_VALUES.has(val)) return `placeholder value "${val}"`;
-  if (key === 'NEXT_PUBLIC_APP_URL' && val.includes('localhost') && process.env.NODE_ENV === 'production') {
-    return 'points to localhost in production';
+function isInvalid(key, value) {
+  if (!value) return 'missing';
+  const normalized = value.trim().toLowerCase();
+  if (INVALID_VALUES.has(normalized) || normalized.includes('your_project_id')) {
+    return 'contains a placeholder value';
   }
-  if (key === 'NEXT_PUBLIC_SUPABASE_URL' && val.includes('YOUR_PROJECT_ID')) {
-    return 'still using example URL';
+  if (key === 'NEXT_PUBLIC_APP_URL') {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+        return 'must be an HTTP(S) origin without credentials, path, query, or fragment';
+      }
+      if (process.env.NODE_ENV === 'production' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname)) {
+        return 'points to localhost in production';
+      }
+    } catch {
+      return 'is not a valid URL';
+    }
   }
   return null;
 }
 
-function checkEnvVars() {
-  let failed = false;
-  // Load .env.local if running locally (CI will have real env)
-  let envLocal = {};
+function readLocalEnvironment() {
+  const environment = {};
   try {
     const raw = readFileSync('.env.local', 'utf8');
-    for (const line of raw.split('\n')) {
+    for (const line of raw.split(/\r?\n/)) {
       const match = line.match(/^([^#=]+)=(.*)$/);
-      if (match) envLocal[match[1].trim()] = match[2].trim();
+      if (!match) continue;
+      const rawValue = match[2].trim();
+      environment[match[1].trim()] = rawValue.replace(/^(['"])(.*)\1$/, '$2');
     }
   } catch {
-    // In CI/Vercel, env vars are injected directly — no .env.local file
+    // CI and hosted deployments inject environment variables directly.
   }
+  return environment;
+}
 
-  const env = { ...envLocal, ...process.env };
+function checkEnvironment() {
+  const environment = { ...readLocalEnvironment(), ...process.env };
+  let failed = false;
 
   process.stdout.write('\n[predeploy] Environment variable check:\n');
   for (const key of REQUIRED_VARS) {
-    const val = env[key];
-    const problem = isInvalid(key, val);
+    const problem = isInvalid(key, environment[key]);
     if (problem) {
-      process.stdout.write(`  ❌ ${key} — ${problem}\n`);
+      process.stdout.write(`  FAIL ${key}: ${problem}\n`);
       failed = true;
     } else {
-      const display = val.length > 40 ? val.slice(0, 40) + '…' : val;
-      process.stdout.write(`  ✅ ${key} = ${display}\n`);
+      // Never print values: even public configuration can expose deployment details.
+      process.stdout.write(`  OK   ${key} is configured\n`);
+    }
+  }
+
+  const conditionalSecrets = [
+    ['ALLOW_PUBLIC_DEMO_BOOTSTRAP', 'DEV_BOOTSTRAP_TOKEN'],
+    ['ALLOW_PUBLIC_DEMO_PROMOTE', 'DEV_PROMOTE_TOKEN'],
+  ];
+  for (const [flag, secret] of conditionalSecrets) {
+    if (environment[flag]?.trim().toLowerCase() !== 'true') continue;
+    const problem = isInvalid(secret, environment[secret]);
+    if (problem) {
+      process.stdout.write(`  FAIL ${secret}: ${problem} while ${flag}=true\n`);
+      failed = true;
+    } else {
+      process.stdout.write(`  OK   ${secret} is configured\n`);
     }
   }
 
   if (failed) {
-    process.stdout.write('\n[predeploy] ❌ Env check failed. Fix the variables above before deploying.\n');
+    process.stdout.write('\n[predeploy] Environment check failed.\n');
     process.exit(1);
   }
-  process.stdout.write('[predeploy] ✅ All env vars OK.\n');
+  process.stdout.write('[predeploy] Environment check passed.\n');
 }
 
-checkEnvVars();
-
-// ── Build checks ──────────────────────────────────────────────────────────────
+checkEnvironment();
 
 const checks = [
-  { label: 'Lint', command: 'npx', args: ['eslint', 'src', '--max-warnings', '9999'] },
+  { label: 'Secret scan', command: 'node', args: ['scripts/secret-scan.mjs'] },
+  { label: 'Lint baseline', command: 'node', args: ['scripts/check-lint-baseline.mjs'] },
   { label: 'Typecheck', command: 'npx', args: ['tsc', '--noEmit'] },
+  { label: 'Tests', command: 'node', args: ['scripts/run-tests-if-present.mjs'] },
+  { label: 'API inventory', command: 'node', args: ['scripts/api-route-inventory.mjs'] },
+  { label: 'Dependency audit', command: 'node', args: ['scripts/check-audit-baseline.mjs'] },
   { label: 'Build', command: 'npx', args: ['next', 'build'] },
 ];
 
@@ -79,17 +110,12 @@ function runCheck({ label, command, args }) {
     const isWindows = process.platform === 'win32';
     const resolvedCommand = isWindows ? 'cmd.exe' : command;
     const resolvedArgs = isWindows ? ['/d', '/s', '/c', [command, ...args].join(' ')] : args;
-    const child = spawn(resolvedCommand, resolvedArgs, {
-      stdio: 'inherit',
-      shell: false,
-    });
+    const child = spawn(resolvedCommand, resolvedArgs, { stdio: 'inherit', shell: false });
 
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${label} failed with exit code ${code ?? 'unknown'}.`));
+    child.once('error', (error) => reject(new Error(`${label} could not start: ${error.message}`)));
+    child.once('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${label} failed with exit code ${code ?? 'unknown'}.`));
     });
   });
 }
@@ -99,4 +125,4 @@ for (const check of checks) {
   await runCheck(check);
 }
 
-process.stdout.write('\n[predeploy] ✅ All checks passed. Ready to deploy.\n');
+process.stdout.write('\n[predeploy] All checks passed. Ready to deploy.\n');

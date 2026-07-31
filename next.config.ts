@@ -6,8 +6,8 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://outplexemplyeerewards
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co https://lh3.googleusercontent.com https://picsum.photos",
   `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://slack.com https://*.slack.com ${appUrl}`,
   "worker-src 'self' blob:",
@@ -18,6 +18,7 @@ const csp = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  "report-uri /api/observability/csp-report",
 ].join('; ');
 
 // ── Headers applied to every route ───────────────────────────────────────────
@@ -35,14 +36,16 @@ const securityHeaders = [
 const corsHeaders = [
   { key: 'Access-Control-Allow-Credentials', value: 'true' },
   { key: 'Access-Control-Allow-Origin',      value: appUrl },
-  { key: 'Access-Control-Allow-Methods',     value: 'GET,POST,PUT,DELETE,OPTIONS' },
-  { key: 'Access-Control-Allow-Headers',     value: 'Content-Type, Authorization' },
+  { key: 'Access-Control-Allow-Methods',     value: 'GET,POST,PUT,PATCH,DELETE,OPTIONS' },
+  { key: 'Access-Control-Allow-Headers',     value: 'Content-Type, Authorization, Idempotency-Key, X-Request-ID' },
+  { key: 'Access-Control-Expose-Headers',    value: 'X-Request-ID' },
+  { key: 'Vary',                             value: 'Origin' },
 ];
 
 const nextConfig: NextConfig = {
   // Prevent webpack from bundling these Node.js packages so __dirname
   // and require() resolve correctly at runtime in API routes.
-  serverExternalPackages: ['tesseract.js', 'tesseract.js-core'],
+  serverExternalPackages: ['exceljs', 'tesseract.js', 'tesseract.js-core'],
 
   images: {
     remotePatterns: [

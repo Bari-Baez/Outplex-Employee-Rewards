@@ -1,118 +1,171 @@
-import { createClient } from '@/lib/supabase/server';
-import { NextRequest, NextResponse } from 'next/server';
-import { getSlackUserProfile, getSlackTeamProfile } from '@/lib/slack/oauth';
+import 'server-only';
 
-function getAllowedDomains() {
-  const configuredDomains = process.env.ALLOWED_EMAIL_DOMAINS
-    ? process.env.ALLOWED_EMAIL_DOMAINS.split(',').map((domain) => domain.trim().toLowerCase()).filter(Boolean)
-    : [];
+import { NextResponse } from 'next/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { getSlackTeamProfile, getSlackUserProfile } from '@/lib/slack/oauth';
+import { getAllowedEmailDomains, getAppOrigin, getOptionalServerEnv } from '@/platform/config/server-env';
+import { safeRelativePath } from '@/platform/http/redirects';
+import { withRequestId } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
 
-  const defaults =
-    process.env.NODE_ENV === 'production'
-      ? ['outplex.com']
-      : ['outplex.com', 'outplex.test', 'gmail.com'];
+export const runtime = 'nodejs';
 
-  return [...new Set([...defaults, ...configuredDomains])];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
-  const providerError = searchParams.get('error');
-  if (providerError) {
-    const mapped = providerError === 'access_denied' ? 'access_denied' : 'auth_failed';
-    return NextResponse.redirect(`${origin}/login?error=${mapped}`);
+function getMetadataString(metadata: Record<string, unknown>, key: string, maxLength: number): string {
+  const value = metadata[key];
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function safeHttpUrl(value: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
   }
+}
 
-  const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/dashboard';
+function redirectTo(appOrigin: URL, path: string, requestId: string): NextResponse {
+  const response = NextResponse.redirect(new URL(path, appOrigin));
+  response.headers.set('Cache-Control', 'no-store');
+  return withRequestId(response, requestId);
+}
 
-  if (code) {
+function loginError(appOrigin: URL, error: string, requestId: string): NextResponse {
+  const target = new URL('/login', appOrigin);
+  target.searchParams.set('error', error);
+  return redirectTo(appOrigin, `${target.pathname}${target.search}`, requestId);
+}
+
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
+
+  try {
+    const appOrigin = getAppOrigin();
+    const searchParams = new URL(request.url).searchParams;
+    const providerError = searchParams.get('error');
+    if (providerError) {
+      return loginError(appOrigin, providerError === 'access_denied' ? 'access_denied' : 'auth_failed', requestId);
+    }
+
+    const code = searchParams.get('code');
+    if (!code || code.length > 4_096) {
+      return loginError(appOrigin, 'auth_failed', requestId);
+    }
+
+    const nextPath = safeRelativePath(searchParams.get('next'), '/dashboard');
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error || !data.user) {
+      return loginError(appOrigin, 'auth_failed', requestId);
+    }
 
-    if (!error && data.user) {
-      const slackUser = data.user;
-      const userMeta = slackUser.user_metadata;
-      const email = (slackUser.email || userMeta?.email || userMeta?.preferred_email || '') as string;
-      
-      const allowedDomains = getAllowedDomains();
-      const userDomain = email.split('@')[1]?.toLowerCase();
-      
-      if (!userDomain || !allowedDomains.includes(userDomain)) {
-        console.warn(`Blocked login attempt from unauthorized domain: ${userDomain}`);
-        await supabase.auth.signOut();
-        return NextResponse.redirect(`${origin}/login?error=unauthorized_domain`);
-      }
+    const authUser = data.user;
+    const serviceClient = await createServiceClient();
+    const metadata = isRecord(authUser.user_metadata) ? authUser.user_metadata : {};
+    const email = (
+      authUser.email
+      || getMetadataString(metadata, 'email', 320)
+      || getMetadataString(metadata, 'preferred_email', 320)
+    ).trim().toLowerCase();
+    const emailMatch = /^([^@\s]{1,64})@([^@\s]{1,253})$/.exec(email);
+    const userDomain = emailMatch?.[2]?.toLowerCase();
 
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('role, is_approved, employee_id')
-        .eq('id', slackUser.id)
-        .maybeSingle();
+    if (!userDomain || !getAllowedEmailDomains().has(userDomain)) {
+      await supabase.auth.signOut();
+      return loginError(appOrigin, 'unauthorized_domain', requestId);
+    }
 
-      // --- Port Employee ID from Slack ---
-      let employeeId = existingUser?.employee_id || null;
-      const slackId = userMeta?.provider_id || slackUser.id;
+    const { data: existingUser, error: profileError } = await serviceClient
+      .from('users')
+      .select('role, is_approved, employee_id, slack_id')
+      .eq('id', authUser.id)
+      .maybeSingle();
+    if (profileError) {
+      logServerError('auth.callback.profile', requestId, profileError);
+      await supabase.auth.signOut();
+      return loginError(appOrigin, 'auth_failed', requestId);
+    }
 
-      if (!employeeId) {
-        try {
-          const profile = await getSlackUserProfile(slackId);
-          if (profile?.fields) {
-            // Priority 1: Exact field ID from env
-            let fieldId = process.env.SLACK_EMPLOYEE_ID_FIELD_ID;
+    const providerId = getMetadataString(metadata, 'provider_id', 64);
+    const slackId = /^[A-Z][A-Z0-9]{1,31}$/.test(providerId)
+      ? providerId
+      : existingUser?.slack_id || authUser.id;
+    let employeeId = existingUser?.employee_id || null;
 
-            // Priority 2: Auto-discovery by label "Employee ID"
-            if (!fieldId) {
-              const teamProfile = await getSlackTeamProfile();
-              const targetField = teamProfile?.fields.find(f => 
-                f.label.toLowerCase().includes('employee id') || 
-                f.label.toLowerCase().includes('employee number')
-              );
-              if (targetField) fieldId = targetField.id;
-            }
+    if (!employeeId && /^[A-Z][A-Z0-9]{1,31}$/.test(slackId)) {
+      try {
+        const profile = await getSlackUserProfile(slackId);
+        if (profile?.fields && isRecord(profile.fields)) {
+          let fieldId = getOptionalServerEnv('SLACK_EMPLOYEE_ID_FIELD_ID');
+          if (fieldId && !/^[A-Za-z0-9_-]{1,80}$/.test(fieldId)) fieldId = null;
 
-            if (fieldId && profile.fields[fieldId]) {
-              employeeId = profile.fields[fieldId].value;
-            }
+          if (!fieldId) {
+            const teamProfile = await getSlackTeamProfile();
+            const targetField = teamProfile?.fields.find((field) => {
+              const label = field.label.toLowerCase();
+              return label.includes('employee id') || label.includes('employee number');
+            });
+            fieldId = targetField?.id ?? null;
           }
-        } catch (err) {
-          console.error('Error porting employee_id from Slack:', err);
+
+          const field = fieldId ? profile.fields[fieldId] : null;
+          const value = isRecord(field) && typeof field.value === 'string' ? field.value.trim() : '';
+          if (/^[A-Za-z0-9_-]{1,64}$/.test(value)) employeeId = value;
         }
+      } catch (slackError) {
+        logServerError('auth.callback.slack_profile', requestId, slackError);
       }
+    }
 
-      const { error: upsertError } = await supabase
-        .from('users')
-        .upsert(
-          {
-            id: slackUser.id,
-            slack_id: slackId,
-            name: userMeta?.full_name || userMeta?.name || email.split('@')[0] || 'Employee',
-            email: email,
-            avatar_url: userMeta?.avatar_url || userMeta?.picture || null,
-            employee_id: employeeId,
-            // Preserve existing role — never downgrade admin/moderator on re-login
-            role: existingUser?.role ?? 'employee',
-            // Preserve approval status — only false for brand-new users
-            is_approved: existingUser ? existingUser.is_approved : false,
-          },
-          {
-            onConflict: 'id',
-            ignoreDuplicates: false,
-          }
-        );
+    const displayName = (
+      getMetadataString(metadata, 'full_name', 120)
+      || getMetadataString(metadata, 'name', 120)
+      || emailMatch?.[1]
+      || 'Employee'
+    );
+    const avatarUrl = safeHttpUrl(
+      getMetadataString(metadata, 'avatar_url', 2_048)
+      || getMetadataString(metadata, 'picture', 2_048),
+    );
 
-      if (upsertError) {
-        console.error('Upsert profile error:', upsertError);
-      }
+    const { error: upsertError } = await serviceClient.from('users').upsert(
+      {
+        id: authUser.id,
+        slack_id: slackId,
+        name: displayName,
+        email,
+        avatar_url: avatarUrl,
+        employee_id: employeeId,
+        role: existingUser?.role ?? 'employee',
+        is_approved: existingUser?.is_approved ?? false,
+      },
+      { onConflict: 'id', ignoreDuplicates: false },
+    );
 
-      // Append a signal for the onboarding modal to skip the "returning visit" logout
-      const redirectUrl = new URL(`${origin}${next}`);
-      redirectUrl.searchParams.set('onboarding_auth', '1');
-      
-      return NextResponse.redirect(redirectUrl.toString());
+    if (upsertError) {
+      logServerError('auth.callback.upsert', requestId, upsertError);
+      await supabase.auth.signOut();
+      return loginError(appOrigin, 'auth_failed', requestId);
+    }
+
+    const redirectUrl = new URL(nextPath, appOrigin);
+    redirectUrl.searchParams.set('onboarding_auth', '1');
+    return redirectTo(appOrigin, `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`, requestId);
+  } catch (error) {
+    logServerError('auth.callback', requestId, error);
+    try {
+      return loginError(getAppOrigin(), 'auth_failed', requestId);
+    } catch {
+      return new NextResponse(null, {
+        status: 500,
+        headers: { 'Cache-Control': 'no-store', 'X-Request-ID': requestId },
+      });
     }
   }
-
-  // Auth error — redirect to login with error message
-  return NextResponse.redirect(`${origin}/login?error=auth_failed`);
 }

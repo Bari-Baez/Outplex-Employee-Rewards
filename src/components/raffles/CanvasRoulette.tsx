@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import confetti from 'canvas-confetti';
 import { Download, Trophy } from 'lucide-react';
 import { WHEEL_SPIN_MS } from '@/lib/raffles/runtime';
 
@@ -195,7 +194,8 @@ export function CanvasRoulette({
       setWheelStage('celebrating');
       setFlashStep(1);
 
-      confetti({ particleCount: 180, spread: 92, origin: { y: 0.58 } });
+      const confettiModule = await import('canvas-confetti').catch(() => null);
+      confettiModule?.default({ particleCount: 180, spread: 92, origin: { y: 0.58 } });
 
       for (let index = 1; index <= POST_SPIN_FLASH_STEPS; index += 1) {
         spinTimersRef.current.push(

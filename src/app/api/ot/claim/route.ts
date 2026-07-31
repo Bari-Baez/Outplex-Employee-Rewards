@@ -1,134 +1,81 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { NextRequest, NextResponse } from 'next/server';
-import { doOTTimeRangesOverlap } from '@/lib/ot';
-import { getOTClaimMetaKey, type OTClaimKind } from '@/lib/ot-claim-meta';
-import { formatOTDate, formatTime } from '@/lib/utils';
+import 'server-only';
 
-export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const serviceClient = await createServiceClient();
+import { authorizeCapability } from '@/platform/auth/capabilities';
+import { getAppOrigin } from '@/platform/config/server-env';
+import { isSameOriginRequest } from '@/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { claimOtSlot } from '@/modules/ot/application/claim-slot';
+import type { OtMutationCode } from '@/modules/ot/application/ports';
+import { claimOtSlotInputSchema } from '@/modules/ot/contracts/claim';
+import { createSupabaseOtClaimRepository } from '@/modules/ot/infrastructure/supabase-ot-claim-repository';
 
-  // Get current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+const MAX_BODY_BYTES = 8 * 1024;
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+const ERRORS: Record<OtMutationCode, { status: number; message: string }> = {
+  claim_changed: { status: 409, message: 'This slot changed while it was being claimed. Please try another.' },
+  daily_claim_exists: { status: 409, message: 'Only one OT slot per day is allowed.' },
+  forbidden: { status: 403, message: 'Forbidden' },
+  invalid_claim_kind: { status: 400, message: 'Select a valid OT type.' },
+  not_claimed: { status: 409, message: 'This OT slot is not claimed.' },
+  not_owner: { status: 403, message: 'You can only change your own OT slot.' },
+  slot_not_found: { status: 404, message: 'Slot not found.' },
+  slot_unavailable: { status: 409, message: 'This slot has already been claimed. Please select another one.' },
+  unclaim_window_expired: { status: 409, message: 'The OT release window has expired.' },
+  unavailable: { status: 503, message: 'OT service is temporarily unavailable.' },
+};
 
-  const { slotId, claimKind } = (await request.json()) as {
-    slotId?: string;
-    claimKind?: OTClaimKind;
-  };
-  if (!slotId) {
-    return NextResponse.json({ error: 'slotId is required' }, { status: 400 });
-  }
-  if (claimKind !== 'day_off' && claimKind !== 'scheduled_extension' && claimKind !== 'recovery') {
-    return NextResponse.json(
-      { error: 'Select the OT type: schedule extension, day off, or recovery hours.' },
-      { status: 400 },
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
+  try {
+    if (!isSameOriginRequest(request, getAppOrigin())) {
+      return errorResponse(requestId, 403, 'Forbidden');
+    }
+
+    const authorization = await authorizeCapability('ot:claim');
+    if (!authorization.ok) {
+      return errorResponse(requestId, authorization.status, authorization.error);
+    }
+
+    const rateLimit = await consumeRateLimit({
+      scope: 'ot:claim',
+      subject: authorization.profile.id,
+      limit: 10,
+      windowSeconds: 60,
+      requestId,
+    });
+    if (!rateLimit.allowed) {
+      return jsonResponse(
+        requestId,
+        { error: 'Too many requests. Please try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } },
+      );
+    }
+
+    const parsed = claimOtSlotInputSchema.safeParse(await readJsonObject(request, MAX_BODY_BYTES));
+    if (!parsed.success) {
+      return errorResponse(requestId, 400, 'Invalid OT claim request.');
+    }
+
+    const result = await claimOtSlot(
+      createSupabaseOtClaimRepository(),
+      authorization.profile.id,
+      parsed.data,
     );
+    if (!result.ok) {
+      const failure = ERRORS[result.code];
+      return errorResponse(requestId, failure.status, failure.message);
+    }
+
+    return jsonResponse(requestId, { data: result.slot, message: 'Slot claimed successfully!' });
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    logServerError('api.ot.claim', requestId, error);
+    return errorResponse(requestId, 500, 'Unable to claim the OT slot.');
   }
-
-  // Use service client to bypass RLS for the atomic claim
-  // First: check slot is still available
-  const { data: slot, error: fetchError } = await serviceClient
-    .from('ot_slots')
-    .select('id, status, claimed_by, date, start_time, end_time, shift_label')
-    .eq('id', slotId)
-    .single();
-
-  if (fetchError || !slot) {
-    return NextResponse.json({ error: 'Slot not found' }, { status: 404 });
-  }
-
-  if (slot.status !== 'available') {
-    return NextResponse.json(
-      { error: 'This slot has already been claimed. Please select another one.' },
-      { status: 409 }
-    );
-  }
-
-  const { data: sameDayClaims, error: sameDayClaimsError } = await serviceClient
-    .from('ot_slots')
-    .select('id, date, start_time, end_time, shift_label')
-    .eq('claimed_by', user.id)
-    .eq('status', 'claimed')
-    .eq('date', slot.date)
-    .neq('id', slotId);
-
-  if (sameDayClaimsError) {
-    return NextResponse.json(
-      { error: 'Unable to validate your OT schedule. Please try again.' },
-      { status: 500 },
-    );
-  }
-
-  const overlappingClaim = (sameDayClaims ?? []).find((claimedSlot) =>
-    doOTTimeRangesOverlap(
-      String(claimedSlot.start_time),
-      String(claimedSlot.end_time),
-      String(slot.start_time),
-      String(slot.end_time),
-    ),
-  );
-
-  if (overlappingClaim) {
-    return NextResponse.json(
-      {
-        error: `This OT overlaps with another OT you already reserved on ${formatOTDate(String(slot.date))}: ${formatTime(String(overlappingClaim.start_time))} - ${formatTime(String(overlappingClaim.end_time))}.`,
-      },
-      { status: 409 },
-    );
-  }
-
-  if ((sameDayClaims ?? []).length > 0) {
-    const existingSlot = sameDayClaims?.[0];
-    return NextResponse.json(
-      {
-        error: `You already reserved one OT slot for ${formatOTDate(String(slot.date))}. Only one OT slot per day is allowed. Existing OT: ${formatTime(String(existingSlot?.start_time ?? '00:00'))} - ${formatTime(String(existingSlot?.end_time ?? '00:00'))}.`,
-      },
-      { status: 409 },
-    );
-  }
-
-  // Atomic update: only succeeds if status is still 'available'
-  const { data: updated, error: claimError } = await serviceClient
-    .from('ot_slots')
-    .update({
-      status: 'claimed',
-      claimed_by: user.id,
-      claimed_at: new Date().toISOString(),
-    })
-    .eq('id', slotId)
-    .eq('status', 'available') // race-condition guard
-    .select()
-    .single();
-
-  if (claimError || !updated) {
-    return NextResponse.json(
-      { error: 'This slot was just claimed by someone else. Please try another.' },
-      { status: 409 }
-    );
-  }
-
-  const metaKey = getOTClaimMetaKey(slotId);
-  await serviceClient.from('app_settings').upsert(
-    {
-      key: metaKey,
-      value: {
-        slotId,
-        userId: user.id,
-        claimKind,
-        claimedAt: updated.claimed_at ?? new Date().toISOString(),
-        date: String(updated.date ?? slot.date),
-        startTime: String(updated.start_time ?? slot.start_time),
-        endTime: String(updated.end_time ?? slot.end_time),
-      },
-    },
-    { onConflict: 'key' },
-  );
-
-  return NextResponse.json({ data: updated, message: 'Slot claimed successfully!' });
 }

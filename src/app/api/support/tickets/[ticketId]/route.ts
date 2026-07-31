@@ -1,78 +1,51 @@
-import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import type { SupportDepartment, SupportTicketStatus } from '@/types/database';
-
-function isValidStatus(value: string): value is SupportTicketStatus {
-  return value === 'open' || value === 'in_progress' || value === 'resolved';
-}
+import { SupportApplicationError } from '@/modules/support/application/errors';
+import { updateSupportTicketStatus } from '@/modules/support/application/update-ticket-status';
+import { supportTicketIdSchema, updateSupportTicketSchema } from '@/modules/support/contracts/ticket';
+import { SupabaseSupportTicketRepository } from '@/modules/support/infrastructure/supabase-support-repository';
+import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ ticketId: string }> },
 ) {
+  const requestId = getRequestId(request);
   try {
-    const { ticketId } = await params;
+    const [{ ticketId }, body] = await Promise.all([
+      params,
+      readJsonObject(request, 4 * 1_024),
+    ]);
+    const parsedTicketId = supportTicketIdSchema.safeParse(ticketId);
+    const parsedBody = updateSupportTicketSchema.safeParse(body);
+    if (!parsedTicketId.success) {
+      return errorResponse(requestId, 400, 'Invalid ticket identifier.');
+    }
+    if (!parsedBody.success) {
+      return errorResponse(requestId, 400, 'Invalid ticket status.');
+    }
+
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return errorResponse(requestId, 401, 'Unauthorized');
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile || !['moderator_a1', 'moderator_b1', 'admin'].includes(profile.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = (await request.json()) as {
-      status?: string;
-    };
-
-    if (!body.status || !isValidStatus(body.status)) {
-      return NextResponse.json({ error: 'Invalid ticket status.' }, { status: 400 });
-    }
-
-    const { data: ticket } = await supabase
-      .from('support_tickets')
-      .select('department')
-      .eq('id', ticketId)
-      .single();
-
-    if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 });
-    }
-
-    const department = ticket.department as SupportDepartment;
-    if ((profile.role === 'moderator_a1' || profile.role === 'moderator_b1') && department !== 'moderator') {
-      return NextResponse.json({ error: 'Moderators can only manage moderator tickets.' }, { status: 403 });
-    }
-
-    const { data, error } = await supabase
-      .from('support_tickets')
-      .update({ status: body.status })
-      .eq('id', ticketId)
-      .select('*')
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json(
-        { error: error?.message ?? 'Unable to update ticket status.' },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json({ data });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unexpected support update error.' },
-      { status: 500 },
+    const repository = new SupabaseSupportTicketRepository(supabase);
+    const data = await updateSupportTicketStatus(
+      repository,
+      user.id,
+      parsedTicketId.data,
+      parsedBody.data.status,
     );
+    return jsonResponse(requestId, { data });
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    if (error instanceof SupportApplicationError) {
+      return errorResponse(requestId, error.status, error.publicMessage, { code: error.code });
+    }
+    logServerError('support.update-ticket', requestId, error);
+    return errorResponse(requestId, 500, 'Unable to update ticket status.');
   }
 }

@@ -1,0 +1,24 @@
+{
+  "capturedAt": "2026-07-31",
+  "scope": "npm audit including development dependencies",
+  "policy": "Known tooling-only findings are explicit; any new package, higher severity, or count fails CI.",
+  "maximum": {
+    "critical": 0,
+    "high": 10,
+    "moderate": 0,
+    "low": 1
+  },
+  "allowedPackages": {
+    "@babel/core": "low",
+    "@eslint/config-array": "high",
+    "@eslint/eslintrc": "high",
+    "brace-expansion": "high",
+    "eslint": "high",
+    "eslint-config-next": "high",
+    "eslint-plugin-import": "high",
+    "eslint-plugin-jsx-a11y": "high",
+    "eslint-plugin-react": "high",
+    "js-yaml": "high",
+    "minimatch": "high"
+  }
+}

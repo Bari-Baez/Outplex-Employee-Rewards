@@ -1,27 +1,27 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import 'server-only';
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { createClient } from '@/lib/supabase/server';
+import { authorizeCapability } from '@/platform/auth/capabilities';
+import { getAppOrigin, getOptionalServerEnv } from '@/platform/config/server-env';
+import { validateFile, type SafeFileKind } from '@/platform/http/file-validation';
+import { isSameOriginRequest } from '@/platform/http/redirects';
+import { readMultipartFormData, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { consumeRateLimit } from '@/platform/security/rate-limit';
 
 export const maxDuration = 30;
+export const runtime = 'nodejs';
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_MULTIPART_BYTES = MAX_IMAGE_BYTES + 512 * 1024;
+const IMAGE_KINDS = ['gif', 'jpeg', 'png', 'webp'] as const satisfies readonly SafeFileKind[];
 
 const METRICS_PROMPT = `You are reading a call-center performance / bonus metrics table image.
-Extract every agent row and return a JSON object.
-
-Output format:
-{
-  "rows": [
-    {"name": "Silegal Ramirez", "opx_id": "4548", "attendance": "80.63", "total_bonus": "15.00"}
-  ]
-}
-
-Rules:
-- "name": agent's full name. The column header is usually "Agent Name".
-- "opx_id": the numeric ID in the first or second column (labeled "OPX ID", "Emp ID", etc.). Use "" if not visible.
-- "attendance": attendance percentage as a plain number WITHOUT the % sign (e.g. "80.63", "100.00"). The column header contains "Attend" or "Attendance".
-- "total_bonus": the TOTAL bonus amount for that agent as a plain number WITHOUT the $ sign. This is the LAST bonus column, typically labeled "Total Bonus Voice", "Total Bonus", or the rightmost money column. If the value is "$15.00" write "15.00". If empty or zero, write "0".
-- Skip any "Grand Total" row and any header rows.
-- Skip rows where the agent name is empty.
-- Return ONLY valid JSON, no markdown fences or explanations.`;
+Extract every agent row and return a JSON object with a "rows" array.
+Each row must contain string fields: name, opx_id, attendance, and total_bonus.
+Use plain numbers without percent or currency signs. Skip header and Grand Total rows.
+Skip rows with an empty agent name. Return ONLY valid JSON.`;
 
 export interface MetricsOcrRow {
   name: string;
@@ -30,73 +30,117 @@ export interface MetricsOcrRow {
   total_bonus: string;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'OCR service not configured.', fallback: true }, { status: 503 });
-  }
-
-  let formData: FormData;
+function parseMetricsRows(text: string): MetricsOcrRow[] {
+  const rawObject = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
+  let parsed: unknown;
   try {
-    formData = await request.formData();
+    parsed = JSON.parse(rawObject);
   } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    return [];
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
 
-  const imageFile = formData.get('image');
-  if (!(imageFile instanceof File)) {
-    return NextResponse.json({ error: 'No image file provided' }, { status: 400 });
+  const rows = (parsed as Record<string, unknown>).rows;
+  if (!Array.isArray(rows)) return [];
+
+  const normalized: MetricsOcrRow[] = [];
+  for (const row of rows.slice(0, 500)) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+    const value = row as Record<string, unknown>;
+    const name = typeof value.name === 'string' ? value.name.trim().slice(0, 160) : '';
+    const opxId = typeof value.opx_id === 'string' || typeof value.opx_id === 'number'
+      ? String(value.opx_id).trim().slice(0, 32)
+      : '';
+    const attendance = typeof value.attendance === 'string' || typeof value.attendance === 'number'
+      ? String(value.attendance).replace(/[%,$]/g, '').trim().slice(0, 32)
+      : '';
+    const totalBonus = typeof value.total_bonus === 'string' || typeof value.total_bonus === 'number'
+      ? String(value.total_bonus).replace(/[$,]/g, '').trim().slice(0, 32)
+      : '';
+
+    if (name.length < 2) continue;
+    if (opxId && !/^\d{1,16}$/.test(opxId)) continue;
+    if (attendance && !/^\d{1,3}(?:\.\d{1,4})?$/.test(attendance)) continue;
+    if (totalBonus && ! /^\d{1,8}(?:\.\d{1,4})?$/.test(totalBonus)) continue;
+
+    normalized.push({ name, opx_id: opxId, attendance, total_bonus: totalBonus || '0' });
   }
+  return normalized;
+}
 
-  const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-  const mediaType = allowedTypes.includes(imageFile.type)
-    ? (imageFile.type as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif')
-    : 'image/png';
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
 
-  const buffer = await imageFile.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString('base64');
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-  let text = '';
   try {
-    const result = await model.generateContent([
-      { text: METRICS_PROMPT },
-      { inlineData: { mimeType: mediaType, data: base64 } },
-    ]);
-    text = result.response.text().trim();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const isQuota = /quota|429|RESOURCE_EXHAUSTED/i.test(message);
-    console.error('[OCR/metrics] Gemini error:', message);
-    return NextResponse.json(
-      {
-        error: isQuota
-          ? 'Daily OCR limit reached. Try again tomorrow.'
-          : 'Vision service temporarily unavailable.',
-        fallback: true,
-      },
-      { status: 503 },
-    );
-  }
-
-  let rows: MetricsOcrRow[] = [];
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as { rows?: MetricsOcrRow[] };
-      if (Array.isArray(parsed.rows)) {
-        rows = parsed.rows.filter((r) => r.name && r.name.trim().length > 1);
-      }
+    if (!isSameOriginRequest(request, getAppOrigin())) {
+      return errorResponse(requestId, 403, 'Forbidden');
     }
-  } catch {
-    // JSON parse failed — caller will fall back to Tesseract
-  }
 
-  return NextResponse.json({ rows, rawText: text });
+    const auth = await authorizeCapability('ocr:metrics');
+    if (!auth.ok) return errorResponse(requestId, auth.status, auth.error);
+
+    const rateLimit = await consumeRateLimit({
+      scope: 'ocr:metrics',
+      subject: auth.profile.id,
+      limit: 6,
+      windowSeconds: 60,
+      requestId,
+    });
+    if (!rateLimit.allowed) return rateLimitedResponse(requestId, rateLimit.retryAfterSeconds);
+
+    const apiKey = getOptionalServerEnv('GEMINI_API_KEY');
+    if (!apiKey) {
+      return errorResponse(requestId, 503, 'OCR service not configured.', { fallback: true });
+    }
+
+    const formData = await readMultipartFormData(request, MAX_MULTIPART_BYTES);
+    const imageFile = formData.get('image');
+    if (!(imageFile instanceof File)) {
+      return errorResponse(requestId, 400, 'No image file provided');
+    }
+    if (imageFile.size > MAX_IMAGE_BYTES) {
+      return errorResponse(requestId, 413, 'Image is too large (max 8MB)');
+    }
+
+    const image = await validateFile(imageFile, { maxBytes: MAX_IMAGE_BYTES, allowedKinds: IMAGE_KINDS });
+    if (!image) {
+      return errorResponse(requestId, 400, 'Unsupported or invalid image. Use PNG, JPEG, WebP, or GIF.');
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel(
+      {
+        model: 'gemini-2.0-flash',
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8_192 },
+      },
+      { timeout: 25_000 },
+    );
+
+    let text: string;
+    try {
+      const result = await model.generateContent([
+        { text: METRICS_PROMPT },
+        { inlineData: { mimeType: image.contentType, data: Buffer.from(image.bytes).toString('base64') } },
+      ]);
+      text = result.response.text().trim().slice(0, 256_000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      const isQuotaError = /quota|429|RESOURCE_EXHAUSTED/i.test(message);
+      logServerError('ocr.metrics.provider', requestId, new Error(isQuotaError ? 'Provider quota exceeded' : 'Provider request failed'));
+      return errorResponse(
+        requestId,
+        503,
+        isQuotaError ? 'Daily OCR limit reached. Try again later.' : 'Vision service temporarily unavailable.',
+        { fallback: true },
+      );
+    }
+
+    return jsonResponse(requestId, { rows: parseMetricsRows(text), rawText: text });
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    logServerError('ocr.metrics', requestId, error);
+    return errorResponse(requestId, 500, 'Unable to process OCR request', { fallback: true });
+  }
 }

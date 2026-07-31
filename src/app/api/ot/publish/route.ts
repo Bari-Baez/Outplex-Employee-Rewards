@@ -5,6 +5,7 @@ import type { CSVRow, BatchStatus } from '@/types/database';
 import { isModeratorRole } from '@/lib/auth/roles';
 import { enforceSectionAvailability } from '@/lib/availability/section-guard';
 import type { OTDateFormat } from '@/lib/utils';
+import { notifyOtSlotsPublished } from '@/platform/integrations/slack/notify';
 
 async function requireModeratorOrAdmin() {
   const supabase = await createClient();
@@ -161,15 +162,11 @@ export async function POST(request: NextRequest) {
 
   if (status === 'published') {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/slack/notify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchName: batch.name,
-          slotsCount: otSlots.length,
-          firstDate: sanitizedRows[0]?.date,
-          lastDate: sanitizedRows[sanitizedRows.length - 1]?.date,
-        }),
+      await notifyOtSlotsPublished({
+        batchName: batch.name,
+        slotsCount: otSlots.length,
+        firstDate: sanitizedRows[0]!.date,
+        lastDate: sanitizedRows[sanitizedRows.length - 1]!.date,
       });
     } catch {
       console.error('Failed to notify Slack');

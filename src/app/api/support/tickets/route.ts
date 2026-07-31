@@ -1,90 +1,42 @@
-import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import type { SupportDepartment, SupportTicket } from '@/types/database';
-
-const TICKET_COOLDOWN_MS = 5 * 60 * 60 * 1000;
-
-function isDepartment(value: string): value is SupportDepartment {
-  return value === 'it' || value === 'moderator';
-}
-
-function buildSupportSubject(department: SupportDepartment, message: string) {
-  const prefix = department === 'it' ? 'IT Support' : 'Moderator Support';
-  const normalized = message.replace(/\s+/g, ' ').trim();
-  return `${prefix}: ${normalized.slice(0, 72)}`;
-}
+import { createSupportTicket } from '@/modules/support/application/create-ticket';
+import { SupportApplicationError } from '@/modules/support/application/errors';
+import { createSupportTicketSchema } from '@/modules/support/contracts/ticket';
+import { SupabaseSupportTicketRepository } from '@/modules/support/infrastructure/supabase-support-repository';
+import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
 
 export async function POST(request: Request) {
+  const requestId = getRequestId(request);
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return errorResponse(requestId, 401, 'Unauthorized');
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = (await request.json()) as {
-      department?: string;
-      message?: string;
-    };
-
-    if (!body.department || !isDepartment(body.department)) {
-      return NextResponse.json({ error: 'Choose a valid support category.' }, { status: 400 });
-    }
-
-    const message = body.message?.trim();
-    if (!message) {
-      return NextResponse.json({ error: 'Write a message before sending your ticket.' }, { status: 400 });
-    }
-
-    const { data: lastTicket } = await supabase
-      .from('support_tickets')
-      .select('created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (lastTicket?.created_at) {
-      const lastTicketTime = new Date(lastTicket.created_at).getTime();
-      const msRemaining = TICKET_COOLDOWN_MS - (Date.now() - lastTicketTime);
-
-      if (msRemaining > 0) {
-        const hoursRemaining = Math.ceil(msRemaining / (60 * 60 * 1000));
-        return NextResponse.json(
-          {
-            error: `You can create another ticket in about ${hoursRemaining} hour(s).`,
-          },
-          { status: 429 },
-        );
-      }
-    }
-
-    const { data, error } = await supabase
-      .from('support_tickets')
-      .insert({
-        user_id: user.id,
-        department: body.department,
-        subject: buildSupportSubject(body.department, message),
-        message,
-        status: 'open',
-      })
-      .select('*')
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json(
-        { error: error?.message ?? 'Unable to create the support ticket.' },
-        { status: 500 },
+    const parsed = createSupportTicketSchema.safeParse(await readJsonObject(request, 8 * 1_024));
+    if (!parsed.success) {
+      const departmentInvalid = parsed.error.issues.some((issue) => issue.path[0] === 'department');
+      return errorResponse(
+        requestId,
+        400,
+        departmentInvalid
+          ? 'Choose a valid support category.'
+          : 'Write a message before sending your ticket.',
       );
     }
 
-    return NextResponse.json({ data: data as SupportTicket });
+    const repository = new SupabaseSupportTicketRepository(supabase);
+    const data = await createSupportTicket(repository, user.id, parsed.data);
+    return jsonResponse(requestId, { data });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unexpected error while creating the support ticket.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    if (error instanceof SupportApplicationError) {
+      return errorResponse(requestId, error.status, error.publicMessage, { code: error.code });
+    }
+    logServerError('support.create-ticket', requestId, error);
+    return errorResponse(requestId, 500, 'Unable to create the support ticket.');
   }
 }

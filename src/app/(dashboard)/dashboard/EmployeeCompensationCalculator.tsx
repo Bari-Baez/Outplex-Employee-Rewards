@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Papa from 'papaparse';
 import {
   CalendarRange,
   Calculator,
@@ -464,6 +463,7 @@ async function buildProcessedMetricsImage(file: File, mode: OcrImageMode) {
 
 async function parseCsvMetricsFile(file: File, opts?: { onProgress?: (pct: number) => void }) {
   const text = await readFileAsTextWithProgress(file, { onProgress: opts?.onProgress });
+  const { default: Papa } = await import('papaparse');
   return new Promise<ImportedMetricsRow[]>((resolve, reject) => {
     Papa.parse<Record<string, string>>(text, {
       header: true,
