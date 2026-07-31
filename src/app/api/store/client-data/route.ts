@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getCachedStoreReviewSummary } from '@/lib/read-models/store';
+import { createClient } from '@backend/platform/supabase/server';
+import { getCachedStoreReviewSummary } from '@backend/modules/store/application/read-models';
 
 export async function GET() {
   try {

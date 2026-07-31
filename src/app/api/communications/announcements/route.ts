@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { normalizeAnnouncementBlocks } from '@/lib/communications';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createServiceClient } from '@backend/platform/supabase/server';
+import { normalizeAnnouncementBlocks } from '@backend/modules/communications/domain/announcements';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 import {
   buildAnnouncementExpiry,
   normalizeAnnouncementDuration,
@@ -9,7 +9,7 @@ import {
   requireModerator,
   resolveAnnouncementStatus,
   runCommunicationsMaintenance,
-} from '@/lib/communications-server';
+} from '@backend/modules/communications/application/communications-service';
 
 interface AnnouncementPayload {
   title?: string;

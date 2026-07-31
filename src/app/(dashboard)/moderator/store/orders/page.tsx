@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { renderStoreOperationsPage } from '../renderStoreOperationsPage';
+import { renderStoreOperationsPage } from '@/app/_composition/store-operations-page';
 
 export const metadata: Metadata = { title: 'Store Operations · Orders' };
 
@@ -10,4 +10,3 @@ export default async function StoreOperationsOrdersPage({
 }) {
   return renderStoreOperationsPage({ searchParams, initialTab: 'orders' });
 }
-

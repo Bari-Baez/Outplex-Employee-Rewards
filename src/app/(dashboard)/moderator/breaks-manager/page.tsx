@@ -1,7 +1,7 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { BreaksManagerClient } from './BreaksManagerClient';
-import type { User } from '@/types/database';
+import { BreaksManagerClient } from '@frontend/modules/breaks/ui/BreaksManagerClient';
+import type { User } from '@shared/contracts/database';
 
 export const metadata = { title: 'Breaks Manager — Outplex' };
 

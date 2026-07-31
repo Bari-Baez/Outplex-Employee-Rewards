@@ -1,13 +1,13 @@
 import 'server-only';
 
-import { authorizeCapability } from '@/platform/auth/capabilities';
-import { getAppOrigin } from '@/platform/config/server-env';
-import { isSameOriginRequest } from '@/platform/http/redirects';
-import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
-import { notifyOtSlotsPublished, type OtSlotsNotification } from '@/platform/integrations/slack/notify';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { authorizeCapability } from '@backend/platform/auth/capabilities';
+import { getAppOrigin } from '@backend/platform/config/server-env';
+import { isSameOriginRequest } from '@backend/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@backend/platform/http/responses';
+import { notifyOtSlotsPublished, type OtSlotsNotification } from '@backend/platform/integrations/slack/notify';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
 
 export const runtime = 'nodejs';
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { getValidAccessToken } from '@/lib/google/oauth';
-import type { FormField } from '@/lib/forms/types';
-import { isFormModeratorRole } from '@/lib/forms/auth';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { getValidAccessToken } from '@backend/platform/integrations/google/oauth';
+import type { FormField } from '@backend/modules/forms/contracts/form';
+import { isFormModeratorRole } from '@backend/modules/forms/domain/authorization';
 
 interface SheetsCreateResponse {
   spreadsheetId: string;

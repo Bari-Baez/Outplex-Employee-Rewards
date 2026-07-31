@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { isModeratorRole } from '@/lib/auth/roles';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
 import {
   assertModeratorAccess,
   loadRaffleRuntime,
   persistRaffleRuntime,
   upsertPrizeAssignment,
-} from '@/lib/raffles/server';
+} from '@backend/modules/raffles/application/raffle-service';
 
 export async function PATCH(
   request: NextRequest,

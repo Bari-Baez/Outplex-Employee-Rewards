@@ -1,6 +1,6 @@
-﻿import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { NextResponse } from 'next/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 export async function GET() {
   const supabase = await createClient();

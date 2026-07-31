@@ -1,8 +1,8 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { OTManagerClient } from './OTManagerClient';
-import { getCurrentOTDateTime, shiftOTDate } from '@/lib/ot';
+import { OTManagerClient } from '@frontend/modules/ot/ui/OTManagerClient';
+import { getCurrentOTDateTime, shiftOTDate } from '@backend/modules/ot/domain/schedule';
 
 export const metadata: Metadata = {
   title: 'OT Manager',

@@ -1,8 +1,8 @@
-﻿import { Suspense } from 'react';
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { RafflesHubClient } from './RafflesHubClient';
+import { RafflesHubClient } from '@frontend/modules/raffles/ui/RafflesHubClient';
 
 export const metadata: Metadata = { title: 'Raffles' };
 

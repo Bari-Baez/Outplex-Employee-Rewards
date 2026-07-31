@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createServiceClient, createClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 // ─── POST /api/breaks/batches/[batchId]/publish ───────────────────────────────
 export async function POST(

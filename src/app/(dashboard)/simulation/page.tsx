@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { loadPresentationStatus } from '@/lib/demo-presentation';
-import { TOOL_KEYS } from '@/lib/tools-catalog';
-import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability } from '@/lib/tool-availability';
-import { SimulationToolsClient } from './SimulationToolsClient';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { loadPresentationStatus } from '@backend/modules/simulation/application/presentation-service';
+import { TOOL_KEYS } from '@backend/modules/shell/domain/tools-catalog';
+import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability } from '@backend/modules/shell/application/availability';
+import { SimulationToolsClient } from '@frontend/modules/simulation/ui/SimulationToolsClient';
 
 export const metadata: Metadata = {
   title: 'Simulation Tools',

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 
 type AllowedStatus = 'ready_for_pickup' | 'completed' | 'cancelled';
 

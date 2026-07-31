@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { revalidateCompanyStoreViews } from '@/lib/store-cache';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { revalidateCompanyStoreViews } from '@backend/modules/store/application/cache';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 
 export async function GET(req: NextRequest) {
   try {

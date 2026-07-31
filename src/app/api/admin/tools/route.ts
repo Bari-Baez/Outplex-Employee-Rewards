@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { TOOL_KEYS, type ToolKey } from '@/lib/tools-catalog';
-import { TOOL_SECTION_IDS } from '@/lib/tool-sections-catalog';
-import {
-  loadMaintenanceBanner,
-  loadSectionAvailability,
-  loadToolAvailability,
-  upsertMaintenanceBanner,
-  upsertSectionAvailability,
-  upsertToolAvailability,
-  type MaintenanceBannerState,
-  type SectionAvailabilityMap,
-  type ToolAvailabilityMap,
-} from '@/lib/tool-availability';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { TOOL_KEYS, type ToolKey } from '@backend/modules/shell/domain/tools-catalog';
+import { TOOL_SECTION_IDS } from '@backend/modules/shell/domain/tool-sections-catalog';
+import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability, upsertMaintenanceBanner, upsertSectionAvailability, upsertToolAvailability } from '@backend/modules/shell/application/availability';
+import type { MaintenanceBannerState, SectionAvailabilityMap, ToolAvailabilityMap } from '@backend/modules/shell/contracts/availability';
 
 export const dynamic = 'force-dynamic';
 

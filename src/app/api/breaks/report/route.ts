@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
-import { addMinutesToTime, computeVarianceMinutes, BREAK_DURATION_MINUTES } from '@/lib/breaks';
-import type { BreakEventType, DelayReason } from '@/types/database';
+import { createServiceClient, createClient } from '@backend/platform/supabase/server';
+import { addMinutesToTime, computeVarianceMinutes, BREAK_DURATION_MINUTES } from '@backend/modules/breaks/domain/schedule';
+import type { BreakEventType, DelayReason } from '@shared/contracts/database';
 
 /** POST /api/breaks/report — employee logs the start of a break */
 export async function POST(req: NextRequest) {

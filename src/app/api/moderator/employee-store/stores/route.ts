@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 // PATCH /api/moderator/employee-store/stores - suspend or update store status
 export async function PATCH(request: NextRequest) {

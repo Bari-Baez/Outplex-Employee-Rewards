@@ -2,6 +2,23 @@
 
 Outplex is a Next.js 16 + Supabase platform for employee rewards, OT management, employee stores, announcements, forms and moderation workflows.
 
+## Physical Architecture
+
+```text
+frontend/                     # browser UI, hooks, state and shared visual primitives
+backend/                      # domain, application, infrastructure and server platform
+database/                     # baseline, QA contracts, dev guidance and archived SQL
+src/app/                      # thin Next.js routing and HTTP composition adapters
+supabase/migrations/          # only deployable forward-only database history
+tests/                        # architecture, contract, smoke, accessibility and E2E gates
+```
+
+Next.js requires `page.tsx`, `layout.tsx` and `route.ts` entrypoints under
+`src/app`; those files compose `frontend/` and `backend/` but do not define a
+fourth business layer. Supabase likewise requires deployable migrations under
+`supabase/migrations`, while all other database lifecycle assets live under
+`database/`.
+
 ## Core Commands
 
 ```bash
@@ -23,15 +40,17 @@ npm run verify:predeploy
 
 - Production auth defaults are strict. If `ALLOWED_EMAIL_DOMAINS` is not set, production falls back to `outplex.com`.
 - Public demo bootstrap/promote routes should stay disabled in production.
-- `supabase/schema.sql` is legacy and should not be used as a production reset script.
+- `database/archive/schema.sql` is legacy and must never be used as a production reset script.
 - Use `docs/PRODUCTION_CHECKLIST.md` before every deployment.
 
 ## Supabase Structure
 
-- `supabase/baseline/`: production bootstrap guidance
 - `supabase/migrations/`: forward-only production SQL
-- `supabase/dev/`: demo/dev-only helpers
-- `supabase/README.md`: rollout rules and migration inventory
+- `database/baseline/`: production bootstrap guidance
+- `database/tests/`: QA-only RLS and concurrency contracts
+- `database/dev/`: demo/dev-only helpers
+- `database/archive/`: non-executable historical SQL
+- `supabase/README.md`: deployment-adapter rules
 
 ## Deployment Order
 

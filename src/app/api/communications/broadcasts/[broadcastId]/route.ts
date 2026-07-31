@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createServiceClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 import {
   enforceDailyBroadcastLimit,
   normalizeBroadcastCategory,
@@ -8,7 +8,7 @@ import {
   requireModerator,
   resolveBroadcastStatus,
   runCommunicationsMaintenance,
-} from '@/lib/communications-server';
+} from '@backend/modules/communications/application/communications-service';
 
 interface BroadcastPayload {
   title?: string;

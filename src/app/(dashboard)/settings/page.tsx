@@ -1,12 +1,12 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
 import { User, Shield } from 'lucide-react';
 import type { Metadata } from 'next';
-import { GoogleConnectCard } from './GoogleConnectCard';
-import { ThemeSettingsCard } from './ThemeSettingsCard';
-import { NotificationSettingsCard } from './NotificationSettingsCard';
-import { ContactITSupportButton } from './ContactITSupportButton';
-import { LogoutButton } from './LogoutButton';
+import { GoogleConnectCard } from '@frontend/modules/access/ui/GoogleConnectCard';
+import { ThemeSettingsCard } from '@frontend/modules/shell/ui/ThemeSettingsCard';
+import { NotificationSettingsCard } from '@frontend/modules/communications/ui/NotificationSettingsCard';
+import { ContactITSupportButton } from '@frontend/modules/support/ui/ContactITSupportButton';
+import { LogoutButton } from '@frontend/modules/access/ui/LogoutButton';
 
 export const metadata: Metadata = { title: 'Settings' };
 

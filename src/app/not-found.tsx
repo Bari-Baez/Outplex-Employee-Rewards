@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowLeft, FileQuestion, LayoutDashboard } from 'lucide-react';
-import { SystemState } from '@/components/ui/SystemState';
+import { SystemState } from '@frontend/shared/ui/SystemState';
 
 export default function NotFound() {
   return (

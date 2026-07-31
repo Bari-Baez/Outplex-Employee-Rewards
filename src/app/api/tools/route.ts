@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { TOOL_KEYS } from '@/lib/tools-catalog';
-import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability } from '@/lib/tool-availability';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { TOOL_KEYS } from '@backend/modules/shell/domain/tools-catalog';
+import { loadMaintenanceBanner, loadSectionAvailability, loadToolAvailability } from '@backend/modules/shell/application/availability';
 
 export const dynamic = 'force-dynamic';
 

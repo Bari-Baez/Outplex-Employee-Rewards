@@ -1,6 +1,6 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { ModeratorFormsClientLazy } from '@/components/lazy/ModeratorFormsClientLazy';
+import { ModeratorFormsClientLazy } from '@frontend/modules/forms/ui/ModeratorFormsClientLazy';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Form Builder' };

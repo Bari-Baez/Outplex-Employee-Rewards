@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { mergeItemsWithMeta } from '@/lib/store-helpers';
-import { getCachedPublicEmployeeStores, getCachedStoreCatalog } from '@/lib/read-models/store';
-import { StoreClient } from './StoreClient';
+import { createClient } from '@backend/platform/supabase/server';
+import { mergeItemsWithMeta } from '@backend/modules/store/domain/catalog';
+import { getCachedPublicEmployeeStores, getCachedStoreCatalog } from '@backend/modules/store/application/read-models';
+import { StoreClient } from '@frontend/modules/store/ui/StoreClient';
 
 export const metadata: Metadata = { title: 'Company Store' };
 

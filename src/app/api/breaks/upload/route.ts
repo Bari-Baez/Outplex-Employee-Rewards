@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { processFileBuffer, sha256 } from '@/lib/breaks';
-import { createScheduleBatchAndSchedules } from '@/lib/breaks-server';
+import { createServiceClient, createClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { processFileBuffer, sha256 } from '@backend/modules/breaks/domain/schedule';
+import { createScheduleBatchAndSchedules } from '@backend/modules/breaks/application/schedule-service';
 
 export const maxDuration = 60; // Allow up to 60s for large CSVs
 

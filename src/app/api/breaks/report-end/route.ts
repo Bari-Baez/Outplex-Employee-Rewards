@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient, createClient } from '@backend/platform/supabase/server';
 
 /** POST /api/breaks/report-end — employee ends an active break */
 export async function POST(req: NextRequest) {

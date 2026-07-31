@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
 import { ShieldCheck, Users, Zap } from 'lucide-react';
 import type { Metadata } from 'next';
@@ -8,11 +8,11 @@ import {
   isOTSlotCompleted,
   isOTSlotUpcoming,
   shiftOTDate,
-} from '@/lib/ot';
-import { EmployeeDashboard } from '@/components/dashboard/EmployeeDashboard';
-import { WorkforceDashboard } from '@/components/dashboard/WorkforceDashboard';
-import { SupervisorDashboard } from '@/components/dashboard/SupervisorDashboard';
-import { getCachedDashboardRaffles } from '@/lib/read-models/dashboard';
+} from '@backend/modules/ot/domain/schedule';
+import { EmployeeDashboard } from '@frontend/modules/dashboard/ui/EmployeeDashboard';
+import { WorkforceDashboard } from '@frontend/modules/dashboard/ui/WorkforceDashboard';
+import { SupervisorDashboard } from '@frontend/modules/dashboard/ui/SupervisorDashboard';
+import { getCachedDashboardRaffles } from '@backend/modules/shell/application/shell-read-model';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
 
   const claimedSlotsRaw = claimedSlotsResult.data ?? [];
   const claimedSlotIds = claimedSlotsRaw.map((slot) => slot.id);
-  const claimMetasMap: Record<string, import('@/lib/ot-claim-meta').OTClaimKind> = {};
+  const claimMetasMap: Record<string, import('@backend/modules/ot/domain/claim-kind').OTClaimKind> = {};
   if (claimedSlotIds.length > 0) {
     const { data: metaRows } = await supabase.rpc('get_my_ot_claim_metadata', {
       p_slot_ids: claimedSlotIds,

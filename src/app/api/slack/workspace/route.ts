@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getWorkspaceInfo } from '@/lib/slack/oauth';
+import { getWorkspaceInfo } from '@backend/platform/integrations/slack/oauth';
 
 /**
  * GET /api/slack/workspace

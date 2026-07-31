@@ -1,10 +1,10 @@
 import 'server-only';
 
-import { readBodyBytes, RequestBodyError } from '@/platform/http/request-body';
-import { errorResponse, rateLimitedResponse, withRequestId } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
-import { writeOperationalEvent } from '@/platform/observability/operational-events';
-import { consumeRateLimit } from '@/platform/security/rate-limit';
+import { readBodyBytes, RequestBodyError } from '@backend/platform/http/request-body';
+import { errorResponse, rateLimitedResponse, withRequestId } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
+import { writeOperationalEvent } from '@backend/platform/observability/operational-events';
+import { consumeRateLimit } from '@backend/platform/security/rate-limit';
 
 export const runtime = 'nodejs';
 

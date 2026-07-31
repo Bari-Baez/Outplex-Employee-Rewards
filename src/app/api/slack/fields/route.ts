@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSlackTeamProfile } from '@/lib/slack/oauth';
+import { getSlackTeamProfile } from '@backend/platform/integrations/slack/oauth';
 
 /**
  * GET /api/slack/fields

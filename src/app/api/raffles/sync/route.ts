@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { loadActiveRafflesWithRuntime, loadRaffleFeed, syncRaffleLifecycle } from '@/lib/raffles/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
-import { isModeratorRole } from '@/lib/auth/roles';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { loadActiveRafflesWithRuntime, loadRaffleFeed, syncRaffleLifecycle } from '@backend/modules/raffles/application/raffle-service';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
 
 export async function POST() {
   try {

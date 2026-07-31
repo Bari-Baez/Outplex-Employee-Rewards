@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
-import { LandingClient } from '../LandingClient';
+import { LandingClient } from '@frontend/modules/access/ui/LandingClient';
 
 export default function LoginPage() {
   return (

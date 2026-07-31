@@ -1,8 +1,0 @@
-import { isModeratorRole, MODERATOR_ROLES } from '@/lib/auth/roles';
-
-// Backwards compatible exports (used across the app)
-export const FORM_MODERATOR_ROLES = MODERATOR_ROLES;
-export function isFormModeratorRole(role: unknown): boolean {
-  return isModeratorRole(role);
-}
-

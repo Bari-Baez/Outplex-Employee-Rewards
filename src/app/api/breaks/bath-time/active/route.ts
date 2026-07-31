@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createServiceClient, createClient } from '@backend/platform/supabase/server';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 /** GET /api/breaks/bath-time/active — supervisors see who is currently offline */
 export async function GET() {

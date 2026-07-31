@@ -1,6 +1,6 @@
-import { getSupabaseBrowserEnv } from '@/lib/supabase/env';
-import { fetchWithSupabaseDns } from '@/lib/supabase/server-fetch';
-import { createClient } from '@/lib/supabase/server';
+import { getSupabaseServerEnv } from '@backend/platform/supabase/env.server';
+import { fetchWithSupabaseDns } from '@backend/platform/supabase/server-fetch';
+import { createClient } from '@backend/platform/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -24,7 +24,7 @@ async function forwardRequest(request: Request, context: ProxyContext) {
     }
   }
 
-  const { url } = getSupabaseBrowserEnv();
+  const { url } = getSupabaseServerEnv();
   const upstreamUrl = new URL(url);
   const incomingUrl = new URL(request.url);
 

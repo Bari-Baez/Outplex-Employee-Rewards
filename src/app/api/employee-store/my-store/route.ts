@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { revalidateEmployeeStoreViews } from '@/lib/store-cache';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { requireEmployeeRole } from '@/lib/auth-helpers';
+import { revalidateEmployeeStoreViews } from '@backend/modules/store/application/cache';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { requireEmployeeRole } from '@backend/modules/access/application/employee-role';
 
 function toMessage(err: unknown): string {
   if (err instanceof Error) return err.message;

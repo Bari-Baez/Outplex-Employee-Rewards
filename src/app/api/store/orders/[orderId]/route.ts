@@ -7,11 +7,11 @@ import {
   getStoreOrderMetaKey,
   isModeratorOrderDeleteEligible,
   parseStoreOrderMeta,
-} from '@/lib/store-helpers';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import type { OrderStatus, StorePickupMode } from '@/types/database';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+} from '@backend/modules/store/domain/catalog';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import type { OrderStatus, StorePickupMode } from '@shared/contracts/database';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 interface UpdateOrderRequest {
   status?: OrderStatus;

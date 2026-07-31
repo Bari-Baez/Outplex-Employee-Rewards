@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 
 export const BUILTIN_DEPARTMENTS = [
   { value: 'New York Times Tier 1',      label: 'New York Times — Tier 1',      group: 'NYT' },

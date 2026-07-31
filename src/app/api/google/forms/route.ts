@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { getValidAccessToken } from '@/lib/google/oauth';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { getValidAccessToken } from '@backend/platform/integrations/google/oauth';
 
 interface GoogleDriveFile {
   id: string;

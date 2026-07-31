@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, LayoutDashboard, RotateCcw } from 'lucide-react';
-import { SystemState } from '@/components/ui/SystemState';
+import { SystemState } from '@frontend/shared/ui/SystemState';
 
 interface ErrorPageProps {
   error: Error & { digest?: string };

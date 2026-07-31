@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, House, RotateCcw } from 'lucide-react';
-import { SystemState } from '@/components/ui/SystemState';
+import { SystemState } from '@frontend/shared/ui/SystemState';
 import './globals.css';
 
 interface GlobalErrorProps {

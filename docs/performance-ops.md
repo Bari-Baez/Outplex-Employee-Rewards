@@ -8,11 +8,11 @@
 - `top-nav shared live snapshot`: `30s`
 - `store catalog + public employee stores + store review summary`: `60s`
 
-These reads are cached with `next/cache` read-model helpers under `src/lib/read-models/*`.
+These reads are cached with `next/cache` read-model helpers under `backend/modules/*/application`.
 
 ## SWR client deduplication
 
-Global SWR config lives in `src/components/providers/SWRProvider.tsx`.
+Global SWR config lives in `frontend/shared/providers/SWRProvider.tsx`.
 
 - `dedupingInterval`: `15s`
 - `focusThrottleInterval`: `10s`
@@ -41,7 +41,7 @@ Do not put shared edge caching in front of these routes because they contain use
 
 ## Supabase / Vercel runtime notes
 
-- `src/lib/supabase/server-fetch.ts` now uses HTTP keep-alive agents to reduce connection churn per lambda/container.
+- `backend/platform/supabase/server-fetch.ts` uses HTTP keep-alive agents to reduce connection churn per lambda/container.
 - If the project uses direct Postgres URLs outside `supabase-js`, point Vercel serverless traffic to the `Supavisor` pooled connection string, not the direct session connection.
 - Keep auth/user-scoped traffic on `supabase-js` unless there is a measured hotspot that justifies a server-side pooled SQL client.
 

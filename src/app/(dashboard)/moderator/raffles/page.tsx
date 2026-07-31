@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { ModeratorRafflesClient } from './ModeratorRafflesClient';
-import { isAtLeastModerator } from '@/lib/permissions';
+import { ModeratorRafflesClient } from '@frontend/modules/raffles/ui/ModeratorRafflesClient';
+import { isAtLeastModerator } from '@backend/modules/access/domain/permissions';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Raffle Management' };

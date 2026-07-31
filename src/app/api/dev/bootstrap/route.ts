@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
-import { ensurePresentationDemoUsers } from '@/lib/demo-presentation';
+import { createServiceClient } from '@backend/platform/supabase/server';
+import { ensurePresentationDemoUsers } from '@backend/modules/simulation/application/presentation-service';
 
 const PLACEHOLDER_VALUES = new Set(['PENDIENTE', 'PLACEHOLDER', 'TODO', '']);
 

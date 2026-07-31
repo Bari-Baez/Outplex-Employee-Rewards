@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { enforceSectionAvailability } from '@backend/modules/shell/application/section-guard';
 
 async function requireModeratorOrAdmin() {
   const supabase = await createClient();

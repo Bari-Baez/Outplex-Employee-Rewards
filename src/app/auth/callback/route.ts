@@ -1,12 +1,12 @@
 import 'server-only';
 
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { getSlackTeamProfile, getSlackUserProfile } from '@/lib/slack/oauth';
-import { getAllowedEmailDomains, getAppOrigin, getOptionalServerEnv } from '@/platform/config/server-env';
-import { safeRelativePath } from '@/platform/http/redirects';
-import { withRequestId } from '@/platform/http/responses';
-import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { getSlackTeamProfile, getSlackUserProfile } from '@backend/platform/integrations/slack/oauth';
+import { getAllowedEmailDomains, getAppOrigin, getOptionalServerEnv } from '@backend/platform/config/server-env';
+import { safeRelativePath } from '@backend/platform/http/redirects';
+import { withRequestId } from '@backend/platform/http/responses';
+import { getRequestId, logServerError } from '@backend/platform/observability/request-context';
 
 export const runtime = 'nodejs';
 

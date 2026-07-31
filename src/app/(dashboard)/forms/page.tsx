@@ -1,6 +1,6 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
 import { redirect } from 'next/navigation';
-import { FormsHubClient } from './FormsHubClient';
+import { FormsHubClient } from '@frontend/modules/forms/ui/FormsHubClient';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Forms' };

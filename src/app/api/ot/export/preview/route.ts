@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { isModeratorRole } from '@/lib/auth/roles';
-import { canonicalizeOTLob, getCurrentOTDateTime, isOTSlotRecentlyAdded, isOTSlotUpcoming } from '@/lib/ot';
-import type { OTSlot } from '@/types/database';
+import { createClient, createServiceClient } from '@backend/platform/supabase/server';
+import { isModeratorRole } from '@backend/modules/access/domain/roles';
+import { canonicalizeOTLob, getCurrentOTDateTime, isOTSlotRecentlyAdded, isOTSlotUpcoming } from '@backend/modules/ot/domain/schedule';
+import type { OTSlot } from '@shared/contracts/database';
 
 export const maxDuration = 15;
 
