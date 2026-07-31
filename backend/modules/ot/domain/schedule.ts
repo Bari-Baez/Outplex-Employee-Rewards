@@ -76,7 +76,13 @@ const OT_COLUMN_LABELS: Record<string, string> = {
 
 type FormulaScope = 'all' | 'selected' | 'blank-only';
 
-const RESERVED_ROW_KEYS = new Set(['id', '_rowIndex']);
+const RESERVED_ROW_KEYS = new Set([
+  'id',
+  '_rowIndex',
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
 
 // Column names that represent total hours — mapped to duration_hrs during normalization
 const DURATION_ALIASES = ['total', 'duration', 'hours', 'hrs', 'total_hrs'] as const;
@@ -191,19 +197,14 @@ export function normalizeOTRow(
   dateFormat: OTDateFormat = 'auto',
   shouldTrim = true,
 ): CSVRow {
-  const normalizedRow: CSVRow = {
-    date: '',
-    start_time: '',
-    end_time: '',
-  };
-
-  Object.entries(row).forEach(([key, value]) => {
-    if (RESERVED_ROW_KEYS.has(key)) {
-      return;
-    }
-
-    normalizedRow[key] = sanitizeCellValue(value, shouldTrim);
-  });
+  const normalizedRow = Object.fromEntries([
+    ['date', ''],
+    ['start_time', ''],
+    ['end_time', ''],
+    ...Object.entries(row)
+      .filter(([key]) => !RESERVED_ROW_KEYS.has(key))
+      .map(([key, value]) => [key, sanitizeCellValue(value, shouldTrim)]),
+  ]) as CSVRow;
 
   // Promote duration column aliases (e.g. Gemini's "total") to duration_hrs when duration_hrs is absent
   if (!String(normalizedRow.duration_hrs ?? '').trim()) {
