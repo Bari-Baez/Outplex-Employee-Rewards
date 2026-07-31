@@ -534,7 +534,7 @@ export function StagingClient({ initialDrafts }: { initialDrafts: DraftBatch[] }
     };
 
     try {
-      // ── Path A: Claude Vision (server) ────────────────────────────────────
+      // ── Path A: server-side OCR (/api/ocr) ────────────────────────────────
       transfer.setMessage('Running OCR...');
       transfer.setProgress(10);
 
