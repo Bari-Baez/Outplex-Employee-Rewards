@@ -4,57 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  LayoutDashboard,
-  CalendarDays,
-  ShoppingBag,
-  Gift,
-  Users,
-  FileSpreadsheet,
-  Settings,
-  Megaphone,
-  ClipboardList,
-  FormInput,
-  Store,
-  LogOut,
-  Wrench,
-} from 'lucide-react';
+import { LogOut, Settings, Wrench } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
 import type { UserRole } from '@/types/database';
 import { useAppAvailability } from '@/components/layout/AppAvailabilityProvider';
-import type { ToolKey } from '@/lib/tools-catalog';
+import { getNavigationItem, getNavigationItems } from '@/lib/navigation';
 
 interface SidebarProps {
   userRole: UserRole;
 }
-
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, toolKey: 'dashboard' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'OT Calendar', href: '/ot-calendar', icon: CalendarDays, toolKey: 'ot_calendar' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'Store', href: '/store', icon: ShoppingBag, toolKey: 'store' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'Raffles', href: '/raffles', icon: Gift, toolKey: 'raffles' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'Order History', href: '/orders', icon: ShoppingBag, toolKey: 'orders' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'Forms', href: '/forms', icon: ClipboardList, toolKey: 'forms' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'Announcements', href: '/announcements', icon: Megaphone, toolKey: 'announcements' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'My Store', href: '/my-store', icon: Store, toolKey: 'my_store' as ToolKey, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-];
-
-const moderatorItems = [
-  { label: 'OT Staging', href: '/staging', icon: FileSpreadsheet, toolKey: 'ot_staging' as ToolKey, roles: ['moderator_a1', 'admin', 'moderator'] as UserRole[] },
-  { label: 'OT Manager', href: '/moderator/ot-manager', icon: CalendarDays, toolKey: 'ot_manager' as ToolKey, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'] as UserRole[] },
-  { label: 'Breaks Manager', href: '/moderator/breaks-manager', icon: ClipboardList, toolKey: 'breaks_manager' as ToolKey, roles: ['moderator_a1', 'moderator_b1', 'admin'] as UserRole[] },
-  { label: 'Raffle Engine', href: '/moderator/raffles', icon: Gift, toolKey: 'raffle_engine' as ToolKey, roles: ['moderator_a1', 'admin', 'moderator'] as UserRole[] },
-  { label: 'Store Operations', href: '/moderator/store/orders', icon: ShoppingBag, toolKey: 'store_operations' as ToolKey, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'] as UserRole[] },
-  { label: 'Communications', href: '/moderator/communications/notifications', icon: Megaphone, toolKey: 'communications' as ToolKey, roles: ['moderator_a1', 'admin'] as UserRole[] },
-  { label: 'Employees', href: '/moderator/users', icon: Users, toolKey: 'employees' as ToolKey, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'] as UserRole[] },
-  { label: 'Employee Stores', href: '/moderator/employee-stores', icon: Store, toolKey: 'employee_stores' as ToolKey, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'] as UserRole[] },
-  { label: 'Form Builder', href: '/moderator/forms', icon: FormInput, toolKey: 'form_builder' as ToolKey, roles: ['moderator_a1', 'admin', 'moderator'] as UserRole[] },
-];
-
-const adminItems = [
-  { label: 'Simulation Tools', href: '/simulation', icon: LayoutDashboard, roles: ['admin'] as UserRole[] },
-];
 
 export function Sidebar({ userRole }: SidebarProps) {
   const pathname = usePathname();
@@ -83,12 +42,16 @@ export function Sidebar({ userRole }: SidebarProps) {
   }, [userRole, supabase]);
 
   const orderedItems = useMemo(
-    () => [
-      ...navItems.map(i => ({ id: i.label, type: 'main' as const, item: i })),
-      ...moderatorItems.filter(i => i.roles.includes(userRole) || (userRole === 'employee' && hasStore && i.href === '/moderator/communications/notifications'))
-        .map(i => ({ id: i.label, type: 'moderator' as const, item: i })),
-      ...(userRole === 'admin' ? adminItems.map(i => ({ id: i.label, type: 'admin' as const, item: i })) : [])
-    ],
+    () => {
+      const permittedItems = getNavigationItems('sidebar', userRole);
+      const employeeStoreCommunications =
+        userRole === 'employee' && hasStore ? getNavigationItem('communications') : undefined;
+      const items = employeeStoreCommunications
+        ? [...permittedItems, employeeStoreCommunications]
+        : permittedItems;
+
+      return items.map((item) => ({ id: item.id, type: item.group, item }));
+    },
     [hasStore, userRole],
   );
 
@@ -124,7 +87,7 @@ export function Sidebar({ userRole }: SidebarProps) {
           {orderedItems.map((obj, index) => {
             const prevType = index > 0 ? orderedItems[index - 1].type : null;
             const showLabel = obj.type !== prevType;
-            const toolKey = 'toolKey' in obj.item ? obj.item.toolKey : undefined;
+            const toolKey = obj.item.toolKey;
             const enabled = toolKey ? isToolEnabled(toolKey, { userRole }) : true;
             return (
               <div key={obj.id}>

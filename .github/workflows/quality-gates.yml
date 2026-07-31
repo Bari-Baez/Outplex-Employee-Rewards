@@ -1,0 +1,137 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+  NEXT_PUBLIC_SUPABASE_URL: https://qa-placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: qa-anon-placeholder-not-a-secret
+  ALLOWED_EMAIL_DOMAINS: example.invalid
+
+jobs:
+  dependency-review:
+    name: 0 - Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+
+  static-quality:
+    name: 1 - Static quality and contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Reproducible install
+        run: npm ci
+      - name: Secret scan
+        run: node scripts/secret-scan.mjs
+      - name: Typecheck
+        run: npm run typecheck
+      - name: ESLint decreasing baseline
+        run: node scripts/check-lint-baseline.mjs
+      - name: Architecture boundaries
+        run: node --test tests/architecture/*.test.mjs
+      - name: API inventory drift
+        run: node scripts/api-route-inventory.mjs --strict-openapi
+
+  tests:
+    name: 2 - Tests and compatibility smoke
+    needs: static-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Repository tests
+        run: npm test
+
+  build:
+    name: 3 - Production build
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  e2e-smoke:
+    name: 4 - Browser and hostile-request smoke
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Playwright smoke
+        run: npx playwright test --config tests/e2e/playwright.config.ts
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: artifacts/playwright-report
+          if-no-files-found: warn
+          retention-days: 14
+
+  dependency-audit:
+    name: 5 - Audits and SBOM
+    needs: e2e-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Audit with zero-vulnerability baseline
+        run: node scripts/check-audit-baseline.mjs
+      - name: Full tooling audit with explicit baseline
+        run: node scripts/check-tooling-audit.mjs
+      - name: Generate CycloneDX SBOM
+        run: node scripts/generate-sbom.mjs --output artifacts/sbom.cdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: artifacts/sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30

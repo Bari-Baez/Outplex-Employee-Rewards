@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useMemo, useRef, type CSSPr
 import { useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Clock, CalendarDays, AlertCircle, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { getOTClaimKindLabel, parseOTClaimMeta, type OTClaimKind } from '@/lib/ot-claim-meta';
+import { getOTClaimKindLabel, type OTClaimKind } from '@/lib/ot-claim-meta';
 import type { OTSlot, UserRole } from '@/types/database';
 import {
   formatOTDate,
@@ -112,20 +112,22 @@ function OTCalendarPageContent() {
     if (currentUserId) {
       const myClaimedIds = visibleSlots
         .filter(s => s.claimed_by === currentUserId)
-        .map(s => `ot_claim_meta:${s.id}`);
+        .map(s => s.id);
       if (myClaimedIds.length > 0) {
-        const { data: metaRows } = await supabase
-          .from('app_settings')
-          .select('key, value')
-          .in('key', myClaimedIds);
-        if (metaRows) {
-          const metas: Record<string, OTClaimKind> = {};
-          for (const row of metaRows) {
-            const meta = parseOTClaimMeta(row.value);
-            if (meta) metas[meta.slotId] = meta.claimKind;
+        const { data: metaRows } = await supabase.rpc('get_my_ot_claim_metadata', {
+          p_slot_ids: myClaimedIds,
+        });
+        const metas: Record<string, OTClaimKind> = {};
+        for (const row of metaRows ?? []) {
+          if (
+            row.claim_kind === 'day_off'
+            || row.claim_kind === 'scheduled_extension'
+            || row.claim_kind === 'recovery'
+          ) {
+            metas[row.slot_id] = row.claim_kind;
           }
-          setClaimMetas(metas);
         }
+        setClaimMetas(metas);
       } else {
         setClaimMetas({});
       }

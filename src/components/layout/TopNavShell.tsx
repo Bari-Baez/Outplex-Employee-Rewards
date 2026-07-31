@@ -16,16 +16,7 @@ import {
   Search,
   Send,
   ShoppingCart,
-  CalendarDays,
-  ClipboardList,
-  FormInput,
-  LayoutDashboard,
-  Megaphone,
-  ShoppingBag,
-  Store,
-  Users,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { ModernSelect } from '@/components/ui/Select';
 import { createClient } from '@/lib/supabase/client';
@@ -41,39 +32,7 @@ import type { UserRole } from '@/types/database';
 import { useAppAvailability } from '@/components/layout/AppAvailabilityProvider';
 import { resolveToolKeyFromPathname } from '@/lib/tools-catalog';
 import { useShellData } from '@/hooks/useShellData';
-
-interface SearchItem {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  roles: UserRole[];
-  synonyms: string[];
-}
-
-const SEARCH_ITEMS: SearchItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['panel', 'inicio', 'home'] },
-  { label: 'OT Calendar', href: '/ot-calendar', icon: CalendarDays, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['calendario', 'horas', 'overtime', 'ot'] },
-  { label: 'Store', href: '/store', icon: ShoppingBag, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['tienda', 'bazar', 'compra', 'shop'] },
-  { label: 'Raffles', href: '/raffles', icon: Gift, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['rifas', 'sorteos', 'ganar', 'raffle'] },
-  { label: 'Order History', href: '/orders', icon: ShoppingBag, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['pedidos', 'compras', 'historial', 'history'] },
-  { label: 'Forms', href: '/forms', icon: ClipboardList, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['formularios', 'encuestas', 'form'] },
-  { label: 'Announcements', href: '/announcements', icon: Megaphone, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['anuncios', 'noticias', 'announcement', 'news'] },
-  { label: 'My Store', href: '/my-store', icon: Store, roles: ['employee', 'moderator_a1', 'moderator_b1', 'admin'], synonyms: ['mi tienda', 'my-shop'] },
-  
-  // Moderator Tools
-  { label: 'OT Staging', href: '/staging', icon: ClipboardList, roles: ['moderator_a1', 'admin', 'moderator'], synonyms: ['staging', 'csv', 'importar'] },
-  { label: 'OT Manager', href: '/moderator/ot-manager', icon: CalendarDays, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'], synonyms: ['gestor ot', 'manager'] },
-  { label: 'Breaks Manager', href: '/moderator/breaks-manager', icon: ClipboardList, roles: ['moderator_a1', 'moderator_b1', 'admin'], synonyms: ['recesos', 'almuerzos', 'breaks'] },
-  { label: 'Raffle Engine', href: '/moderator/raffles', icon: Gift, roles: ['moderator_a1', 'admin', 'moderator'], synonyms: ['motor rifas', 'crear rifa', 'engine'] },
-  { label: 'Store Operations', href: '/moderator/store/orders', icon: ShoppingBag, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'], synonyms: ['operaciones tienda', 'inventario', 'stock'] },
-  { label: 'Communications', href: '/moderator/communications/notifications', icon: Megaphone, roles: ['moderator_a1', 'admin'], synonyms: ['comunicaciones', 'mensajes', 'studio'] },
-  { label: 'Employees', href: '/moderator/users', icon: Users, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'], synonyms: ['empleados', 'usuarios', 'users'] },
-  { label: 'Employee Stores', href: '/moderator/employee-stores', icon: Store, roles: ['moderator_a1', 'moderator_b1', 'admin', 'moderator'], synonyms: ['tiendas empleados', 'colmados'] },
-  { label: 'Form Builder', href: '/moderator/forms', icon: FormInput, roles: ['moderator_a1', 'admin', 'moderator'], synonyms: ['constructor forms', 'crear forms', 'builder'] },
-  
-  // Admin Tools
-  { label: 'Simulation Tools', href: '/simulation', icon: LayoutDashboard, roles: ['admin'], synonyms: ['simulacion', 'dev', 'tools'] },
-];
+import { getNavigationItems } from '@/lib/navigation';
 
 interface TopNavShellProps {
   user: User | null;
@@ -562,13 +521,12 @@ export function TopNavShell({ user }: TopNavShellProps) {
   const filteredSearchItems = useMemo(() => {
     if (!searchQuery.trim() || !user) return [];
     const term = searchQuery.toLowerCase().trim();
-    return SEARCH_ITEMS.filter(item => {
-      if (!item.roles.includes(user.role)) return false;
+    return getNavigationItems('search', user.role).filter(item => {
       const toolKey = resolveToolKeyFromPathname(item.href);
       if (toolKey && !isToolEnabled(toolKey, { userRole: user.role })) return false;
       return (
         item.label.toLowerCase().includes(term) ||
-        item.synonyms.some(syn => syn.toLowerCase().includes(term))
+        item.synonyms?.some(syn => syn.toLowerCase().includes(term))
       );
     }).slice(0, 6);
   }, [searchQuery, user, isToolEnabled]);

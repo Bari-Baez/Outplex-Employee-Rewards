@@ -1,0 +1,7 @@
+{
+  "capturedAt": "2026-07-31",
+  "policy": "OpenAPI drift is zero; every implemented operation must remain documented exactly once.",
+  "allowedUndocumentedOperations": [],
+  "allowedStaleOperations": [],
+  "allowedStalePaths": []
+}

@@ -1,89 +1,115 @@
-import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import 'server-only';
+
+import { randomUUID } from 'node:crypto';
+import { createServiceClient } from '@/lib/supabase/server';
 import { enforceSectionAvailability } from '@/lib/availability/section-guard';
+import { authorizeCapability, hasCapability, type Capability } from '@/platform/auth/capabilities';
+import { getAppOrigin } from '@/platform/config/server-env';
+import { validateFile, type SafeFileKind } from '@/platform/http/file-validation';
+import { isSameOriginRequest } from '@/platform/http/redirects';
+import { readMultipartFormData, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse, withRequestId } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { consumeRateLimit } from '@/platform/security/rate-limit';
+
+export const runtime = 'nodejs';
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_MULTIPART_BYTES = MAX_FILE_BYTES + 1024 * 1024;
+const IMAGE_KINDS = ['gif', 'jpeg', 'png', 'webp'] as const satisfies readonly SafeFileKind[];
+
+const FOLDERS: Record<string, { capability: Capability; kinds: readonly SafeFileKind[] }> = {
+  uploads: { capability: 'assets:upload:self-service', kinds: [...IMAGE_KINDS, 'pdf', 'csv', 'xls', 'xlsx'] },
+  avatars: { capability: 'assets:upload:self-service', kinds: IMAGE_KINDS },
+  emp_store: { capability: 'assets:upload:self-service', kinds: IMAGE_KINDS },
+  products: { capability: 'assets:upload:managed', kinds: IMAGE_KINDS },
+  public: { capability: 'assets:upload:managed', kinds: [...IMAGE_KINDS, 'pdf'] },
+  store: { capability: 'assets:upload:managed', kinds: IMAGE_KINDS },
+  forms: { capability: 'assets:upload:managed', kinds: IMAGE_KINDS },
+  raffles: { capability: 'assets:upload:managed', kinds: IMAGE_KINDS },
+  breaks: { capability: 'assets:upload:managed', kinds: ['csv', 'xls', 'xlsx'] },
+};
 
 export async function POST(request: Request) {
-  try {
-    const supabaseAuth = await createClient();
-    const {
-      data: { user },
-    } = await supabaseAuth.auth.getUser();
+  const requestId = getRequestId(request);
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    if (!isSameOriginRequest(request, getAppOrigin())) {
+      return errorResponse(requestId, 403, 'Forbidden');
     }
 
-    const { data: profile } = await supabaseAuth.from('users').select('role').eq('id', user.id).single();
-    if (!profile?.role) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const auth = await authorizeCapability('assets:upload:self-service');
+    if (!auth.ok) return errorResponse(requestId, auth.status, auth.error);
+
+    const rateLimit = await consumeRateLimit({
+      scope: 'assets:upload',
+      subject: auth.profile.id,
+      limit: 30,
+      windowSeconds: 60,
+      requestId,
+    });
+    if (!rateLimit.allowed) return rateLimitedResponse(requestId, rateLimit.retryAfterSeconds);
+
+    const formData = await readMultipartFormData(request, MAX_MULTIPART_BYTES);
+    const file = formData.get('file');
+    if (!(file instanceof File)) {
+      return errorResponse(requestId, 400, 'No file provided');
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      return errorResponse(requestId, 413, 'File too large (max 10MB)');
+    }
+
+    const rawFolder = formData.get('folder');
+    if (rawFolder !== null && typeof rawFolder !== 'string') {
+      return errorResponse(requestId, 400, 'Invalid upload folder');
+    }
+    const folder = rawFolder?.trim() || 'uploads';
+    const folderPolicy = FOLDERS[folder];
+    if (!folderPolicy || !hasCapability(auth.profile.role, folderPolicy.capability)) {
+      return errorResponse(requestId, 403, 'Forbidden');
+    }
+
+    const validated = await validateFile(file, {
+      maxBytes: MAX_FILE_BYTES,
+      allowedKinds: folderPolicy.kinds,
+    });
+    if (!validated) {
+      return errorResponse(requestId, 400, 'File type not allowed or file content is invalid');
     }
 
     const serviceClient = await createServiceClient();
     const maintenance = await enforceSectionAvailability({
-      serviceClient: serviceClient,
+      serviceClient,
       toolKey: 'my_store',
       sectionKey: 'main',
-      userRole: profile.role as string,
+      userRole: auth.profile.role,
       bypassForAdmin: true,
     });
-    if (maintenance) {
-      return maintenance;
-    }
+    if (maintenance) return withRequestId(maintenance, requestId);
 
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-
-    // Whitelist allowed folders to prevent path traversal
-    const ALLOWED_FOLDERS = new Set(['uploads', 'avatars', 'products', 'public', 'store', 'breaks']);
-    const rawFolder = formData.get('folder') as string | null;
-    const folder = rawFolder && ALLOWED_FOLDERS.has(rawFolder) ? rawFolder : 'uploads';
-
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    }
-
-    // Validate size (10 MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File too large (max 10MB)' }, { status: 400 });
-    }
-
-    // Validate file extension — only allow safe image/document types
-    const ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'csv', 'xlsx', 'xls']);
-    const fileExt = file.name.replace(/^.*\./, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!fileExt || !ALLOWED_EXTENSIONS.has(fileExt)) {
-      return NextResponse.json({ error: 'File type not allowed' }, { status: 400 });
-    }
-
-    // Prepare buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Create unique filename
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
-    const filePath = `${folder}/${fileName}`;
-
-    // Upload using service client to bypass RLS limitations and ensure availability
-    const supabase = serviceClient;
-    const { data, error } = await supabase.storage
+    const ownerSegment = folderPolicy.capability === 'assets:upload:self-service'
+      ? `/${auth.profile.id}`
+      : '';
+    const filePath = `${folder}${ownerSegment}/${randomUUID()}.${validated.extension}`;
+    const { data, error } = await serviceClient.storage
       .from('assets')
-      .upload(filePath, buffer, {
-        contentType: file.type,
-        upsert: true,
+      .upload(filePath, validated.bytes, {
+        contentType: validated.contentType,
+        upsert: false,
       });
 
-    if (error) {
-      console.error('Upload Error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error || !data) {
+      logServerError('upload.storage', requestId, error);
+      return errorResponse(requestId, 500, 'Unable to store file');
     }
 
-    // Get public URL
-    const { data: publicUrlData } = supabase.storage
-      .from('assets')
-      .getPublicUrl(data.path);
-
-    return NextResponse.json({ url: publicUrlData.publicUrl });
+    const { data: publicUrlData } = serviceClient.storage.from('assets').getPublicUrl(data.path);
+    return jsonResponse(requestId, { url: publicUrlData.publicUrl });
   } catch (error) {
-    console.error('Upload Process Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    logServerError('upload', requestId, error);
+    return errorResponse(requestId, 500, 'Internal Server Error');
   }
 }

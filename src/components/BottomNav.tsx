@@ -2,34 +2,25 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  CalendarDays,
-  ShoppingBag,
-  MoreHorizontal,
-} from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import type { UserRole } from '@/types/database';
+import { getNavigationItems } from '@/lib/navigation';
 
 interface BottomNavProps {
   userRole: UserRole;
   onMoreClick: () => void;
 }
 
-const MAIN_ITEMS = [
-  { label: 'Home', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'OT', href: '/ot-calendar', icon: CalendarDays },
-  { label: 'Store', href: '/store', icon: ShoppingBag },
-];
-
-export function BottomNav({ onMoreClick }: BottomNavProps) {
+export function BottomNav({ userRole, onMoreClick }: BottomNavProps) {
   const pathname = usePathname();
+  const mainItems = getNavigationItems('mobile-primary', userRole);
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/');
 
   return (
     <nav className="bottom-nav" aria-label="Mobile navigation">
-      {MAIN_ITEMS.map(({ label, href, icon: Icon }) => (
+      {mainItems.map(({ label, compactLabel, href, icon: Icon }) => (
         <Link
           key={href}
           href={href}
@@ -37,9 +28,9 @@ export function BottomNav({ onMoreClick }: BottomNavProps) {
           aria-label={label}
         >
           <span className="bottom-nav-icon">
-            <Icon size={22} strokeWidth={isActive(href) ? 2.2 : 1.8} />
+            <Icon aria-hidden="true" size={22} strokeWidth={isActive(href) ? 2.2 : 1.8} />
           </span>
-          <span className="bottom-nav-label">{label}</span>
+          <span className="bottom-nav-label">{compactLabel ?? label}</span>
         </Link>
       ))}
 

@@ -81,6 +81,37 @@ interface AppState {
   clearEmpCart: () => void;
 }
 
+type PersistedAppState = Pick<
+  AppState,
+  | 'cart'
+  | 'cartSavedAt'
+  | 'empCart'
+  | 'empCartSavedAt'
+  | 'sidebarExpanded'
+  | 'notificationPopupsEnabled'
+  | 'notificationSoundEnabled'
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function migratePersistedAppState(persistedState: unknown): PersistedAppState {
+  const state = isRecord(persistedState) ? persistedState : {};
+
+  return {
+    cart: Array.isArray(state.cart) ? (state.cart as CartItem[]) : [],
+    cartSavedAt: typeof state.cartSavedAt === 'number' ? state.cartSavedAt : null,
+    empCart: Array.isArray(state.empCart) ? (state.empCart as EmpCartItem[]) : [],
+    empCartSavedAt: typeof state.empCartSavedAt === 'number' ? state.empCartSavedAt : null,
+    sidebarExpanded: typeof state.sidebarExpanded === 'boolean' ? state.sidebarExpanded : true,
+    notificationPopupsEnabled:
+      typeof state.notificationPopupsEnabled === 'boolean' ? state.notificationPopupsEnabled : true,
+    notificationSoundEnabled:
+      typeof state.notificationSoundEnabled === 'boolean' ? state.notificationSoundEnabled : true,
+  };
+}
+
 function isCartExpired(savedAt: number | null) {
   return !savedAt || Date.now() - savedAt > CART_TTL_MS;
 }
@@ -327,7 +358,9 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'outplex-app-shell',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState) => migratePersistedAppState(persistedState),
       partialize: (state) => ({
         cart: state.cart,
         cartSavedAt: state.cartSavedAt,
@@ -339,21 +372,19 @@ export const useAppStore = create<AppState>()(
       }),
 
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as
-          | Pick<AppState, 'cart' | 'cartSavedAt' | 'empCart' | 'empCartSavedAt' | 'sidebarExpanded' | 'notificationPopupsEnabled' | 'notificationSoundEnabled'>
-          | undefined;
+        const persisted = migratePersistedAppState(persistedState);
 
-        const nytExpired = !persisted || isCartExpired(persisted.cartSavedAt ?? null);
-        const empExpired = !persisted || isCartExpired(persisted.empCartSavedAt ?? null);
+        const nytExpired = isCartExpired(persisted.cartSavedAt);
+        const empExpired = isCartExpired(persisted.empCartSavedAt);
         return {
           ...currentState,
-          cart: nytExpired ? [] : (persisted?.cart ?? []),
-          cartSavedAt: nytExpired ? null : (persisted?.cartSavedAt ?? null),
-          empCart: empExpired ? [] : (persisted?.empCart ?? []),
-          empCartSavedAt: empExpired ? null : (persisted?.empCartSavedAt ?? null),
-          sidebarExpanded: persisted?.sidebarExpanded ?? currentState.sidebarExpanded,
-          notificationPopupsEnabled: persisted?.notificationPopupsEnabled ?? currentState.notificationPopupsEnabled,
-          notificationSoundEnabled: persisted?.notificationSoundEnabled ?? currentState.notificationSoundEnabled,
+          cart: nytExpired ? [] : persisted.cart,
+          cartSavedAt: nytExpired ? null : persisted.cartSavedAt,
+          empCart: empExpired ? [] : persisted.empCart,
+          empCartSavedAt: empExpired ? null : persisted.empCartSavedAt,
+          sidebarExpanded: persisted.sidebarExpanded,
+          notificationPopupsEnabled: persisted.notificationPopupsEnabled,
+          notificationSoundEnabled: persisted.notificationSoundEnabled,
         };
 
       },

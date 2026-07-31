@@ -72,18 +72,19 @@ export default async function DashboardPage() {
   ]);
 
   const claimedSlotsRaw = claimedSlotsResult.data ?? [];
-  const claimMetaKeys = claimedSlotsRaw.map(s => `ot_claim_meta:${s.id}`);
+  const claimedSlotIds = claimedSlotsRaw.map((slot) => slot.id);
   const claimMetasMap: Record<string, import('@/lib/ot-claim-meta').OTClaimKind> = {};
-  if (claimMetaKeys.length > 0) {
-    const { data: metaRows } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .in('key', claimMetaKeys);
-    if (metaRows) {
-      const { parseOTClaimMeta } = await import('@/lib/ot-claim-meta');
-      for (const row of metaRows) {
-        const meta = parseOTClaimMeta(row.value);
-        if (meta) claimMetasMap[meta.slotId] = meta.claimKind;
+  if (claimedSlotIds.length > 0) {
+    const { data: metaRows } = await supabase.rpc('get_my_ot_claim_metadata', {
+      p_slot_ids: claimedSlotIds,
+    });
+    for (const row of metaRows ?? []) {
+      if (
+        row.claim_kind === 'day_off'
+        || row.claim_kind === 'scheduled_extension'
+        || row.claim_kind === 'recovery'
+      ) {
+        claimMetasMap[row.slot_id] = row.claim_kind;
       }
     }
   }

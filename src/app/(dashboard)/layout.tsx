@@ -16,6 +16,7 @@ import type { FormDefinition } from '@/lib/forms/types';
 import { BackgroundShader } from '@/components/layout/BackgroundShader';
 import { DashboardThemeBridge } from '@/components/theme/DashboardThemeBridge';
 import { MobileNav } from '@/components/MobileNav';
+import { OfflineNotice } from '@/components/layout/OfflineNotice';
 import { getCachedAvailabilitySnapshot, getCachedMandatoryPublishedForms } from '@/lib/read-models/dashboard';
 
 const DASHBOARD_PROFILE_SELECT =
@@ -103,6 +104,7 @@ export default async function DashboardLayout({
     <div className="app-layout relative">
       <BackgroundShader />
       <DashboardThemeBridge />
+      <OfflineNotice />
 
       <AppAvailabilityProvider initialTools={toolAvailability} initialSections={sectionAvailability} initialBanner={maintenanceBanner}>
         {isRevoked && <RevokedRoleGuard userName={profile?.name ?? 'User'} />}

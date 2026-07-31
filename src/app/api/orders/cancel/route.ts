@@ -1,151 +1,64 @@
-﻿import { NextResponse } from 'next/server';
-import {
-  appendOrderStatus,
-  getOrderItemName,
-  getOrderLineItems,
-  getStoreOrderMetaKey,
-  ORDER_CANCELLATION_WINDOW_MS,
-  parseStoreOrderMeta,
-} from '@/lib/store-helpers';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import 'server-only';
 
-export async function POST(req: Request) {
+import type { StoreOrderMutationCode } from '@/modules/store/application/ports';
+import { cancelOrderInputSchema } from '@/modules/store/contracts/orders';
+import { createSupabaseStoreOrderRepository } from '@/modules/store/infrastructure/supabase-store-order-repository';
+import { authorizeCapability } from '@/platform/auth/capabilities';
+import { getAppOrigin } from '@/platform/config/server-env';
+import { hashIdempotentRequest, parseIdempotencyKey } from '@/platform/idempotency/guard';
+import { isSameOriginRequest } from '@/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { consumeRateLimit } from '@/platform/security/rate-limit';
+
+const ERRORS: Record<StoreOrderMutationCode, { status: number; message: string }> = {
+  forbidden: { status: 403, message: 'Forbidden' },
+  idempotency_conflict: { status: 409, message: 'This idempotency key was used for a different request.' },
+  idempotency_in_progress: { status: 409, message: 'This cancellation is already being processed.' },
+  insufficient_points: { status: 409, message: 'Unable to refund this order.' },
+  insufficient_stock: { status: 409, message: 'Unable to restore order stock.' },
+  invalid_cart: { status: 400, message: 'Invalid order request.' },
+  item_not_found: { status: 409, message: 'An order item no longer exists.' },
+  item_unavailable: { status: 409, message: 'An order item is unavailable.' },
+  lines_unavailable: { status: 409, message: 'Order line details are unavailable.' },
+  not_pending: { status: 400, message: 'Only pending orders can be cancelled.' },
+  order_not_found: { status: 404, message: 'Order not found.' },
+  unavailable: { status: 503, message: 'Order cancellation is temporarily unavailable.' },
+  window_expired: { status: 400, message: 'The 5-minute cancellation window has expired.' },
+};
+
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
   try {
-    const { orderId } = (await req.json()) as { orderId?: string };
-    if (!orderId) {
-      return NextResponse.json({ error: 'Missing orderId' }, { status: 400 });
-    }
+    if (!isSameOriginRequest(request, getAppOrigin())) return errorResponse(requestId, 403, 'Forbidden');
+    const auth = await authorizeCapability('store:checkout');
+    if (!auth.ok) return errorResponse(requestId, auth.status, auth.error);
+    const key = parseIdempotencyKey(request);
+    if (!key) return errorResponse(requestId, 400, 'A valid Idempotency-Key header is required.');
 
-    const supabase = await createClient();
-    const serviceClient = await createServiceClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const [{ data: order, error: orderError }, { data: metaSetting, error: metaError }] = await Promise.all([
-      serviceClient
-        .from('store_orders')
-        .select('id, item_id, user_id, points_spent, status, created_at, item:store_items(id, name, stock, image_url, description)')
-        .eq('id', orderId)
-        .single(),
-      serviceClient
-        .from('app_settings')
-        .select('key, value')
-        .eq('key', getStoreOrderMetaKey(orderId))
-        .maybeSingle(),
-    ]);
-
-    if (orderError || !order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
-    }
-
-    if (metaError) {
-      throw metaError;
-    }
-
-    if (order.user_id !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    if (order.status !== 'pending') {
-      return NextResponse.json({ error: 'Only pending orders can be cancelled.' }, { status: 400 });
-    }
-
-    const elapsedMs = Date.now() - new Date(order.created_at).getTime();
-    if (elapsedMs > ORDER_CANCELLATION_WINDOW_MS) {
-      return NextResponse.json({ error: 'The 5-minute cancellation window has expired.' }, { status: 400 });
-    }
-
-    const meta = parseStoreOrderMeta(metaSetting?.value);
-    const lineItems = getOrderLineItems({
-      item: Array.isArray(order.item) ? order.item[0] : order.item,
-      meta,
+    const rate = await consumeRateLimit({
+      scope: 'store:cancel', subject: auth.profile.id, limit: 10, windowSeconds: 60, requestId,
     });
+    if (!rate.allowed) return rateLimitedResponse(requestId, rate.retryAfterSeconds);
 
-    const { error: updateOrderError } = await serviceClient
-      .from('store_orders')
-      .update({ status: 'cancelled' })
-      .eq('id', orderId);
-
-    if (updateOrderError) {
-      throw updateOrderError;
-    }
-
-    for (const line of lineItems) {
-      const { data: linkedItem, error: itemError } = await serviceClient
-        .from('store_items')
-        .select('id, stock')
-        .eq('id', line.itemId)
-        .maybeSingle();
-
-      if (itemError) {
-        throw itemError;
-      }
-
-      if (linkedItem && linkedItem.stock !== -1) {
-        const { error: stockError } = await serviceClient
-          .from('store_items')
-          .update({ stock: linkedItem.stock + line.quantity })
-          .eq('id', line.itemId);
-
-        if (stockError) {
-          throw stockError;
-        }
-      }
-    }
-
-    const { data: profile, error: profileError } = await serviceClient
-      .from('users')
-      .select('points')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      throw profileError ?? new Error('Unable to load profile for refund.');
-    }
-
-    const { error: refundError } = await serviceClient
-      .from('users')
-      .update({ points: profile.points + order.points_spent })
-      .eq('id', user.id);
-
-    if (refundError) {
-      throw refundError;
-    }
-
-    await serviceClient.from('points_ledger').insert({
-      user_id: user.id,
-      points_added: order.points_spent,
-      reason: `Store order cancelled (${orderId})`,
+    const parsed = cancelOrderInputSchema.safeParse(await readJsonObject(request, 8 * 1024));
+    if (!parsed.success) return errorResponse(requestId, 400, 'Invalid order cancellation request.');
+    const requestHash = hashIdempotentRequest(new TextEncoder().encode(JSON.stringify(parsed.data)));
+    const result = await createSupabaseStoreOrderRepository().cancel({
+      userId: auth.profile.id,
+      orderId: parsed.data.orderId,
+      idempotencyKey: key,
+      requestHash,
     });
-
-    const updatedMeta = appendOrderStatus(meta, 'cancelled', 'Cancelled by employee');
-    await serviceClient.from('app_settings').upsert(
-      {
-        key: getStoreOrderMetaKey(orderId),
-        value: updatedMeta,
-      },
-      { onConflict: 'key' },
-    );
-
-    await serviceClient.from('notifications').insert({
-      user_id: user.id,
-      title: 'Store order cancelled',
-      message: `Your order for ${meta?.orderLabel ?? getOrderItemName({ item: Array.isArray(order.item) ? order.item[0] : order.item, meta })} was cancelled and your points were refunded.`,
-      type: 'store',
-    });
-
-    return NextResponse.json({ success: true });
+    if (!result.ok) {
+      const failure = ERRORS[result.code];
+      return errorResponse(requestId, failure.status, failure.message);
+    }
+    return jsonResponse(requestId, result.data);
   } catch (error) {
-    console.error('Error cancelling order:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal Server Error' },
-      { status: 500 },
-    );
+    if (error instanceof RequestBodyError) return errorResponse(requestId, error.status, error.publicMessage);
+    logServerError('api.orders.cancel', requestId, error);
+    return errorResponse(requestId, 500, 'Unable to cancel the order.');
   }
 }
-

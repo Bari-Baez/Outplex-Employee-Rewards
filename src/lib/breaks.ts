@@ -356,7 +356,7 @@ export async function processFileBuffer(
         return fields;
       });
     } else {
-      const ExcelJS = await import('exceljs');
+      const { default: ExcelJS } = await import('exceljs/dist/exceljs.min.js');
       const wb = new ExcelJS.Workbook();
       // exceljs types predate Node 22 Buffer<ArrayBufferLike> — safe at runtime
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

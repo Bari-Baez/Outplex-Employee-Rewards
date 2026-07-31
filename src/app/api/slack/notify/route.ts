@@ -1,79 +1,64 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { WebClient } from '@slack/web-api';
-import { createClient } from '@/lib/supabase/server';
+import 'server-only';
 
-const botToken = process.env.SLACK_BOT_TOKEN;
-const userToken = process.env.SLACK_USER_TOKEN;
+import { authorizeCapability } from '@/platform/auth/capabilities';
+import { getAppOrigin } from '@/platform/config/server-env';
+import { isSameOriginRequest } from '@/platform/http/redirects';
+import { readJsonObject, RequestBodyError } from '@/platform/http/request-body';
+import { errorResponse, jsonResponse, rateLimitedResponse } from '@/platform/http/responses';
+import { notifyOtSlotsPublished, type OtSlotsNotification } from '@/platform/integrations/slack/notify';
+import { getRequestId, logServerError } from '@/platform/observability/request-context';
+import { consumeRateLimit } from '@/platform/security/rate-limit';
 
-const slackToken = (botToken && botToken !== 'PENDIENTE' && botToken !== 'PLACEHOLDER')
-  ? botToken
-  : (userToken && userToken !== 'PENDIENTE' && userToken !== 'PLACEHOLDER' ? userToken : null);
+export const runtime = 'nodejs';
 
-const slack = new WebClient(slackToken || 'NO_TOKEN_CONFIGURED');
+function parseNotification(value: Record<string, unknown>): OtSlotsNotification | null {
+  const batchName = value.batchName === undefined
+    ? 'New OT Batch'
+    : typeof value.batchName === 'string'
+      ? value.batchName.trim()
+      : '';
+  const slotsCount = typeof value.slotsCount === 'number' ? value.slotsCount : Number.NaN;
+  const firstDate = typeof value.firstDate === 'string' ? value.firstDate.trim() : '';
+  const lastDate = typeof value.lastDate === 'string' ? value.lastDate.trim() : '';
 
-export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!batchName || batchName.length > 120) return null;
+  if (!Number.isSafeInteger(slotsCount) || slotsCount < 1 || slotsCount > 100_000) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDate) || !/^\d{4}-\d{2}-\d{2}$/.test(lastDate)) return null;
+  return { batchName, slotsCount, firstDate, lastDate };
+}
 
-  const { batchName, slotsCount, firstDate, lastDate } = await request.json();
-
-  const channelId = process.env.SLACK_OT_CHANNEL_ID;
-  if (!channelId || channelId.includes('PLACEHOLDER') || channelId === 'PENDIENTE') {
-    return NextResponse.json({ ok: true, skipped: true });
-  }
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
 
   try {
-    await slack.chat.postMessage({
-      channel: channelId,
-      blocks: [
-        {
-          type: 'header',
-          text: {
-            type: 'plain_text',
-            text: '⚡ NEW OT SLOTS ARE LIVE!',
-            emoji: true,
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*${batchName ?? 'New OT Batch'}* has just been published!\n\n📅 Dates: *${firstDate}* → *${lastDate}*\n⏰ Total slots: *${slotsCount}*\n\n🔥 Spots are filling fast — don't wait!`,
-          },
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '🗓️ Claim Your OT Slot',
-                emoji: true,
-              },
-              style: 'primary',
-              url: `${process.env.NEXT_PUBLIC_APP_URL}/ot-calendar`,
-              action_id: 'open_ot_calendar',
-            },
-          ],
-        },
-        {
-          type: 'context',
-          elements: [
-            {
-              type: 'mrkdwn',
-              text: '_First come, first served. Slots update in real-time — no duplicate claims._',
-            },
-          ],
-        },
-      ],
-      text: `⚡ New OT slots published: ${slotsCount} slots available! Click to claim yours: ${process.env.NEXT_PUBLIC_APP_URL}/ot-calendar`,
-    });
+    if (!isSameOriginRequest(request, getAppOrigin())) {
+      return errorResponse(requestId, 403, 'Forbidden');
+    }
 
-    return NextResponse.json({ ok: true });
+    const auth = await authorizeCapability('slack:notify');
+    if (!auth.ok) return errorResponse(requestId, auth.status, auth.error);
+
+    const rateLimit = await consumeRateLimit({
+      scope: 'slack:notify',
+      subject: auth.profile.id,
+      limit: 10,
+      windowSeconds: 60,
+      requestId,
+    });
+    if (!rateLimit.allowed) return rateLimitedResponse(requestId, rateLimit.retryAfterSeconds);
+
+    const payload = parseNotification(await readJsonObject(request, 8 * 1024));
+    if (!payload) {
+      return errorResponse(requestId, 400, 'Invalid notification payload');
+    }
+
+    const result = await notifyOtSlotsPublished(payload);
+    return jsonResponse(requestId, { ok: true, ...result });
   } catch (error) {
-    console.error('[Slack] Notification error:', error);
-    return NextResponse.json({ error: 'Slack notification failed' }, { status: 500 });
+    if (error instanceof RequestBodyError) {
+      return errorResponse(requestId, error.status, error.publicMessage);
+    }
+    logServerError('slack.notify', requestId, error);
+    return errorResponse(requestId, 502, 'Slack notification failed');
   }
 }

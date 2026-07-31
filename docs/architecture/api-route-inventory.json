@@ -1,0 +1,1460 @@
+{
+  "schemaVersion": 1,
+  "source": "src/app/api/**/route.ts",
+  "contract": "docs/openapi.yaml",
+  "summary": {
+    "routeFiles": 114,
+    "implementedOperations": 149,
+    "documentedOperations": 149,
+    "undocumentedRoutes": 0,
+    "undocumentedOperations": 0,
+    "stalePaths": 0,
+    "staleOperations": 0
+  },
+  "drift": {
+    "undocumentedRoutes": [],
+    "undocumentedOperations": [],
+    "stalePaths": [],
+    "staleOperations": []
+  },
+  "routes": [
+    {
+      "route": "/api/admin/tools",
+      "file": "src/app/api/admin/tools/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/admin/users/logout",
+      "file": "src/app/api/admin/users/logout/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/assets/outplex-logo",
+      "file": "src/app/api/assets/outplex-logo/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/batches/{batchId}/publish",
+      "file": "src/app/api/breaks/batches/[batchId]/publish/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/batches/{batchId}/schedules",
+      "file": "src/app/api/breaks/batches/[batchId]/schedules/route.ts",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "GET",
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/bath-time/active",
+      "file": "src/app/api/breaks/bath-time/active/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/live-sync",
+      "file": "src/app/api/breaks/live-sync/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/manual-entry",
+      "file": "src/app/api/breaks/manual-entry/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/match-agent",
+      "file": "src/app/api/breaks/match-agent/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/my-schedule",
+      "file": "src/app/api/breaks/my-schedule/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/report-end",
+      "file": "src/app/api/breaks/report-end/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/report/export",
+      "file": "src/app/api/breaks/report/export/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/report",
+      "file": "src/app/api/breaks/report/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/breaks/upload",
+      "file": "src/app/api/breaks/upload/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/communications/announcements/{announcementId}",
+      "file": "src/app/api/communications/announcements/[announcementId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/communications/announcements",
+      "file": "src/app/api/communications/announcements/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/communications/broadcasts/{broadcastId}",
+      "file": "src/app/api/communications/broadcasts/[broadcastId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/communications/broadcasts",
+      "file": "src/app/api/communications/broadcasts/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/communications/employee-announcements/{announcementId}",
+      "file": "src/app/api/communications/employee-announcements/[announcementId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/communications/employee-announcements",
+      "file": "src/app/api/communications/employee-announcements/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/dashboard/shell",
+      "file": "src/app/api/dashboard/shell/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/departments",
+      "file": "src/app/api/departments/route.ts",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/dev/bootstrap",
+      "file": "src/app/api/dev/bootstrap/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/dev/demo",
+      "file": "src/app/api/dev/demo/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/dev/promote",
+      "file": "src/app/api/dev/promote/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/my-store",
+      "file": "src/app/api/employee-store/my-store/route.ts",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "GET",
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/orders/{id}",
+      "file": "src/app/api/employee-store/orders/[id]/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/orders/cancel",
+      "file": "src/app/api/employee-store/orders/cancel/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/orders",
+      "file": "src/app/api/employee-store/orders/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/products/{productId}",
+      "file": "src/app/api/employee-store/products/[productId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/products",
+      "file": "src/app/api/employee-store/products/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/requests",
+      "file": "src/app/api/employee-store/requests/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/reviews",
+      "file": "src/app/api/employee-store/reviews/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/reviews/user",
+      "file": "src/app/api/employee-store/reviews/user/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/employee-store/stores",
+      "file": "src/app/api/employee-store/stores/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/forms/{formId}/completion",
+      "file": "src/app/api/forms/[formId]/completion/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/forms/{formId}/export",
+      "file": "src/app/api/forms/[formId]/export/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/forms/{formId}/publish",
+      "file": "src/app/api/forms/[formId]/publish/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/forms/{formId}/responses",
+      "file": "src/app/api/forms/[formId]/responses/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/forms/{formId}",
+      "file": "src/app/api/forms/[formId]/route.ts",
+      "methods": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/forms",
+      "file": "src/app/api/forms/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/gif/search",
+      "file": "src/app/api/gif/search/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/google/callback",
+      "file": "src/app/api/google/callback/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/google/connect",
+      "file": "src/app/api/google/connect/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/google/forms/import",
+      "file": "src/app/api/google/forms/import/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/google/forms",
+      "file": "src/app/api/google/forms/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/google/sheets/export",
+      "file": "src/app/api/google/sheets/export/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/google/status",
+      "file": "src/app/api/google/status/route.ts",
+      "methods": [
+        "GET",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "GET",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/media/proxy",
+      "file": "src/app/api/media/proxy/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/employee-store/products",
+      "file": "src/app/api/moderator/employee-store/products/route.ts",
+      "methods": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/employee-store/requests/{requestId}",
+      "file": "src/app/api/moderator/employee-store/requests/[requestId]/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/employee-store/requests",
+      "file": "src/app/api/moderator/employee-store/requests/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/employee-store/stores",
+      "file": "src/app/api/moderator/employee-store/stores/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/maintenance/cleanup-logs",
+      "file": "src/app/api/moderator/maintenance/cleanup-logs/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/points/reset",
+      "file": "src/app/api/moderator/points/reset/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/points",
+      "file": "src/app/api/moderator/points/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/roles/approve",
+      "file": "src/app/api/moderator/roles/approve/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/users/access-review",
+      "file": "src/app/api/moderator/users/access-review/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/users/delete",
+      "file": "src/app/api/moderator/users/delete/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/users/revoke",
+      "file": "src/app/api/moderator/users/revoke/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/moderator/users/update",
+      "file": "src/app/api/moderator/users/update/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/notifications/{notificationId}",
+      "file": "src/app/api/notifications/[notificationId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/notifications/mutes/{senderId}",
+      "file": "src/app/api/notifications/mutes/[senderId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/notifications/mutes",
+      "file": "src/app/api/notifications/mutes/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/notifications",
+      "file": "src/app/api/notifications/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/observability/csp-report",
+      "file": "src/app/api/observability/csp-report/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ocr/metrics",
+      "file": "src/app/api/ocr/metrics/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ocr",
+      "file": "src/app/api/ocr/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/onboarding/complete-profile",
+      "file": "src/app/api/onboarding/complete-profile/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/onboarding/request-access",
+      "file": "src/app/api/onboarding/request-access/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/onboarding/supervisors",
+      "file": "src/app/api/onboarding/supervisors/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/orders/cancel",
+      "file": "src/app/api/orders/cancel/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/claim",
+      "file": "src/app/api/ot/claim/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/drafts/{draftId}",
+      "file": "src/app/api/ot/drafts/[draftId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/export/preview",
+      "file": "src/app/api/ot/export/preview/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/export/xlsx",
+      "file": "src/app/api/ot/export/xlsx/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/publish",
+      "file": "src/app/api/ot/publish/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/slots/{slotId}/cancel",
+      "file": "src/app/api/ot/slots/[slotId]/cancel/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/slots/{slotId}",
+      "file": "src/app/api/ot/slots/[slotId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/ot/unclaim",
+      "file": "src/app/api/ot/unclaim/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/{raffleId}/prizes",
+      "file": "src/app/api/raffles/[raffleId]/prizes/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/{raffleId}/restore",
+      "file": "src/app/api/raffles/[raffleId]/restore/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/{raffleId}",
+      "file": "src/app/api/raffles/[raffleId]/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/{raffleId}/spin-complete",
+      "file": "src/app/api/raffles/[raffleId]/spin-complete/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/{raffleId}/video",
+      "file": "src/app/api/raffles/[raffleId]/video/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/deleted",
+      "file": "src/app/api/raffles/deleted/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles",
+      "file": "src/app/api/raffles/route.ts",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/raffles/sync",
+      "file": "src/app/api/raffles/sync/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/slack/fields",
+      "file": "src/app/api/slack/fields/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/slack/notify",
+      "file": "src/app/api/slack/notify/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/slack/workspace",
+      "file": "src/app/api/slack/workspace/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/checkout",
+      "file": "src/app/api/store/checkout/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/client-data",
+      "file": "src/app/api/store/client-data/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/favorites",
+      "file": "src/app/api/store/favorites/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/favorites/toggle",
+      "file": "src/app/api/store/favorites/toggle/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/inventory/notify",
+      "file": "src/app/api/store/inventory/notify/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/inventory/reset",
+      "file": "src/app/api/store/inventory/reset/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/items/{itemId}",
+      "file": "src/app/api/store/items/[itemId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/items",
+      "file": "src/app/api/store/items/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/orders/{orderId}",
+      "file": "src/app/api/store/orders/[orderId]/route.ts",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/orders/cleanup",
+      "file": "src/app/api/store/orders/cleanup/route.ts",
+      "methods": [
+        "DELETE"
+      ],
+      "documentedMethods": [
+        "DELETE"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/reviews",
+      "file": "src/app/api/store/reviews/route.ts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/reviews/summary",
+      "file": "src/app/api/store/reviews/summary/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/reviews/user",
+      "file": "src/app/api/store/reviews/user/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/store/theme",
+      "file": "src/app/api/store/theme/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/supabase-proxy/{supabasePath}",
+      "file": "src/app/api/supabase-proxy/[...supabasePath]/route.ts",
+      "methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "documentedMethods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/support/tickets/{ticketId}",
+      "file": "src/app/api/support/tickets/[ticketId]/route.ts",
+      "methods": [
+        "PATCH"
+      ],
+      "documentedMethods": [
+        "PATCH"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/support/tickets",
+      "file": "src/app/api/support/tickets/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/tools",
+      "file": "src/app/api/tools/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/upload",
+      "file": "src/app/api/upload/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/user/clear-revoke",
+      "file": "src/app/api/user/clear-revoke/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/user/role-request/acknowledge",
+      "file": "src/app/api/user/role-request/acknowledge/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/user/role-request/cancel",
+      "file": "src/app/api/user/role-request/cancel/route.ts",
+      "methods": [
+        "POST"
+      ],
+      "documentedMethods": [
+        "POST"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    },
+    {
+      "route": "/api/user/role-request/status",
+      "file": "src/app/api/user/role-request/status/route.ts",
+      "methods": [
+        "GET"
+      ],
+      "documentedMethods": [
+        "GET"
+      ],
+      "missingInOpenApi": [],
+      "staleOpenApiMethods": []
+    }
+  ]
+}

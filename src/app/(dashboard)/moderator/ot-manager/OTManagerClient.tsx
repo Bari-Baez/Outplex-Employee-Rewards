@@ -1,8 +1,6 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import {
   AlertCircle,
   ArrowRight,
@@ -1462,10 +1460,14 @@ export function OTManagerClient({
     }
   };
 
-  const downloadExportPdf = (
+  const downloadExportPdf = async (
     columns: ExportColumn[] = visibleExportColumns,
     rows: ExportRow[] = filteredExportRows.map(({ row }) => row),
   ) => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF({ orientation: exportPdfOrientation });
     doc.setFontSize(16);
     doc.text(exportStudioTitle, 14, 15);

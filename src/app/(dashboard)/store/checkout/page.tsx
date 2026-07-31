@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { formatPoints, getStockLabel } from '@/lib/store-helpers';
@@ -24,6 +24,7 @@ export default function CheckoutPage() {
   const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>('processing');
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
   const [orderSnapshot, setOrderSnapshot] = useState<CartItem[]>([]);
+  const checkoutIdempotencyKey = useRef<string | null>(null);
 
   const totalPoints = useMemo(
     () => cart.reduce((accumulator, cartItem) => accumulator + cartItem.item.points_cost * cartItem.quantity, 0),
@@ -33,6 +34,14 @@ export default function CheckoutPage() {
     () => orderSnapshot.reduce((sum, line) => sum + line.item.points_cost * line.quantity, 0),
     [orderSnapshot],
   );
+  const cartFingerprint = useMemo(
+    () => cart.map((line) => `${line.item.id}:${line.quantity}`).sort().join('|'),
+    [cart],
+  );
+
+  useEffect(() => {
+    checkoutIdempotencyKey.current = null;
+  }, [cartFingerprint]);
 
   const refreshInventory = async () => {
     if (cart.length === 0) {
@@ -87,9 +96,13 @@ export default function CheckoutPage() {
     setOverlayPhase('processing');
 
     try {
+      checkoutIdempotencyKey.current ??= crypto.randomUUID();
       const response = await fetch('/api/store/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': checkoutIdempotencyKey.current,
+        },
         body: JSON.stringify({ cart }),
       });
 
@@ -99,6 +112,7 @@ export default function CheckoutPage() {
       }
 
       setOrderSnapshot(cart);
+      checkoutIdempotencyKey.current = null;
       setCreatedOrderId(data.orderId ?? null);
       clearCart();
       router.refresh();

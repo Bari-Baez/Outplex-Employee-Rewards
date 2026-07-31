@@ -242,7 +242,10 @@ export function OrdersClient({ initialOrders, initialEmpOrders }: { initialOrder
     try {
       const response = await fetch('/api/orders/cancel', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `order-cancel:${orderId}`,
+        },
         body: JSON.stringify({ orderId }),
       });
       const payload = (await response.json()) as { error?: string };

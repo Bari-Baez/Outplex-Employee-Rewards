@@ -505,8 +505,9 @@ export function LandingClient({
                       type="button"
                       className="absolute top-4 right-4 p-2 text-white/30 hover:text-white transition-colors"
                       onClick={() => setShowForm(false)}
+                      aria-label="Close sign-in dialog"
                     >
-                      <X size={20} />
+                      <X aria-hidden="true" size={20} />
                     </button>
 
                     <header className="flex items-center justify-between mb-10">

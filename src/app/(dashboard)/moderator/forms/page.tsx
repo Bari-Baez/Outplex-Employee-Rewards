@@ -1,6 +1,6 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { ModeratorFormsClient } from './ModeratorFormsClient';
+import { ModeratorFormsClientLazy } from '@/components/lazy/ModeratorFormsClientLazy';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Form Builder' };
@@ -14,5 +14,5 @@ export default async function ModeratorFormsPage() {
   const { data: profile } = await serviceClient.from('users').select('role, name, email').eq('id', user.id).single();
   if (!profile || !['moderator', 'moderator_a1', 'admin'].includes(profile.role as string)) redirect('/dashboard');
 
-  return <ModeratorFormsClient moderatorName={profile.name as string} />;
+  return <ModeratorFormsClientLazy moderatorName={profile.name as string} />;
 }
